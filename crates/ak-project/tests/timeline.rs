@@ -84,7 +84,9 @@ fn checkpoints_only_when_something_changed() {
     let task = t
         .checkpoint(CheckpointKind::Task, "", Some("T-001"))
         .unwrap();
-    assert!(task.is_none(), "unchanged task checkpoint is skipped");
+    let task = task.expect("a task checkpoint is recorded even without new changes");
+    assert!(task.changed_files.is_empty());
+    assert_eq!(task.task_id.as_deref(), Some("T-001"));
 
     // The index survives reopening.
     let again = Timeline::open(root).unwrap();

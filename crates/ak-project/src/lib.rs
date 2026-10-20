@@ -11,4 +11,4 @@ mod timeline;
 pub use error::ProjectError;
 pub use project::{AGENTKNIFE_DIR, LoadedHistory, Project, ProjectMeta};
 pub use registry::{ProjectEntry, RecentProject, Registry};
-pub use timeline::{CheckpointKind, Interruption, Timeline, TimelineEntry};
+pub use timeline::{CheckpointKind, DEFAULT_KEEP_TURNS, Interruption, Timeline, TimelineEntry};

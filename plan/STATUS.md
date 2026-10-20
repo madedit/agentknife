@@ -4,6 +4,7 @@
 - P1-CORE-003 — coordinator — workflow written (.github/workflows/ci.yml); not yet run: repo has no GitHub remote
 
 ## Blocked
+- P1-PROJ-004 (follow-up) — needs: nothing urgent — the git objects of collected checkpoints stay on disk as unreachable loose objects (gix 0.89 has no prune/repack). Disk use grows slowly with project size times the number of changes. Revisit if a project folder gets large: repack with a pack writer, or start a fresh repo from the surviving entries.
 - P1-AGENT-002 (follow-up) — needs: decision, low priority — on Windows, output of cmd's *built-in* commands (echo, dir, type) containing non-ASCII text is garbled: cmd writes the ANSI code page to pipes, and chcp 65001 does not change that. External tools (cargo, trunk) output UTF-8 and are fine. A fix needs code-page decoding (encoding_rs + GetACP) or running commands through PowerShell.
 - P1-PROV-002 (follow-up) — needs: owner, a real Anthropic API key — run `cargo run -p ak-providers --example record_anthropic`. The adapter is verified live against an Anthropic-COMPATIBLE local server only (text, tool round trip, vision). Claude-only features are still verified only against synthetic fixtures: adaptive thinking + signature replay, the models API, refusal/fallback.
 - P1-PROV-003 (follow-up) — needs: Ollama / LM Studio / OpenRouter access — run `AK_MODEL=… cargo run -p ak-providers --example record_openai_compat`. Verified live on a llama-server-style endpoint (generic flavor). Unverified: the Ollama/LM Studio/OpenRouter capability endpoints, OpenRouter `delta.reasoning` and whether streamed `reasoning_details` need merging.
@@ -51,7 +52,7 @@
     - Atomic chat history save/load. Damaged files are moved aside; files from a newer version are refused and left untouched.
     - Frozen v1 golden fixture test.
   - `new_id` / `unix_now` moved to ak-types::ids (native only).
-- P1-PROJ-003 — (hash in next commit) — ak_project::Timeline:
+- P1-PROJ-003 — 50628f7 — ak_project::Timeline:
   - Storage: a bare gix repo at .agentknife/checkpoints.git (user's .git untouched, no system git) plus an append-only timeline.json; a ref per entry.
   - Kinds: initial/turn/task/bundle/marked/abandoned/restore, each with a localized label (fluent).
   - checkpoint() only records real changes (marked/bundle always record) and lists the changed files.
@@ -61,3 +62,8 @@
   - The policy now protects the .agentknife internals.
   - A real `git fsck --strict` validates the repo (Chinese filenames included).
   - The Checkpointer glue into ak_agent belongs in ak-app.
+- P1-PROJ-004 — (hash in next commit) — Timeline::gc(keep_turns):
+  - Keeps the newest N turn entries; older ones fold their changed files into the next surviving entry (their task).
+  - Initial, task, bundle, marked, abandoned and restore entries, and the newest entry, are never collected.
+  - Idempotent; survives reopening; kept entries still restore. DEFAULT_KEEP_TURNS = 50.
+  - Fixed in PROJ-003: task checkpoints now always record (they were skipped when nothing changed since the last turn, which is the normal case).

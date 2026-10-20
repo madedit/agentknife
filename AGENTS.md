@@ -165,8 +165,10 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - *task checkpoints*, when a task completes, with the task id in the message
 - **Checkpoint GC:**
   - Keep the latest **50** turn checkpoints (configurable).
-  - Squash older turn checkpoints into their task checkpoint, in the background.
+  - Squash older turn checkpoints into their task checkpoint, in the background. In practice: `Timeline::gc` removes their index entries and refs, and their changed files fold into the next surviving entry.
   - Never delete task checkpoints, bundle checkpoints, or user-marked versions ("Mark this version").
+  - Also never delete `abandoned` entries (the user's set-aside work), `restore` or `initial` entries, or the newest entry, which is the state on disk.
+  - Task checkpoints are always recorded, even without new changes, because a task usually ends right after its last turn.
 - **Bundling:** build for the host platform only. Windows: NSIS `.exe`. macOS: `.dmg`. Linux: `.AppImage` + `.deb`. Phase 2 adds Android `.apk`. Output is unsigned, and the AI explains SmartScreen/Gatekeeper workarounds in plain language.
 - **Privacy:** no telemetry by default. Crash reports are opt-in only.
 

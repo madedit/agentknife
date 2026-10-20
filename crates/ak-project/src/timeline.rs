@@ -23,6 +23,8 @@ use crate::project::AGENTKNIFE_DIR;
 const REPO_DIR: &str = "checkpoints.git";
 const INDEX_FILE: &str = "timeline.json";
 const INDEX_SCHEMA_VERSION: u32 = 1;
+/// Default for [`Timeline::gc`] (a setting in P1-APP-002).
+pub const DEFAULT_KEEP_TURNS: usize = 50;
 /// Never part of a snapshot, wherever they are.
 const SKIP_DIRS: &[&str] = &[".git", "target", "node_modules", "dist"];
 /// AgentKnife's own state inside `.agentknife/`: never snapshotted or restored.
@@ -159,14 +161,18 @@ impl Timeline {
     }
 
     /// Saves the current files as a new entry. Returns `None` when nothing changed
-    /// since the last entry (except `Marked` and `Bundle`, which always record).
+    /// since the last entry. `Task`, `Marked` and `Bundle` always record: the marker
+    /// itself matters (a task usually ends right after its last turn).
     pub fn checkpoint(
         &mut self,
         kind: CheckpointKind,
         label: &str,
         task_id: Option<&str>,
     ) -> Result<Option<TimelineEntry>, ProjectError> {
-        let always = matches!(kind, CheckpointKind::Marked | CheckpointKind::Bundle);
+        let always = matches!(
+            kind,
+            CheckpointKind::Task | CheckpointKind::Marked | CheckpointKind::Bundle
+        );
         self.record(kind, label, task_id, None, always)
     }
 
@@ -244,6 +250,62 @@ impl Timeline {
             _ => {}
         }
         Ok(abandoned)
+    }
+
+    /// Checkpoint GC: keeps the newest `keep_turns` `Turn` entries and folds older
+    /// ones into the next surviving entry (normally their `Task`). Every other kind
+    /// is kept forever. Returns how many entries were removed. Callers run it in the
+    /// background.
+    pub fn gc(&mut self, keep_turns: usize) -> Result<usize, ProjectError> {
+        // The newest entry is the state on disk: never collected, or every file
+        // would look like an unsaved change.
+        let newest = self.entries.len().saturating_sub(1);
+        let turns: Vec<usize> = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter(|(i, e)| e.kind == CheckpointKind::Turn && *i != newest)
+            .map(|(i, _)| i)
+            .collect();
+        let keep_turns = if self
+            .entries
+            .last()
+            .is_some_and(|e| e.kind == CheckpointKind::Turn)
+        {
+            keep_turns.saturating_sub(1)
+        } else {
+            keep_turns
+        };
+        let excess = turns.len().saturating_sub(keep_turns);
+        if excess == 0 {
+            return Ok(0);
+        }
+        let doomed: Vec<usize> = turns[..excess].to_vec();
+        let mut carried: Vec<String> = Vec::new();
+        let mut kept = Vec::with_capacity(self.entries.len() - excess);
+        for (i, mut entry) in std::mem::take(&mut self.entries).into_iter().enumerate() {
+            if doomed.contains(&i) {
+                carried.append(&mut entry.changed_files);
+                if let Ok(r) = self
+                    .repo
+                    .find_reference(format!("refs/checkpoints/{}", entry.id).as_str())
+                {
+                    r.delete().map_err(git_err)?;
+                }
+            } else {
+                if !carried.is_empty() {
+                    entry.changed_files.append(&mut carried);
+                    entry.changed_files.sort();
+                    entry.changed_files.dedup();
+                }
+                kept.push(entry);
+            }
+        }
+        // Squashed turns after the last surviving entry: nothing to fold into, and
+        // nothing is lost (their state is the latest entry's state).
+        self.entries = kept;
+        self.save_index()?;
+        Ok(excess)
     }
 
     fn record(
