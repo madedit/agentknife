@@ -132,6 +132,11 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Anything that runs rustup or cargo must use `Toolchain::env()`, which sets `RUSTUP_AUTO_INSTALL=0` and `RUSTUP_TOOLCHAIN`. Without it, rustup silently installs a missing toolchain. The one exception is installing Rust itself (rustup-init, `rustup toolchain install`), which uses the private homes without `RUSTUP_TOOLCHAIN`. `SystemProbe` drops inherited `RUSTUP_TOOLCHAIN`, `RUSTUP_HOME`, `CARGO_HOME`, `CARGO`, `RUSTC` and `RUSTDOC`, so the parent process (for example `cargo run`) cannot change which toolchain is used.
   - Detection goes through the `Probe` trait, so it can be tested for all OSes on any host with canned outputs.
   - `ak_doctor::Installer` installs only the isolated items that `check` did not find Ok, then checks again. It uses prebuilt downloads where `assets` has them, and falls back to `cargo install --locked` (Tailwind has no fallback). Each download must match its sha256 in `versions.toml` `[downloads]`; after changing a tool version, run `cargo xtask pin-downloads` (CI fails on missing or stale keys).
+  - System dependencies: `ak_doctor::system::guides` turns the missing items into `SystemGuide`s, which contain plain-language fluent steps (`doctor-guide-*`) and end with "Check again".
+    - On Windows, official installers run through winget, which verifies Microsoft's installer hash; without winget, the guide opens the official download page.
+    - On macOS, `xcode-select --install` is used.
+    - On Linux there is no action. The guide gives one copyable command for the detected distribution, because sudo is typed by the user, never by AgentKnife.
+    - `system::launch` runs only after the user has confirmed (`doctor-confirm-<action>`), and it opens only the known official pages.
   - Downloads resume from `<file>.part`. A file whose checksum fails is deleted, never used. Programs are written to a temporary file and renamed into place. rustup-init always gets `--no-modify-path`: never touch the user's PATH, dotfiles or registry.
 - **Preview:**
   - The center pane is an iframe on the Trunk dev server.

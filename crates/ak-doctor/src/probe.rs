@@ -30,6 +30,11 @@ pub trait Probe: Send + Sync {
     fn list_dir(&self, path: &Path) -> Vec<String>;
 
     fn env_var(&self, name: &str) -> Option<String>;
+
+    /// A small text file (e.g. `/etc/os-release`); `None` if unreadable.
+    fn read_file(&self, _path: &Path) -> Option<String> {
+        None
+    }
 }
 
 /// Variables that make rustup or cargo pick another toolchain.
@@ -107,5 +112,9 @@ impl Probe for SystemProbe {
 
     fn env_var(&self, name: &str) -> Option<String> {
         std::env::var(name).ok()
+    }
+
+    fn read_file(&self, path: &Path) -> Option<String> {
+        std::fs::read_to_string(path).ok()
     }
 }

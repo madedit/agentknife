@@ -347,6 +347,11 @@ async fn linux_packages() {
     assert_eq!(status(&r, "linux-c-compiler"), CheckStatus::Ok);
     assert!(!r.ready());
 
+    // Fedora/Arch: the non-Ayatana appindicator counts too.
+    let f = f.out("pkg-config --modversion appindicator3-0.1", "12.10.1\n");
+    let r = report(Platform::Linux, &f).await;
+    assert_eq!(status(&r, "linux-appindicator"), CheckStatus::Ok);
+
     let r = report(Platform::Linux, &with_toolchain(Fake::default())).await;
     let webkit = r.item("linux-webkit2gtk").unwrap();
     assert_eq!(webkit.status, CheckStatus::Missing);

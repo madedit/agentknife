@@ -30,13 +30,17 @@ impl Platform {
 /// The WebView2 runtime's EdgeUpdate client id.
 const WEBVIEW2_GUID: &str = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
 
-/// Linux libraries Tauri needs, checked with pkg-config.
-const LINUX_PACKAGES: &[(&str, &str)] = &[
-    ("linux-webkit2gtk", "webkit2gtk-4.1"),
-    ("linux-javascriptcore", "javascriptcoregtk-4.1"),
-    ("linux-libsoup", "libsoup-3.0"),
-    ("linux-appindicator", "ayatana-appindicator3-0.1"),
-    ("linux-librsvg", "librsvg-2.0"),
+/// Linux libraries Tauri needs, checked with pkg-config (any one name will do).
+const LINUX_PACKAGES: &[(&str, &[&str])] = &[
+    ("linux-webkit2gtk", &["webkit2gtk-4.1"]),
+    ("linux-javascriptcore", &["javascriptcoregtk-4.1"]),
+    ("linux-libsoup", &["libsoup-3.0"]),
+    // Debian and Alpine ship Ayatana; Fedora, Arch and openSUSE the original.
+    (
+        "linux-appindicator",
+        &["ayatana-appindicator3-0.1", "appindicator3-0.1"],
+    ),
+    ("linux-librsvg", &["librsvg-2.0"]),
 ];
 
 /// Checks the isolated toolchain and the system dependencies for `platform`.
@@ -206,7 +210,7 @@ async fn isolated(tc: &Toolchain, pinned: &Pinned, probe: &dyn Probe) -> Vec<Che
     items
 }
 
-fn program_files_x86(probe: &dyn Probe) -> PathBuf {
+pub(crate) fn program_files_x86(probe: &dyn Probe) -> PathBuf {
     PathBuf::from(
         probe
             .env_var("ProgramFiles(x86)")
@@ -333,15 +337,21 @@ async fn macos(probe: &dyn Probe) -> Vec<CheckItem> {
 async fn linux(probe: &dyn Probe) -> Vec<CheckItem> {
     let mut items = Vec::new();
     let has_pkg_config = probe.run("pkg-config", &["--version"], &[]).await.is_some();
-    for (id, pkg) in LINUX_PACKAGES {
+    for (id, names) in LINUX_PACKAGES {
         let mut it = item(id, CheckScope::System, CheckStatus::Missing);
         if !has_pkg_config {
             it.detail = Some("pkg-config is not installed".into());
-        } else if let Some(out) = probe.run("pkg-config", &["--modversion", pkg], &[]).await
-            && out.success
-        {
-            it.status = CheckStatus::Ok;
-            it.found = parse_version(&out.stdout);
+            items.push(it);
+            continue;
+        }
+        for pkg in *names {
+            if let Some(out) = probe.run("pkg-config", &["--modversion", pkg], &[]).await
+                && out.success
+            {
+                it.status = CheckStatus::Ok;
+                it.found = parse_version(&out.stdout);
+                break;
+            }
         }
         items.push(it);
     }

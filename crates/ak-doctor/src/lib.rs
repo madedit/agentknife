@@ -7,6 +7,7 @@ mod detect;
 pub mod fetch;
 pub mod install;
 pub mod probe;
+pub mod system;
 mod toolchain;
 
 pub use detect::{Platform, check, parse_version};

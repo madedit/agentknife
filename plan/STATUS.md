@@ -110,7 +110,7 @@
     - Linux: pkg-config packages and cc
   - DoctorReport DTO in ak-types; fluent names and statuses (en and zh-TW).
   - Fake-probe tests for all 3 OSes.
-- P1-DOC-002 — (hash in next commit) — isolated toolchain install (owner decision Q61 (c)):
+- P1-DOC-002 — c0f3290 — isolated toolchain install (owner decision Q61 (c)):
   - assets: download URLs for rustup-init, trunk, wasm-bindgen, tauri-cli and tailwind on win-x64, linux-x64, mac-x64 and mac-arm64.
   - versions.toml [tools] rustup and [downloads]: 20 sha256 pins written by `cargo xtask pin-downloads`. CI step "downloads" fails on missing or stale keys.
   - Installer: check → plan (isolated items that are not Ok) → install → check again; errors go into the item detail.
@@ -121,3 +121,18 @@
   - Tests: plan, resume, Range ignored, checksum mismatch, all 3 archive kinds, rustup-init args and env, cargo fallback env, nothing-to-do.
   - Real install on this Windows machine: 856 MB in %APPDATA%/AgentKnife/toolchain; doctor ready; second run installs nothing. User PATH (HKCU\Environment), the Rustup uninstall key and C:\tools\rustup were unchanged.
   - Real run on this machine: MSVC 17.14, SDK 10.0.26100, WebView2 155.0 detected. The real rustc 1.99.1 and wasm32 target were detected through junctions into the AgentKnife layout.
+- P1-DOC-003 — (hash in next commit) — guided system-dependency install:
+  - SystemGuide / GuideStep / SystemAction DTOs in ak-types; fluent steps, buttons (doctor-action-*) and confirmations (doctor-confirm-*) in en and zh-TW; every guide ends with "Check again".
+  - Windows:
+    - MSVC: winget Microsoft.VisualStudio.BuildTools (VS 2026, 18.x) with the VCTools workload and recommended components. This also covers a missing SDK.
+    - SDK alone: open the Visual Studio Installer, then manual Modify steps.
+    - WebView2: winget Microsoft.EdgeWebView2Runtime.
+    - No winget: open the official download page.
+  - macOS: xcode-select --install.
+  - Linux:
+    - /etc/os-release (ID, ID_LIKE) picks one copyable command for Debian/Ubuntu, Fedora, Arch, openSUSE, Alpine or Gentoo. These are Tauri's lists plus pkg-config and the -dev packages the check needs.
+    - Unknown distributions get a link to the Tauri page.
+    - Nothing runs sudo.
+  - launch() refuses any page that is not one of the official ones.
+  - Detection fix: linux-appindicator also accepts appindicator3-0.1 (Fedora, Arch, openSUSE).
+  - Not verified on real machines: the winget installs (this PC already has everything), macOS, the Linux commands (openSUSE libappindicator3-devel and the Gentoo list are not from the Tauri page).

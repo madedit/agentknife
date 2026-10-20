@@ -1,4 +1,5 @@
-//! Prints the doctor report for this computer (read-only; installs nothing).
+//! Prints the doctor report for this computer and the guides for missing
+//! system dependencies (read-only; installs nothing).
 //!
 //! ```text
 //! cargo run -p ak-doctor --example doctor_report
@@ -8,6 +9,7 @@
 use std::error::Error;
 
 use ak_doctor::probe::SystemProbe;
+use ak_doctor::system::guides;
 use ak_doctor::{Pinned, Platform, Toolchain, check};
 use ak_types::i18n::{I18n, Locale};
 
@@ -41,5 +43,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         );
     }
     println!("ready: {}", report.ready());
+    for guide in guides(&report, Platform::current(), &SystemProbe::default()).await {
+        println!("\n## {}", i18n.t(&format!("doctor-item-{}", guide.item)));
+        for (n, step) in (1..).zip(&guide.steps) {
+            println!("{n}. {}", i18n.t(&step.message));
+            for extra in [&step.command, &step.link].into_iter().flatten() {
+                println!("   {extra}");
+            }
+        }
+        if let Some(action) = &guide.action {
+            println!(
+                "[{}] {}",
+                i18n.t(&format!("doctor-action-{}", action.key())),
+                i18n.t(&format!("doctor-confirm-{}", action.key()))
+            );
+        }
+    }
     Ok(())
 }
