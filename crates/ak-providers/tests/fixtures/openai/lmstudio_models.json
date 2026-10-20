@@ -1,0 +1,21 @@
+[
+   {
+      "request" : {
+         "method" : "GET",
+         "path" : "/api/v1/models"
+      },
+      "response" : {
+         "chunks" : [
+            "{\"models\":[{\"capabilities\":{\"reasoning\":{\"allowed_options\":[\"on\",\"off\"],\"default\":\"on\"},\"trained_for_tool_use\":true,\"vision\":false},\"key\":\"qwen/qwen3-8b\",\"max_context_length\":32768,\"type\":\"llm\"},{\"capabilities\":{\"trained_for_tool_use\":false,\"vision\":true},\"key\":\"google/gemma-3-4b\",\"max_context_length\":131072,\"type\":\"llm\"}]}"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "application/json"
+            ]
+         ],
+         "status" : 200
+      },
+      "source" : "synthetic"
+   }
+]

@@ -1,0 +1,26 @@
+[
+   {
+      "request" : {
+         "method" : "POST",
+         "path" : "/api/v1/chat/completions"
+      },
+      "response" : {
+         "chunks" : [
+            "data: {\"choices\":[{\"delta\":{\"content\":\"St",
+            "arting\"},\"finish_reason\":null,\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthetic\",\"model\":",
+            "\"m\",\"object\":",
+            "\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"\"},\"finish_reason\":\"error\",\"index\":0}],\"error\":{\"code\":502,\"message\":\"Provider dis",
+            "connected\"},\"id\":\"gen-1\",\"object\":\"chat.c",
+            "ompletion.chunk\"}\n\n"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "text/event-stream"
+            ]
+         ],
+         "status" : 200
+      },
+      "source" : "synthetic"
+   }
+]

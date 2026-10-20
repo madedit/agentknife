@@ -1,0 +1,21 @@
+[
+   {
+      "request" : {
+         "method" : "POST",
+         "path" : "/v1/chat/completions"
+      },
+      "response" : {
+         "chunks" : [
+            "{\"error\":{\"code\":\"invalid_api_key\",\"message\":\"Incorrect API key provided\",\"type\":\"invalid_request_error\"}}"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "application/json"
+            ]
+         ],
+         "status" : 401
+      },
+      "source" : "synthetic"
+   }
+]

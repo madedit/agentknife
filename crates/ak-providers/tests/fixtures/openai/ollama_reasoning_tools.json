@@ -1,0 +1,158 @@
+[
+   {
+      "request" : {
+         "body" : {
+            "max_tokens" : 4096,
+            "messages" : [
+               {
+                  "content" : "You are AgentKnife.",
+                  "role" : "system"
+               },
+               {
+                  "content" : "What is in src/app.rs?",
+                  "role" : "user"
+               }
+            ],
+            "model" : "qwen3:8b",
+            "reasoning_effort" : "high",
+            "stream" : true,
+            "stream_options" : {
+               "include_usage" : true
+            },
+            "tools" : [
+               {
+                  "function" : {
+                     "description" : "Read a project file",
+                     "name" : "read_file",
+                     "parameters" : {
+                        "properties" : {
+                           "path" : {
+                              "type" : "string"
+                           }
+                        },
+                        "required" : [
+                           "path"
+                        ],
+                        "type" : "object"
+                     }
+                  },
+                  "type" : "function"
+               }
+            ]
+         },
+         "method" : "POST",
+         "path" : "/v1/chat/completions"
+      },
+      "response" : {
+         "chunks" : [
+            "data: {\"choices\":[{\"delta\":{\"content\":\"\",",
+            "\"reasoning\":\"I should \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"created\":1792000000",
+            ",\"id\":\"chatcm",
+            "pl-synthetic\",\"model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"\",\"reasoning\":\"read the file.\",\"role\":\"assistan",
+            "t\"},\"finish_reason\":null,\"index\":0}],\"cre",
+            "ated\":1792000000,\"id\":\"chatcmpl-synthetic\",\"model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":n",
+            "ull}\n\ndata: {",
+            "\"choices\":[{\"delta\":{\"content\":\"\",\"role\":\"assistant\",\"tool_calls\":[{\"function\":{\"arguments\":\"{\\\"path\\\":\\\"src/app.rs\\\"}\",\"name\":\"read_file\"},\"id\":\"call_x1\",\"inde",
+            "x\":0,\"type\":\"function\"}]},\"finish_reason\"",
+            ":null,\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthetic\",\"model\":\"m\",\"object\":\"chat.compl",
+            "etion.chunk\",",
+            "\"usage\":null}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"tool_calls\",\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthet",
+            "ic\",\"model\":\"m\",\"object\":\"chat.completion",
+            ".chunk\",\"usage\":null}\n\ndata: {\"choices\":[],\"id\":\"chatcmpl-synthetic\",\"object\":\"chat.completion.ch",
+            "unk\",\"usage\":",
+            "{\"completion_tokens\":40,\"prompt_tokens\":120,\"prompt_tokens_details\":{\"cached_tokens\":0},\"total_tokens\":160}}\n\ndata: [DONE]\n\n"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "text/event-stream"
+            ]
+         ],
+         "status" : 200
+      },
+      "source" : "synthetic"
+   },
+   {
+      "request" : {
+         "body" : {
+            "max_tokens" : 4096,
+            "messages" : [
+               {
+                  "content" : "You are AgentKnife.",
+                  "role" : "system"
+               },
+               {
+                  "content" : "What is in src/app.rs?",
+                  "role" : "user"
+               },
+               {
+                  "content" : null,
+                  "reasoning" : "I should read the file.",
+                  "role" : "assistant",
+                  "tool_calls" : [
+                     {
+                        "function" : {
+                           "arguments" : "{\"path\":\"src/app.rs\"}",
+                           "name" : "read_file"
+                        },
+                        "id" : "call_x1",
+                        "type" : "function"
+                     }
+                  ]
+               },
+               {
+                  "content" : "fn main() {}",
+                  "role" : "tool",
+                  "tool_call_id" : "call_x1"
+               }
+            ],
+            "model" : "qwen3:8b",
+            "reasoning_effort" : "high",
+            "stream" : true,
+            "stream_options" : {
+               "include_usage" : true
+            },
+            "tools" : [
+               {
+                  "function" : {
+                     "description" : "Read a project file",
+                     "name" : "read_file",
+                     "parameters" : {
+                        "properties" : {
+                           "path" : {
+                              "type" : "string"
+                           }
+                        },
+                        "required" : [
+                           "path"
+                        ],
+                        "type" : "object"
+                     }
+                  },
+                  "type" : "function"
+               }
+            ]
+         },
+         "method" : "POST",
+         "path" : "/v1/chat/completions"
+      },
+      "response" : {
+         "chunks" : [
+            "data: {\"choices\":[{\"delta\":{\"content\":\"It",
+            " is an empty \",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"created\":1792000000,\"id\":\"ch",
+            "atcmpl-synthe",
+            "tic\",\"model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"main.\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"index",
+            "\":0}],\"created\":1792000000,\"id\":\"chatcmpl",
+            "-synthetic\",\"model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\n"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "text/event-stream"
+            ]
+         ],
+         "status" : 200
+      },
+      "source" : "synthetic"
+   }
+]

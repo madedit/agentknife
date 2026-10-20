@@ -1,0 +1,152 @@
+[
+   {
+      "request" : {
+         "body" : {
+            "max_tokens" : 4096,
+            "messages" : [
+               {
+                  "content" : "You are AgentKnife.",
+                  "role" : "system"
+               },
+               {
+                  "content" : "What is in src/app.rs?",
+                  "role" : "user"
+               }
+            ],
+            "model" : "anthropic/claude-opus-5-5",
+            "stream" : true,
+            "stream_options" : {
+               "include_usage" : true
+            },
+            "tools" : [
+               {
+                  "function" : {
+                     "description" : "Read a project file",
+                     "name" : "read_file",
+                     "parameters" : {
+                        "properties" : {
+                           "path" : {
+                              "type" : "string"
+                           }
+                        },
+                        "required" : [
+                           "path"
+                        ],
+                        "type" : "object"
+                     }
+                  },
+                  "type" : "function"
+               }
+            ]
+         },
+         "method" : "POST",
+         "path" : "/api/v1/chat/completions"
+      },
+      "response" : {
+         "chunks" : [
+            ": OPENROUTER PROCESSING\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"\",\"reasoning_details\":[{\"format\":\"anthropic-claude-v1\",\"index\":0,\"signature\":\"or-sig-1\",\"text\":\"Check the file first.\",\"type\":\"reasoning.text\"}],\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthetic\",\"model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"{\\\"path\\\":\\\"src/app.rs\\\"}\",\"name\":\"read_file\"},\"id\":\"toolu_or1\",\"index\":0,\"type\":\"function\"}]},\"finish_reason\":null,\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthetic\",\"model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\",\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthetic\",\"model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\n",
+            "data: {\"choices\":[],\"id\":\"chatcmpl-synthetic\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":20,\"prompt_tokens\":300,\"prompt_tokens_details\":{\"cached_tokens\":0},\"total_tokens\":320}}\n\n",
+            "data: [DONE]\n\n"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "text/event-stream"
+            ]
+         ],
+         "status" : 200
+      },
+      "source" : "synthetic"
+   },
+   {
+      "request" : {
+         "body" : {
+            "max_tokens" : 4096,
+            "messages" : [
+               {
+                  "content" : "You are AgentKnife.",
+                  "role" : "system"
+               },
+               {
+                  "content" : "What is in src/app.rs?",
+                  "role" : "user"
+               },
+               {
+                  "content" : null,
+                  "reasoning_details" : [
+                     {
+                        "format" : "anthropic-claude-v1",
+                        "index" : 0,
+                        "signature" : "or-sig-1",
+                        "text" : "Check the file first.",
+                        "type" : "reasoning.text"
+                     }
+                  ],
+                  "role" : "assistant",
+                  "tool_calls" : [
+                     {
+                        "function" : {
+                           "arguments" : "{\"path\":\"src/app.rs\"}",
+                           "name" : "read_file"
+                        },
+                        "id" : "toolu_or1",
+                        "type" : "function"
+                     }
+                  ]
+               },
+               {
+                  "content" : "fn main() {}",
+                  "role" : "tool",
+                  "tool_call_id" : "toolu_or1"
+               }
+            ],
+            "model" : "anthropic/claude-opus-5-5",
+            "stream" : true,
+            "stream_options" : {
+               "include_usage" : true
+            },
+            "tools" : [
+               {
+                  "function" : {
+                     "description" : "Read a project file",
+                     "name" : "read_file",
+                     "parameters" : {
+                        "properties" : {
+                           "path" : {
+                              "type" : "string"
+                           }
+                        },
+                        "required" : [
+                           "path"
+                        ],
+                        "type" : "object"
+                     }
+                  },
+                  "type" : "function"
+               }
+            ]
+         },
+         "method" : "POST",
+         "path" : "/api/v1/chat/completions"
+      },
+      "response" : {
+         "chunks" : [
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Em",
+            "pty main.\"},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthetic\",\"mo",
+            "del\":\"m\",\"obj",
+            "ect\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: [DONE]\n\n"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "text/event-stream"
+            ]
+         ],
+         "status" : 200
+      },
+      "source" : "synthetic"
+   }
+]

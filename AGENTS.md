@@ -197,6 +197,7 @@ Prerequisites for developing AgentKnife:
 | Refresh the vendored CodeMirror | `cargo xtask vendor-codemirror` |
 
 | Record real Anthropic fixtures (costs cents) | `ANTHROPIC_API_KEY=… cargo run -p ak-providers --example record_anthropic` |
+| Record real Chat Completions fixtures (free with local Ollama) | `AK_MODEL=qwen3:8b cargo run -p ak-providers --example record_openai_compat` |
 | Regenerate `rust-toolchain.toml` | `cargo xtask gen-toolchain` (never edit it by hand) |
 
 **Windows gotcha:** run cargo from PowerShell or cmd, not Git Bash. Git Bash's `/usr/bin/link` shadows MSVC `link.exe`, and every build fails with `link: extra operand`.

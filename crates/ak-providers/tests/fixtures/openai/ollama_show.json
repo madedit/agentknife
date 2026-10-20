@@ -1,0 +1,46 @@
+[
+   {
+      "request" : {
+         "body" : {
+            "model" : "gemma2:2b"
+         },
+         "method" : "POST",
+         "path" : "/api/show"
+      },
+      "response" : {
+         "chunks" : [
+            "{\"capabilities\":[\"completion\"],\"model_info\":{\"gemma2.context_length\":8192,\"general.architecture\":\"gemma2\"}}"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "application/json"
+            ]
+         ],
+         "status" : 200
+      },
+      "source" : "synthetic"
+   },
+   {
+      "request" : {
+         "body" : {
+            "model" : "qwen3:8b"
+         },
+         "method" : "POST",
+         "path" : "/api/show"
+      },
+      "response" : {
+         "chunks" : [
+            "{\"capabilities\":[\"completion\",\"tools\",\"thinking\"],\"model_info\":{\"general.architecture\":\"qwen3\",\"qwen3.context_length\":40960}}"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "application/json"
+            ]
+         ],
+         "status" : 200
+      },
+      "source" : "synthetic"
+   }
+]

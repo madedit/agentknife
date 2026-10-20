@@ -68,6 +68,26 @@ impl HttpResponse {
     }
 }
 
+/// Passes 2xx responses through; turns anything else into a typed error, using the
+/// `{"error": {"message": …}}` body most providers send.
+pub(crate) async fn ok_or_error(resp: HttpResponse) -> Result<HttpResponse, ProviderError> {
+    if (200..300).contains(&resp.status) {
+        return Ok(resp);
+    }
+    let status = resp.status;
+    let retry_after = resp.header("retry-after").map(str::to_owned);
+    let text = resp.text().await.unwrap_or_default();
+    let message = serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .and_then(|v| v["error"]["message"].as_str().map(str::to_owned))
+        .unwrap_or(text);
+    Err(ProviderError::from_status(
+        status,
+        retry_after.as_deref(),
+        &message,
+    ))
+}
+
 /// The only way providers reach the network. Real HTTP and fixture replay both
 /// implement it.
 pub trait HttpTransport: Send + Sync {

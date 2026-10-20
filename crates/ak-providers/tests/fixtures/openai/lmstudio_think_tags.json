@@ -1,0 +1,32 @@
+[
+   {
+      "request" : {
+         "method" : "POST",
+         "path" : "/v1/chat/completions"
+      },
+      "response" : {
+         "chunks" : [
+            "data: {\"choices\":[{\"delta\":{\"content\":\"<t",
+            "hi\",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synt",
+            "hetic\",\"model",
+            "\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"nk>The user wants a greeting.</th\"},\"finish_reason\":null,\"index\":0}",
+            "],\"created\":1792000000,\"id\":\"chatcmpl-syn",
+            "thetic\",\"model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"choices\":[{\"delta\":{\"",
+            "content\":\"ink",
+            ">\\n\\nHello!\"},\"finish_reason\":null,\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthetic\",\"model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: ",
+            "{\"choices\":[{\"delta\":{},\"finish_reason\":\"",
+            "stop\",\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthetic\",\"model\":\"m\",\"object\":\"chat.compl",
+            "etion.chunk\",",
+            "\"usage\":null}\n\ndata: [DONE]\n\n"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "text/event-stream"
+            ]
+         ],
+         "status" : 200
+      },
+      "source" : "synthetic"
+   }
+]

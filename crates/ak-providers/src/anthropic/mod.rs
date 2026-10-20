@@ -19,6 +19,7 @@ use futures_util::stream as fstream;
 use serde_json::Value;
 
 use crate::sse::sse_events;
+use crate::transport::ok_or_error;
 use crate::{
     Capabilities, ChatRequest, Effort, EventStream, HttpRequest, HttpResponse, HttpTransport,
     Method, ModelInfo, Provider, ProviderError,
@@ -235,25 +236,6 @@ impl Provider for Anthropic {
             Ok(decode(resp))
         })
     }
-}
-
-/// Passes 2xx responses through; turns anything else into a typed error.
-async fn ok_or_error(resp: HttpResponse) -> Result<HttpResponse, ProviderError> {
-    if (200..300).contains(&resp.status) {
-        return Ok(resp);
-    }
-    let status = resp.status;
-    let retry_after = resp.header("retry-after").map(str::to_owned);
-    let text = resp.text().await.unwrap_or_default();
-    let message = serde_json::from_str::<Value>(&text)
-        .ok()
-        .and_then(|v| v["error"]["message"].as_str().map(str::to_owned))
-        .unwrap_or(text);
-    Err(ProviderError::from_status(
-        status,
-        retry_after.as_deref(),
-        &message,
-    ))
 }
 
 fn decode(resp: HttpResponse) -> EventStream {

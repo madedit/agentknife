@@ -1,0 +1,83 @@
+[
+   {
+      "request" : {
+         "body" : {
+            "max_completion_tokens" : 4096,
+            "messages" : [
+               {
+                  "content" : "You are AgentKnife.",
+                  "role" : "system"
+               },
+               {
+                  "content" : "What is in src/app.rs?",
+                  "role" : "user"
+               }
+            ],
+            "model" : "gpt-test",
+            "reasoning_effort" : "low",
+            "stream" : true,
+            "stream_options" : {
+               "include_usage" : true
+            },
+            "tools" : [
+               {
+                  "function" : {
+                     "description" : "Read a project file",
+                     "name" : "read_file",
+                     "parameters" : {
+                        "properties" : {
+                           "path" : {
+                              "type" : "string"
+                           }
+                        },
+                        "required" : [
+                           "path"
+                        ],
+                        "type" : "object"
+                     }
+                  },
+                  "type" : "function"
+               }
+            ]
+         },
+         "method" : "POST",
+         "path" : "/v1/chat/completions"
+      },
+      "response" : {
+         "chunks" : [
+            "data: {\"choices\":[{\"delta\":{\"content\":\"\",",
+            "\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-syntheti",
+            "c\",\"model\":\"m",
+            "\",\"obfuscation\":\"x9Q\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"Reading \"},\"finish_reason\":null,\"index\":0}],\"create",
+            "d\":1792000000,\"id\":\"chatcmpl-synthetic\",\"",
+            "model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"choices\":[{\"delta\":{\"content\":",
+            "\"it.\"},\"finis",
+            "h_reason\":null,\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthetic\",\"model\":\"m\",\"obfuscation\":\"pad\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: ",
+            "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"fun",
+            "ction\":{\"arguments\":\"\",\"name\":\"read_file\"},\"id\":\"call_abc\",\"index\":0,\"type\":\"function\"}]},\"finish",
+            "_reason\":null",
+            ",\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthetic\",\"model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"choices\":[{\"delta\":{\"tool_calls\"",
+            ":[{\"function\":{\"arguments\":\"{\\\"pa\"},\"inde",
+            "x\":0}]},\"finish_reason\":null,\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthetic\",\"model\":\"",
+            "m\",\"object\":\"",
+            "chat.completion.chunk\",\"usage\":null}\n\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"th\\\": \\\"src/app.rs\\\"}\"},\"index\":0}]},\"finish_reason\":n",
+            "ull,\"index\":0}],\"created\":1792000000,\"id\"",
+            ":\"chatcmpl-synthetic\",\"model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"choices",
+            "\":[{\"delta\":{",
+            "},\"finish_reason\":\"tool_calls\",\"index\":0}],\"created\":1792000000,\"id\":\"chatcmpl-synthetic\",\"model\":\"m\",\"object\":\"chat.completion.chunk\",\"usage\":null}\n\ndata: {\"ch",
+            "oices\":[],\"id\":\"chatcmpl-synthetic\",\"obje",
+            "ct\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":31,\"prompt_tokens\":250,\"prompt_tokens_de",
+            "tails\":{\"cach",
+            "ed_tokens\":200},\"total_tokens\":281}}\n\ndata: [DONE]\n\n"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "text/event-stream"
+            ]
+         ],
+         "status" : 200
+      },
+      "source" : "synthetic"
+   }
+]

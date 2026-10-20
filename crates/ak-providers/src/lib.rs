@@ -11,6 +11,7 @@ mod assemble;
 mod error;
 pub mod fixture;
 mod http;
+pub mod openai;
 mod provider;
 pub mod sse;
 mod transport;

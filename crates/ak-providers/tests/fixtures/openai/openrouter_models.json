@@ -1,0 +1,21 @@
+[
+   {
+      "request" : {
+         "method" : "GET",
+         "path" : "/api/v1/models"
+      },
+      "response" : {
+         "chunks" : [
+            "{\"data\":[{\"architecture\":{\"input_modalities\":[\"text\",\"image\"],\"output_modalities\":[\"text\"]},\"context_length\":1000000,\"id\":\"anthropic/claude-opus-5-5\",\"name\":\"Anthropic: Claude Opus 5.5\",\"supported_parameters\":[\"tools\",\"tool_choice\",\"reasoning\",\"max_tokens\"],\"top_provider\":{\"max_completion_tokens\":128000}},{\"architecture\":{\"input_modalities\":[\"text\"]},\"context_length\":4096,\"id\":\"some/tiny-model\",\"name\":\"Tiny\",\"supported_parameters\":[\"max_tokens\",\"temperature\"],\"top_provider\":{\"max_completion_tokens\":null}}]}"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "application/json"
+            ]
+         ],
+         "status" : 200
+      },
+      "source" : "synthetic"
+   }
+]
