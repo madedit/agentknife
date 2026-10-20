@@ -57,6 +57,163 @@ impl PreviewStatus {
     }
 }
 
+// ---- What the preview page reports (same JSON as `ak_bridge::protocol`) ----
+//
+// ak-bridge ships inside generated apps and cannot be a dependency here, so these
+// are copies; ak-preview's tests check both directions against ak-bridge.
+
+/// The bridge's answers when no page ran an action (`ak_bridge::protocol`).
+pub const PAGE_NOT_OPEN: &str = "the preview page is not open";
+pub const PAGE_CLOSED: &str = "the preview page closed";
+
+/// An action the agent performs in the preview page (control channel).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum ControlAction {
+    Click {
+        ak_id: String,
+    },
+    Type {
+        ak_id: String,
+        text: String,
+        #[serde(default)]
+        enter: bool,
+    },
+    DomSummary,
+    AppState,
+    PrepareScreenshot {
+        #[serde(default)]
+        ak_id: Option<String>,
+    },
+}
+
+impl ControlAction {
+    /// Reads the page without changing it (safe to repeat).
+    pub fn is_read_only(&self) -> bool {
+        matches!(
+            self,
+            ControlAction::DomSummary
+                | ControlAction::AppState
+                | ControlAction::PrepareScreenshot { .. }
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Rect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Size {
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DomItem {
+    pub depth: usize,
+    pub tag: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ak_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attrs: Vec<(String, String)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked: Option<bool>,
+    #[serde(default)]
+    pub disabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DomSummary {
+    pub title: String,
+    pub url: String,
+    pub items: Vec<DomItem>,
+    #[serde(default)]
+    pub omitted: usize,
+}
+
+impl DomSummary {
+    /// Compact text for a model, one element per line, indented by nesting:
+    /// `button #add-button "Add item"`.
+    pub fn render(&self) -> String {
+        let mut out = format!("Page: {} ({})\n", self.title, self.url);
+        for item in &self.items {
+            let mut line = format!("{}{}", "  ".repeat(item.depth), item.tag);
+            if let Some(id) = &item.ak_id {
+                line.push_str(&format!(" #{id}"));
+            }
+            for (k, v) in &item.attrs {
+                line.push_str(&format!(" {k}={v}"));
+            }
+            if let Some(v) = &item.value {
+                line.push_str(&format!(" value={v:?}"));
+            }
+            if let Some(c) = item.checked {
+                line.push_str(if c { " checked" } else { " unchecked" });
+            }
+            if item.disabled {
+                line.push_str(" disabled");
+            }
+            if let Some(t) = &item.text {
+                line.push_str(&format!(" {t:?}"));
+            }
+            out.push_str(&line);
+            out.push('\n');
+        }
+        if self.omitted > 0 {
+            out.push_str(&format!("({} more elements not shown)\n", self.omitted));
+        }
+        out
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AppState {
+    pub url: String,
+    pub title: String,
+    pub local_storage: serde_json::Map<String, serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScreenshotArea {
+    pub rect: Rect,
+    pub viewport: Size,
+    pub device_pixel_ratio: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CanvasPoint {
+    pub x: f64,
+    pub y: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hit: Option<serde_json::Value>,
+}
+
+/// What the user pointed at in the preview (inspector).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Picked {
+    pub ak_id: Option<String>,
+    pub exact: bool,
+    pub path: String,
+    pub tag: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    pub rect: Rect,
+    pub viewport: Size,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas: Option<CanvasPoint>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

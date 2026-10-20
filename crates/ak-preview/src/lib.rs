@@ -4,10 +4,13 @@
 
 #![forbid(unsafe_code)]
 
+pub mod control;
 pub mod dev;
 pub mod log;
 pub mod process;
 pub mod profiles;
+pub mod session;
 
 pub use dev::Preview;
 pub use process::Tools;
+pub use session::{Capturer, Image, PreviewSession};

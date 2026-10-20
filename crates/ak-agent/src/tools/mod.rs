@@ -5,6 +5,7 @@ mod command;
 mod files;
 mod knowledge;
 pub mod path;
+pub mod preview;
 mod search;
 
 use std::path::Path;
@@ -16,6 +17,7 @@ pub use ask::{AskUser, Asker, Question};
 pub use command::{RunCommand, ToolEnv};
 pub use files::{EditFile, ListFiles, ReadFile, WriteFile};
 pub use knowledge::{READ_KNOWLEDGE, ReadKnowledge};
+pub use preview::{PREVIEW_TOOLS, PreviewAccess, with_preview_tools};
 pub use search::SearchFiles;
 
 use crate::tool::{ToolContext, ToolOutput, ToolRegistry};

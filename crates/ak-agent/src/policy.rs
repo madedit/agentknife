@@ -90,6 +90,8 @@ impl PermissionGate for ProjectPolicy {
             }
             // Reads AgentKnife's built-in docs; touches nothing.
             "ask_user" | crate::tools::READ_KNOWLEDGE => Decision::Allow,
+            // Looks at or uses the running preview; never touches project files.
+            t if crate::tools::PREVIEW_TOOLS.contains(&t) => Decision::Allow,
             // A tool this policy does not know: ask rather than guess.
             other => ask(ConfirmKind::Unrecognized, other),
         }

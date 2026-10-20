@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 ak-providers.workspace = true
+ak-preview = { path = "../ak-preview" }
 ak-types.workspace = true
 futures-util.workspace = true
 ignore.workspace = true
@@ -19,8 +20,9 @@ tracing.workspace = true
 chrono.workspace = true
 
 [dev-dependencies]
-# Live examples use the real stack (its knowledge pack).
-ak-preview = { path = "../ak-preview" }
+# Live examples: a real project, toolchain and preview.
+ak-doctor = { path = "../ak-doctor" }
+ak-project = { path = "../ak-project" }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 

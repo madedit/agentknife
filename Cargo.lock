@@ -32,7 +32,9 @@ dependencies = [
 name = "ak-agent"
 version = "0.1.0"
 dependencies = [
+ "ak-doctor",
  "ak-preview",
+ "ak-project",
  "ak-providers",
  "ak-types",
  "chrono",
@@ -98,9 +100,14 @@ dependencies = [
  "ak-doctor",
  "ak-project",
  "ak-types",
+ "futures-util",
  "getrandom 0.3.4",
+ "serde",
+ "serde_json",
+ "tauri",
  "tempfile",
  "tokio",
+ "tokio-tungstenite",
  "toml 1.1.8+spec-1.1.0",
 ]
 

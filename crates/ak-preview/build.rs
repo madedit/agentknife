@@ -61,6 +61,17 @@ fn main() {
         panic!("writing {}: {e}", out.display());
     }
     knowledge(&manifest.join("../../knowledge/tauri-leptos"), &out_dir);
+
+    // Tests link Tauri (ak-bridge's server); on Windows Tauri needs Common-Controls
+    // v6, or the test binaries fail to start (see crates/ak-bridge/build.rs).
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+    {
+        println!("cargo:rustc-link-arg-tests=/MANIFEST:EMBED");
+        println!(
+            "cargo:rustc-link-arg-tests=/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
+        );
+    }
 }
 
 /// `knowledge/tauri-leptos`: pack.toml's id, version and topics, with each

@@ -17,6 +17,11 @@ pub const URL_PARAM: &str = "ak_bridge";
 /// Where the frontend keeps that URL for the rest of the session.
 pub const STORAGE_KEY: &str = "ak_bridge";
 
+/// Control answers when no page could run the action: none is open (never sent),
+/// or the page went away before answering (e.g. it reloaded after a rebuild).
+pub const PAGE_NOT_OPEN: &str = "the preview page is not open";
+pub const PAGE_CLOSED: &str = "the preview page closed";
+
 /// Query parameter that marks a connection as AgentKnife's controller (the
 /// agent), not the preview page: `?token=…&role=controller`.
 pub const CONTROLLER_ROLE: &str = "role=controller";

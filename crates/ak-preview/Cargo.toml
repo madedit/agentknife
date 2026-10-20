@@ -8,8 +8,11 @@ publish.workspace = true
 [dependencies]
 ak-doctor = { path = "../ak-doctor" }
 ak-types.workspace = true
+futures-util.workspace = true
 getrandom.workspace = true
+serde_json.workspace = true
 tokio = { workspace = true, features = ["process", "io-util", "sync", "time", "rt", "net", "macros"] }
+tokio-tungstenite.workspace = true
 
 [build-dependencies]
 # Reads knowledge/<stack>/pack.toml.
@@ -24,8 +27,10 @@ doc = false
 
 [dev-dependencies]
 # Keeps the preview settings in step with what ak-bridge expects.
-ak-bridge = { path = "../ak-bridge" }
+ak-bridge = { path = "../ak-bridge", features = ["dev"] }
+tauri = { workspace = true, features = ["test"] }
 ak-project = { path = "../ak-project" }
+serde.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["process", "io-util", "sync", "time", "rt", "rt-multi-thread", "net", "macros"] }
 toml.workspace = true

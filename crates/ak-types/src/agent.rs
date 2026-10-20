@@ -83,6 +83,16 @@ pub enum AgentEvent {
     },
     /// Older messages were summarized to make room (the chat itself is unchanged).
     ContextCompacted,
+    /// Before finishing a turn that changed files, AgentKnife checks the app still
+    /// builds (fluent `agent-build-checking`).
+    BuildChecking,
+    /// The result: ok (`agent-build-ok`), or failed and the agent is fixing it
+    /// (`agent-build-fixing`, attempt `attempt` of `max`).
+    BuildChecked {
+        ok: bool,
+        attempt: u32,
+        max: u32,
+    },
     /// A message was added to the conversation.
     MessageAppended {
         message: Message,

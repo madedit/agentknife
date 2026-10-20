@@ -69,7 +69,7 @@ pub mod server {
 
     use crate::protocol::{
         CONTROLLER_ROLE, ClientMessage, ControlAction, ENV_ORIGIN, ENV_PORT, ENV_TOKEN,
-        ServerMessage,
+        PAGE_CLOSED, PAGE_NOT_OPEN, ServerMessage,
     };
 
     #[derive(Debug, Clone)]
@@ -287,7 +287,7 @@ pub mod server {
                     let _ = controller.send(ServerMessage::ControlResult {
                         id: their_id,
                         ok: false,
-                        value: Value::String("the preview page closed".into()),
+                        value: Value::String(PAGE_CLOSED.into()),
                     });
                 }
             }
@@ -305,7 +305,7 @@ pub mod server {
             let _ = controller.send(ServerMessage::ControlResult {
                 id: their_id,
                 ok: false,
-                value: Value::String("the preview page is not open".into()),
+                value: Value::String(PAGE_NOT_OPEN.into()),
             });
             return;
         };

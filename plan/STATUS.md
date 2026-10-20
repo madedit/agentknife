@@ -274,7 +274,7 @@
     - The to-do example ran in the preview on the real runtime: add/check/delete/filter via the control channel; it survived a reload (todos.json in app data, then deleted).
     - Live agent (local model) calls read_knowledge on its own with relevant topics. Found and fixed: the policy asked for confirmation on every read_knowledge; the docs used use_toaster() inside async blocks.
   - Fixed in ak-bridge (control channel): dom_summary dropped text in non-reported children (a row's label in a <span>); containers now include text outside reported children.
-- P1-PREV-001 — 6aa71c4 + output-order fix (hash in next commit) — dev-server manager:
+- P1-PREV-001 — 6aa71c4 + 0a076bf — dev-server manager:
   - ak_types::preview: PreviewStatus {frontend, backend: ServerState Off/Starting/Building/Ready/Error{output}, url}, plus ready() and error().
   - ak_types::stack changes: PreviewPlan.frontend_log (LogMarkers) replaces frontend_ready, and ReadySignal is StdoutPrefix only. The tauri-leptos markers come from real trunk 0.21.14 output: "INFO starting build" / "INFO success" / "ERROR error".
   - ak_preview::Preview:
@@ -294,3 +294,21 @@
     - Cause: stdout and stderr were read from separate pipes, so a compiler error on stderr could arrive before the build-start line on stdout and be dropped, or arrive after the failure line. An agent could have read an error without the compiler message.
     - Fix: both streams share one OS pipe (std::io::pipe), so lines keep the order the process wrote them; after an exit the output is drained for up to 500 ms.
     - The test passed 15/15 runs, and preview_live passed again.
+- P1-PREV-002 — (hash in next commit) — agent-facing preview tools:
+  - ak_types::preview copies of the bridge protocol: ControlAction (+is_read_only), DomSummary/DomItem (+render), AppState, ScreenshotArea, Picked, Rect, Size, CanvasPoint, PAGE_NOT_OPEN/PAGE_CLOSED (now shared constants in ak_bridge::protocol). New agent events BuildChecking / BuildChecked{ok, attempt, max} with fluent agent-build-* (en, zh-TW).
+  - ak_preview:
+    - control::Controller: the controller WebSocket client; reconnects only when sending fails, never re-sends.
+    - session::PreviewSession: start/stop/status/settled/files_changed/act/dom_summary/app_state/selection/screenshot, and the Capturer trait (Image).
+    - act retries while the page reloads (always for never-delivered actions, read-only ones only after a mid-action reload).
+  - ak_agent:
+    - PreviewAccess (implemented for PreviewSession) plus the tools build_status, dom_summary, interact, get_selection and screenshot_preview (vision + capturer only); the policy allows them.
+    - Agent::with_preview: files_changed after steps that touched files, then the end-of-turn build check with auto-fix (shares failures/max_fix_attempts with run_command, ends Stuck).
+  - Template fix (found live): Trunk watched the whole project, so the agent's .agentknife/ writes (turn.lock every step, notes) rebuilt and reloaded the page and broke interact. Trunk.toml now watches only index.html, Cargo.toml, src, style and ak. Existing projects get the old Trunk.toml; the template-update mechanism must also refresh config files.
+  - Tests:
+    - Bridge-copy compatibility in both directions, plus render equality.
+    - Controller against the real ak-bridge server with a fake page: no page, click, error, summary, missing backend.
+    - Agent: tools (errors, no screenshot without vision/capture, broken build shown); auto-fix until fixed (the note includes the compiler output and is saved); stays broken -> Stuck; no check without changes or without a running preview.
+  - Live (agent_preview_live, local model, page in Chrome, real preview):
+    - "Change the Greet text": search/edit/build_status/dom_summary, build check ok, Completed.
+    - "Add a Clear button and try it": implemented. After the watch fix, the agent typed, read, clicked and read again, and confirmed the field cleared with no failed steps; build check ok.
+  - Not here: real screen capture (the Capturer comes from ak-app, P1-APP-001: WebView2 CapturePreview / CDP Page.captureScreenshot with clip, WKWebView takeSnapshot, webkit snapshot).

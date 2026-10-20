@@ -225,6 +225,15 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - `run_command` on Windows must use `raw_arg("/S /C \"…\"")`, because Rust's argument quoting breaks cmd.
   - On timeout or cancel, `run_command` must kill the whole process tree, because killing only the shell leaves cargo/trunk running.
 - **Agent sees results:** a preview-screenshot tool when the model has vision, and a DOM summary otherwise. In dev builds, the `ak-bridge` control channel lets the agent click, type, and read state for self-verification.
+  - Tools (`ak_agent::tools::preview`, added with `with_preview_tools(registry, preview, vision)`):
+    - `build_status`, `dom_summary`, `interact` (click/type/read_state by data-ak-id) and `get_selection`.
+    - `screenshot_preview`, only with vision and a `Capturer` (ak-app supplies the capture).
+    - All go through the `PreviewAccess` trait (implemented by `ak_preview::PreviewSession`), and the policy allows them.
+  - `Agent::with_preview`:
+    - After a step that touched files, it calls `files_changed`.
+    - When a turn that changed files ends, it waits for the build (BuildChecking/BuildChecked events). On failure it adds a context note with the compiler output and the model continues, up to `max_fix_attempts`, shared with failed runs; after that the turn ends as Stuck.
+  - `PreviewSession::act` retries while the page reloads after a rebuild (10 s): always when no page got the action, and only read-only actions when the page left mid-action (never a second click).
+  - Template rule: Trunk watches only what the screens are built from (`[watch] watch = [...]`). Writes elsewhere (`.agentknife/`, notes, the backend) must not reload the page while the agent works.
 - **Projects:**
   - The project list is the home screen. Projects default to `~/AgentKnife/Projects/<name>`.
   - The AI connection is global, with an optional per-project override.
@@ -321,6 +330,7 @@ Prerequisites for developing AgentKnife:
 | Record real Anthropic fixtures (costs cents) | `ANTHROPIC_API_KEY=… cargo run -p ak-providers --example record_anthropic` |
 | Record real Chat Completions fixtures (free with local Ollama) | `AK_MODEL=qwen3:8b cargo run -p ak-providers --example record_openai_compat` (`AK_WIRE=responses` records the Responses API, `AK_VISION=1` adds an image scenario) |
 | Run one live agent turn (manual check) | `AK_BASE_URL=http://127.0.0.1:8080/v1 AK_MODEL=… cargo run -p ak-agent --example agent_live` |
+| Live check: agent + running preview + real model (open the printed URL in a browser) | `AK_BASE_URL=… AK_MODEL=… cargo run -p ak-agent --example agent_preview_live -- "<request>"` |
 | Live check of the project tools (edits a scratch project) | same env vars, `--example agent_tools_live` |
 | Regenerate `rust-toolchain.toml` | `cargo xtask gen-toolchain` (never edit it by hand) |
 

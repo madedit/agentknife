@@ -12,6 +12,7 @@ use ak_types::agent::{
 };
 use ak_types::chat::{ContentPart, Conversation, Entry, Message, ToolCall};
 use ak_types::i18n::Locale;
+use ak_types::preview::ServerState;
 use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
 use tokio::sync::mpsc::UnboundedSender;
@@ -25,6 +26,7 @@ use crate::plan::{CancelPlans, PlanReviewer};
 use crate::policy::{PermissionMode, ProjectPolicy};
 use crate::prompt::{PLAN_TOOL, PlanMode, greeting_note, plan_tool_spec, system_prompt};
 use crate::tool::{ToolContext, ToolOutput, ToolRegistry, split_label};
+use crate::tools::preview::{PreviewAccess, describe_status};
 use crate::usage::{CapStatus, CostBasis, Totals, UsageLedger};
 
 #[derive(Debug, Clone)]
@@ -87,6 +89,16 @@ struct TurnState {
 /// Tools whose failure counts towards auto-fix.
 const BUILD_TOOLS: &[&str] = &["run_command"];
 
+/// How long the end-of-turn build check waits for the preview to rebuild.
+const BUILD_CHECK_WAIT: std::time::Duration = std::time::Duration::from_secs(300);
+
+enum BuildCheck {
+    Fine,
+    /// The model gets the error and another step.
+    FixIt,
+    Stop(TurnOutcome),
+}
+
 /// What a finished turn did, for the checkpoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TurnSummary {
@@ -146,6 +158,9 @@ pub struct Agent {
     config: AgentConfig,
     /// Built once: never changes during a conversation.
     system: String,
+    /// The project's running preview: told about file changes, and checked for a
+    /// working build before a turn that changed files ends.
+    preview: Option<Arc<dyn PreviewAccess>>,
 }
 
 type Events = UnboundedSender<AgentEvent>;
@@ -166,7 +181,14 @@ impl Agent {
             session: Mutex::new(Totals::default()),
             config,
             system,
+            preview: None,
         }
+    }
+
+    /// Connects the project's preview (see the `preview` field).
+    pub fn with_preview(mut self, preview: Arc<dyn PreviewAccess>) -> Self {
+        self.preview = Some(preview);
+        self
     }
 
     pub fn with_plan_reviewer(mut self, reviewer: Arc<dyn PlanReviewer>) -> Self {
@@ -497,10 +519,18 @@ impl Agent {
                 return stop;
             }
             if calls.is_empty() {
-                return match assembled.stop_reason {
-                    StopReason::MaxTokens => TurnOutcome::MaxTokens,
-                    _ => TurnOutcome::Completed,
-                };
+                if assembled.stop_reason == StopReason::MaxTokens {
+                    return TurnOutcome::MaxTokens;
+                }
+                // The model is done. If it changed files, the app must still build.
+                match self
+                    .check_build(conversation, events, touched, &mut state)
+                    .await
+                {
+                    BuildCheck::Fine => return TurnOutcome::Completed,
+                    BuildCheck::FixIt => continue,
+                    BuildCheck::Stop(outcome) => return outcome,
+                }
             }
 
             let mut step_touched = Vec::new();
@@ -548,6 +578,12 @@ impl Agent {
                     touched.push(t.clone());
                 }
             }
+            if !step_touched.is_empty()
+                && let Some(preview) = &self.preview
+            {
+                // Backend code needs a restart; the screens rebuild by themselves.
+                preview.files_changed(&step_touched).await;
+            }
             if let Some(l) = lock.as_mut()
                 && let Err(e) = l.record_step(&step_touched)
             {
@@ -567,6 +603,64 @@ impl Agent {
             }
         }
         TurnOutcome::StepLimit
+    }
+
+    /// After a turn that changed files: waits for the preview build. A failure
+    /// goes back to the model with the compiler output (up to `max_fix_attempts`
+    /// fixes, shared with failed builds/runs).
+    async fn check_build(
+        &self,
+        conversation: &mut Conversation,
+        events: &Events,
+        touched: &[String],
+        state: &mut TurnState,
+    ) -> BuildCheck {
+        let Some(preview) = &self.preview else {
+            return BuildCheck::Fine;
+        };
+        if touched.is_empty() || preview.status().frontend == ServerState::Off {
+            return BuildCheck::Fine;
+        }
+        emit(events, AgentEvent::BuildChecking);
+        let status = preview.settled(BUILD_CHECK_WAIT).await;
+        let max = self.config.max_fix_attempts;
+        let Some(error) = status.error() else {
+            emit(
+                events,
+                AgentEvent::BuildChecked {
+                    ok: true,
+                    attempt: 0,
+                    max,
+                },
+            );
+            return BuildCheck::Fine;
+        };
+        state.failures += 1;
+        state.last_error = error.to_owned();
+        if state.failures > max {
+            return BuildCheck::Stop(TurnOutcome::Stuck {
+                attempts: max,
+                last_error: std::mem::take(&mut state.last_error),
+            });
+        }
+        emit(
+            events,
+            AgentEvent::BuildChecked {
+                ok: false,
+                attempt: state.failures,
+                max,
+            },
+        );
+        conversation.push_context(format!(
+            "After your changes the app no longer builds, so the user's preview is broken.              Fix this before you finish (read the files involved first).
+
+{}",
+            describe_status(&status)
+        ));
+        if let Err(e) = self.store.save(conversation) {
+            return BuildCheck::Stop(save_failed(e));
+        }
+        BuildCheck::FixIt
     }
 
     /// Adds a model call's usage to the session and today's ledger and reports it.

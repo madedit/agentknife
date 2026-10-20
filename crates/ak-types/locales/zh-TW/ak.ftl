@@ -25,6 +25,12 @@ doctor-install-done = { $tool } 已安裝。
 doctor-install-failed = 無法安裝 { $tool }。
 doctor-ready = 需要的工具都裝好了。
 
+## Agent 修改後的建置檢查（$attempt、$max：數字）
+
+agent-build-checking = 正在確認 App 還能正常建置…
+agent-build-ok = App 可以正常建置與執行。
+agent-build-fixing = App 無法建置，正在修正（第 { $attempt } 次，最多 { $max } 次）…
+
 ## Agent 步驟確認（$detail：原始指令或路徑）
 
 confirm-download = 這一步會從網路下載或安裝軟體：{ $detail }

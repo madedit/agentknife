@@ -25,6 +25,12 @@ doctor-install-done = { $tool } is installed.
 doctor-install-failed = Could not install { $tool }.
 doctor-ready = Everything you need is installed.
 
+## Build check after the agent's changes ($attempt, $max: numbers)
+
+agent-build-checking = Checking that the app still builds…
+agent-build-ok = The app builds and runs.
+agent-build-fixing = The app no longer builds. Fixing it (try { $attempt } of { $max })…
+
 ## Agent step confirmations ($detail: the command or path, shown verbatim)
 
 confirm-download = This step downloads or installs software from the internet: { $detail }

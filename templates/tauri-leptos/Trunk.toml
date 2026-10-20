@@ -3,8 +3,10 @@
 target = "index.html"
 
 [watch]
-# The backend has its own build; changes there do not rebuild the frontend.
-ignore = ["src-tauri"]
+# Only what the screens are built from. Anything else (the backend, which has its
+# own build; AgentKnife's .agentknife/ notes and turn lock; docs) must not
+# rebuild and reload the preview page while the agent works.
+watch = ["index.html", "Cargo.toml", "src", "style", "ak"]
 
 [serve]
 addresses = ["127.0.0.1"]
