@@ -253,21 +253,96 @@ pub enum HostOs {
     Linux,
 }
 
-/// An installer the bundle step produces.
+impl HostOs {
+    /// The OS AgentKnife runs on (`None` on others).
+    pub fn current() -> Option<HostOs> {
+        match std::env::consts::OS {
+            "windows" => Some(HostOs::Windows),
+            "macos" => Some(HostOs::MacOs),
+            "linux" => Some(HostOs::Linux),
+            _ => None,
+        }
+    }
+}
+
+/// How AgentKnife packs the built program.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Artifact {
+pub enum ArchiveFormat {
+    Zip,
+    TarGz,
+}
+
+impl ArchiveFormat {
+    pub fn extension(self) -> &'static str {
+        match self {
+            ArchiveFormat::Zip => "zip",
+            ArchiveFormat::TarGz => "tar.gz",
+        }
+    }
+}
+
+/// What a bundle build leaves for the user.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BundleOutput {
+    /// The build made an installer: the newest `*.{extension}` in `dir`
+    /// (relative to the project).
+    Installer {
+        /// Short kind for messages (`dmg`).
+        kind: &'static str,
+        dir: &'static str,
+        extension: &'static str,
+    },
+    /// AgentKnife packs the built program into an archive.
+    Archive(ArchiveFormat),
+}
+
+/// The bundle build for one OS.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BundleTarget {
     pub os: HostOs,
-    /// Short kind for messages (`nsis`, `dmg`, `appimage`, `deb`).
-    pub kind: &'static str,
-    /// Folder (relative to the project) and file extension where it appears.
-    pub dir: &'static str,
-    pub extension: &'static str,
+    pub command: CommandSpec,
+    pub output: BundleOutput,
+}
+
+/// A string value in a project JSON file, by JSON pointer (`/productName`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct JsonField {
+    pub file: &'static str,
+    pub pointer: &'static str,
+}
+
+/// Where preview-only code would show up in a release build.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScanIn {
+    /// The built program.
+    Program,
+    /// Every file under this project folder.
+    Dir(&'static str),
+}
+
+/// Text that only preview-only code contains; finding it in a release build
+/// means the bridge or inspector slipped in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PreviewMarker {
+    pub scan: ScanIn,
+    pub text: &'static str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BundlePlan {
-    pub command: CommandSpec,
-    pub artifacts: &'static [Artifact],
+    pub targets: Vec<BundleTarget>,
+    /// The release program, relative to the project, without `.exe`.
+    pub program: &'static str,
+    /// The app's display name and version (archive and file names).
+    pub name: JsonField,
+    pub version: JsonField,
+    pub preview_markers: &'static [PreviewMarker],
+}
+
+impl BundlePlan {
+    pub fn target(&self, os: HostOs) -> Option<&BundleTarget> {
+        self.targets.iter().find(|t| t.os == os)
+    }
 }
 
 #[cfg(test)]

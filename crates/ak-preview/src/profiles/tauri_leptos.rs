@@ -4,8 +4,9 @@
 //! This is the only place that knows those names (checked by `cargo xtask ci`).
 
 use ak_types::stack::{
-    Artifact, BundlePlan, CommandSpec, HostOs, KnowledgePack, LogMarkers, PreviewPlan, ReadySignal,
-    StackProfile, Template, TemplateFile, TemplateValue, Tool,
+    ArchiveFormat, BundleOutput, BundlePlan, BundleTarget, CommandSpec, HostOs, JsonField,
+    KnowledgePack, LogMarkers, PreviewMarker, PreviewPlan, ReadySignal, ScanIn, StackProfile,
+    Template, TemplateFile, TemplateValue, Tool,
 };
 
 /// `templates/tauri-leptos`, embedded by build.rs.
@@ -47,32 +48,22 @@ const DOCTOR: &[&str] = &[
     "linux-c-compiler",
 ];
 
-const ARTIFACTS: &[Artifact] = &[
-    Artifact {
-        os: HostOs::Windows,
-        kind: "nsis",
-        dir: "target/release/bundle/nsis",
-        extension: "exe",
+/// Text only the bridge's preview code has (ak_bridge::protocol::READY_PREFIX in
+/// the backend, the inspector's overlay id in the screens).
+const PREVIEW_MARKERS: &[PreviewMarker] = &[
+    PreviewMarker {
+        scan: ScanIn::Program,
+        text: "AK_BRIDGE_READY",
     },
-    Artifact {
-        os: HostOs::MacOs,
-        kind: "dmg",
-        dir: "target/release/bundle/dmg",
-        extension: "dmg",
-    },
-    Artifact {
-        os: HostOs::Linux,
-        kind: "appimage",
-        dir: "target/release/bundle/appimage",
-        extension: "AppImage",
-    },
-    Artifact {
-        os: HostOs::Linux,
-        kind: "deb",
-        dir: "target/release/bundle/deb",
-        extension: "deb",
+    PreviewMarker {
+        scan: ScanIn::Dir("dist"),
+        text: "__ak_inspector_overlay",
     },
 ];
+
+/// Where the preview's dev server writes the screens. Not `dist/`: a release
+/// build writes there, and the preview would then serve screens without `dev`.
+const PREVIEW_DIST: &str = "target/ak-preview-dist";
 
 fn strings(items: &[&str]) -> Vec<String> {
     items.iter().map(|s| (*s).to_owned()).collect()
@@ -123,6 +114,8 @@ impl StackProfile for TauriLeptos {
                     "serve",
                     "--features",
                     "dev",
+                    "--dist",
+                    PREVIEW_DIST,
                     "--address",
                     "127.0.0.1",
                     "--port",
@@ -175,18 +168,52 @@ impl StackProfile for TauriLeptos {
     }
 
     fn bundle(&self) -> BundlePlan {
-        let (env, env_remove) = trunk_env();
-        BundlePlan {
-            // tauri.conf.json runs `trunk build --release` first (no `dev`
-            // feature: the bridge is not in the installer).
-            command: CommandSpec {
+        // tauri.conf.json runs `trunk build --release` first (no `dev`
+        // feature: the bridge is not in the release build).
+        let build = |extra: &[&str]| {
+            let (env, env_remove) = trunk_env();
+            let mut args = strings(&["build"]);
+            args.extend(strings(extra));
+            CommandSpec {
                 tool: Tool::CargoTauri,
-                args: strings(&["build"]),
+                args,
                 cwd: "",
                 env,
                 env_remove,
+            }
+        };
+        BundlePlan {
+            targets: vec![
+                BundleTarget {
+                    os: HostOs::Windows,
+                    command: build(&["--no-bundle"]),
+                    output: BundleOutput::Archive(ArchiveFormat::Zip),
+                },
+                BundleTarget {
+                    os: HostOs::Linux,
+                    command: build(&["--no-bundle"]),
+                    output: BundleOutput::Archive(ArchiveFormat::TarGz),
+                },
+                BundleTarget {
+                    os: HostOs::MacOs,
+                    command: build(&["--bundles", "dmg"]),
+                    output: BundleOutput::Installer {
+                        kind: "dmg",
+                        dir: "target/release/bundle/dmg",
+                        extension: "dmg",
+                    },
+                },
+            ],
+            program: "target/release/app",
+            name: JsonField {
+                file: "src-tauri/tauri.conf.json",
+                pointer: "/productName",
             },
-            artifacts: ARTIFACTS,
+            version: JsonField {
+                file: "src-tauri/tauri.conf.json",
+                pointer: "/version",
+            },
+            preview_markers: PREVIEW_MARKERS,
         }
     }
 }
@@ -317,8 +344,17 @@ mod tests {
         assert!(backend.args.windows(2).any(|w| w == ["--features", "dev"]));
         assert!(backend.env.iter().any(|(_, v)| v == "{bridge_token}"));
         assert!(preview.frontend.env_remove.contains(&"NO_COLOR".to_owned()));
+        assert!(
+            preview
+                .frontend
+                .args
+                .windows(2)
+                .any(|w| w == ["--dist", PREVIEW_DIST])
+        );
         let bundle = TauriLeptos.bundle();
-        assert!(!bundle.command.args.iter().any(|a| a.contains("dev")));
+        for t in &bundle.targets {
+            assert!(!t.command.args.iter().any(|a| a.contains("dev")));
+        }
         // The installer build must not enable `dev` behind our back either.
         let conf = String::from_utf8_lossy(file("src-tauri/tauri.conf.json").unwrap().contents);
         assert!(conf.contains(r#""beforeBuildCommand": "trunk build --release""#));

@@ -4,6 +4,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
+use tokio::sync::mpsc;
+
 use ak_doctor::Toolchain;
 use ak_types::stack::{CommandSpec, Tool, fill};
 
@@ -92,6 +94,27 @@ impl Tools {
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         cmd
     }
+}
+
+/// Sends the process's output, line by line (a blocking read on its own thread).
+pub fn read_lines(reader: std::io::PipeReader, tx: mpsc::UnboundedSender<String>) {
+    std::thread::spawn(move || {
+        let mut reader = std::io::BufReader::new(reader);
+        let mut buf = Vec::new();
+        loop {
+            buf.clear();
+            match std::io::BufRead::read_until(&mut reader, b'\n', &mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {
+                    let line = String::from_utf8_lossy(&buf);
+                    let line = line.trim_end_matches(['\n', '\r']).to_owned();
+                    if tx.send(line).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
 }
 
 fn killer(pid: u32) -> std::process::Command {

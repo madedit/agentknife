@@ -312,7 +312,7 @@
     - "Change the Greet text": search/edit/build_status/dom_summary, build check ok, Completed.
     - "Add a Clear button and try it": implemented. After the watch fix, the agent typed, read, clicked and read again, and confirmed the field cleared with no failed steps; build check ok.
   - Not here: real screen capture (the Capturer comes from ak-app, P1-APP-001: WebView2 CapturePreview / CDP Page.captureScreenshot with clip, WKWebView takeSnapshot, webkit snapshot).
-- P1-PREV-003 — (hash in next commit) — data-ak-id auto-insert:
+- P1-PREV-003 — c9ad231 — data-ak-id auto-insert:
   - ak_preview::ids::add_missing_ids(source, fallback): syn 3 (span-locations) finds view! bodies outside closures, rstml 0.13.1 parses them like leptos_macro 0.8.19 (recover_block), ` data-ak-id="…"` is inserted after the tag name of meaningful lowercase elements without one.
     - Ids: own text, name, aria-label, alt, title, id, a meaningful input type, placeholder, else the component name (split camel case), else the file stem; plus the kind (button, link, input, checkbox, title, text, list, form…), not repeated when the words already end with it. Unique per file against existing data-ak-id/ak_id (-2, -3).
   - StackProfile::add_missing_ids(rel_path, source) (default None); tauri-leptos runs it on src/**.rs and returns None when nothing changed or the file does not parse.
@@ -321,3 +321,11 @@
   - add_ids example: the pass as a CLI, in place.
   - Tests: unit (naming, uniqueness, closures, components, idempotence); golden fixtures signup/todos (AK_BLESS=1 rewrites; output parses and is idempotent); the template and the worked example need no ids; the profile only touches src/**.rs; agent: the pass runs on the changed file, writes it, tells the preview, then the build check.
   - Compile check: the knowledge-check project (check-knowledge) with its static ids stripped got them back from add_ids (todo-app-main, to-do-title), and 15 were added to snippets.rs; `cargo build --target wasm32-unknown-unknown --features dev` succeeded, so the inserted attributes are valid Leptos.
+- P1-BUNDLE-001 — (hash in next commit) — host-platform bundling (changed by the user 2026-10-20: Windows .zip, Linux .tar.gz; NSIS .exe and .deb moved to the new P1-BUNDLE-003):
+  - ak_types::stack: BundlePlan is now per-OS BundleTargets (command + BundleOutput::Archive(Zip|TarGz) or Installer{kind, dir, extension}), the release program path, name/version JsonFields and PreviewMarkers (ScanIn::Program / Dir). HostOs::current().
+  - tauri-leptos: Windows/Linux `cargo tauri build --no-bundle`, macOS `--bundles dmg` (not run here: no Mac). tauri.conf.json targets are now app + dmg. Markers: AK_BRIDGE_READY in the program, __ak_inspector_overlay under dist/.
+  - Preview fix found while designing: trunk serve now writes to target/ak-preview-dist; with the shared dist/ a release build would have replaced the preview's screens with ones without `dev`.
+  - ak_bundle::Bundler::build: reads name/version first, runs the build (stdout+stderr on one pipe, colors stripped, Output events, the tail on failure, cancel kills the process tree), checks markers, packs `<Name>/<Name>[.exe]` (tar mode 755; written to .partial, then renamed), records a Bundle checkpoint, returns path + checkpoint id. Stages Building/Checking/Packing with fluent bundle-* labels (en, zh-TW); timeline-bundle now says "Packaged for installing" / 「打包了 App」.
+  - ak_preview::process::read_lines is now shared (moved from dev.rs).
+  - Tests (fake `cargo tauri build`, ak-bundle-fake-build): pack + archive contents + stages + output lines + Bundle checkpoints (twice); failure keeps the compiler output; a leaked marker in the program or in dist/ is refused with nothing packed; missing program / empty name (checked before building); cancel. Unit: tar.gz mode, file names, marker search.
+  - Live (bundle_live, fresh project, isolated toolchain, Windows 11): `Bundle Check_0.1.0_x64.zip` (2.7 MB) in 112 s with a Bundle checkpoint. The dev builds of the same project contain both markers, the release program does not. Unzipped `Bundle Check/Bundle Check.exe` starts and shows the Home screen.

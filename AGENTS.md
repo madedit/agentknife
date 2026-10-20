@@ -106,7 +106,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
 - Stack-specific logic goes behind a `StackProfile` trait, which covers template, knowledge pack, doctor requirements, preview strategy, and bundle strategy. Do not hard-code `tauri-leptos` outside its profile implementation.
   - The trait and its plain-data plans live in `ak_types::stack`: Template (embedded files, values to replace, renames, `instantiate`), KnowledgePack, doctor requirement ids (`DoctorReport::ready_for`), PreviewPlan and BundlePlan.
     - The plans hold CommandSpecs for toolchain tools, with `{port}`, `{bridge_port}`, `{bridge_token}` and `{bridge_origin}` placeholders and env to set or remove.
-    - They also say how to tell readiness, which paths restart the backend, and where installers appear.
+    - They also say how to tell readiness, which paths restart the backend, and, per host OS, how the release is built and what the user gets (an archive AgentKnife packs, or an installer the build makes).
   - Implementations live in `ak_preview::profiles` (`default_profile`, `by_id`); `tauri_leptos.rs` embeds `templates/tauri-leptos` via build.rs. Projects store the stack id in project.json; `Project::scaffold(&dyn StackProfile)` writes the starter app and never overwrites existing files.
   - `cargo xtask ci` (step `stack`) rejects the literal stack name anywhere under crates/ except that profile, its build.rs and its tests.
 
@@ -280,7 +280,11 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Never delete task checkpoints, bundle checkpoints, or user-marked versions ("Mark this version").
   - Also never delete `abandoned` entries (the user's set-aside work), `restore` or `initial` entries, or the newest entry, which is the state on disk.
   - Task checkpoints are always recorded, even without new changes, because a task usually ends right after its last turn.
-- **Bundling:** build for the host platform only. Windows: NSIS `.exe`. macOS: `.dmg`. Linux: `.AppImage` + `.deb`. Phase 2 adds Android `.apk`. Output is unsigned, and the AI explains SmartScreen/Gatekeeper workarounds in plain language.
+- **Bundling:** build for the host platform only. Windows: `.zip`. macOS: `.dmg`. Linux: `.tar.gz`. Installers (NSIS `.exe`, `.deb`) come later (P1-BUNDLE-003); Phase 2 adds Android `.apk`. Output is unsigned, and the AI explains SmartScreen/Gatekeeper workarounds in plain language.
+  - `ak_bundle::Bundler::build` runs the plan's command (`cargo tauri build --no-bundle` on Windows and Linux, `--bundles dmg` on macOS), streams stages and output lines, and refuses a build that contains a preview marker (the bridge's ready line in the program, the inspector's overlay id under `dist/`).
+  - Archives hold `<Name>/<Name>[.exe]` (mode 755 in tar.gz) and go to `target/release/bundle/{zip,tar.gz}/<Name>_<version>_<arch>.<ext>`; name and version come from tauri.conf.json. Every success records a `Bundle` checkpoint.
+  - The preview's `trunk serve` writes to `target/ak-preview-dist`, never `dist/`, so a release build cannot swap the preview's screens for ones without `dev`.
+  - On Windows the zip needs WebView2 (built into Windows 10/11); on Linux the tar.gz needs WebKitGTK 4.1 installed on the target computer. The install guidance (P1-BUNDLE-002) must say so.
 - **Privacy:** no telemetry by default. Crash reports are opt-in only.
 
 ## 5. Coding rules
@@ -331,6 +335,7 @@ Prerequisites for developing AgentKnife:
 | Real OS keychain round trip (writes and deletes a test entry) | `cargo test -p ak-providers --test credentials -- --ignored` |
 | Live check of the preview manager (new project, real toolchain; minutes) | `cargo run -p ak-preview --example preview_live` |
 | Add missing data-ak-ids to Leptos files, in place | `cargo run -p ak-preview --example add_ids -- <file.rs>…` |
+| Live check of bundling (new project, real toolchain; minutes) | `cargo run -p ak-bundle --example bundle_live` |
 | Doctor report for this computer (read-only) | `cargo run -p ak-doctor --example doctor_report` |
 | Install the isolated toolchain for real (several hundred MB) | `cargo run -p ak-doctor --example doctor_install` |
 | Record real Anthropic fixtures (costs cents) | `ANTHROPIC_API_KEY=… cargo run -p ak-providers --example record_anthropic` |

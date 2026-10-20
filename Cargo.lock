@@ -73,6 +73,20 @@ dependencies = [
 [[package]]
 name = "ak-bundle"
 version = "0.1.0"
+dependencies = [
+ "ak-doctor",
+ "ak-preview",
+ "ak-project",
+ "ak-types",
+ "flate2",
+ "serde_json",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "zip",
+]
 
 [[package]]
 name = "ak-doctor"

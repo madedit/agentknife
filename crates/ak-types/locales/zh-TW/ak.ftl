@@ -48,7 +48,7 @@ denied-dangerous = 已阻擋：這可能會損壞你的電腦：{ $detail }
 timeline-initial = 起點
 timeline-turn = 修改
 timeline-task = 完成一個任務
-timeline-bundle = 產生了安裝檔
+timeline-bundle = 打包了 App
 timeline-marked = 標記的版本
 timeline-abandoned = 暫存起來（可以找回來）
 timeline-restore = 回到之前的版本
@@ -130,3 +130,8 @@ doctor-confirm-winget-webview2 = 要安裝 Microsoft Edge WebView2 嗎？AgentKn
 doctor-confirm-open-vs-installer = 要打開 Visual Studio Installer 嗎？Windows 可能會要求管理員權限。
 doctor-confirm-xcode-install = 要安裝 Apple 的命令列工具嗎？macOS 會顯示自己的視窗來確認並下載。
 doctor-confirm-open-page = 要在瀏覽器打開官方下載頁面嗎？
+
+# Bundling
+bundle-building = 正在建置完成版 App（第一次要幾分鐘）…
+bundle-checking = 正在確認裡面沒有預覽專用的部分…
+bundle-packing = 正在把 App 打包成一個檔案…

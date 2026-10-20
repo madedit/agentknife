@@ -48,7 +48,7 @@ denied-dangerous = Blocked: this could damage your computer: { $detail }
 timeline-initial = Starting point
 timeline-turn = Change
 timeline-task = Task finished
-timeline-bundle = Installer built
+timeline-bundle = Packaged for installing
 timeline-marked = Marked version
 timeline-abandoned = Set aside (can be brought back)
 timeline-restore = Went back to an earlier version
@@ -130,3 +130,8 @@ doctor-confirm-winget-webview2 = Install Microsoft Edge WebView2? AgentKnife run
 doctor-confirm-open-vs-installer = Open the Visual Studio Installer? Windows may ask for administrator permission.
 doctor-confirm-xcode-install = Install Apple’s Command Line Tools? macOS shows its own window to confirm and download them.
 doctor-confirm-open-page = Open the official download page in your browser?
+
+# Bundling
+bundle-building = Building the finished app (the first time takes a few minutes)…
+bundle-checking = Checking that no preview-only parts are inside…
+bundle-packing = Packing the app into one file…

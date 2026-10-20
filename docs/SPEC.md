@@ -60,10 +60,10 @@ AI 用使用者的語言打招呼，說明 AgentKnife 能做什麼，並建議�
 - 「用真正的視窗執行」按鈕：開出實際的 App 視窗做最後測試
 
 ### 4.5 打包與安裝
-- 產出**目前這台電腦平台**的安裝檔：
-  - Windows：`.exe` 安裝程式
+- 產出**目前這台電腦平台**的 App 檔案：
+  - Windows：`.zip`（解壓後直接執行；`.exe` 安裝程式之後再加）
   - macOS：`.dmg`
-  - Linux：`.AppImage`、`.deb`
+  - Linux：`.tar.gz`（`.deb` 之後再加）
   - （第二階段）Android：`.apk`
 - 安裝檔不簽章。AI 依平台用白話教使用者怎麼安裝，包括 Windows SmartScreen 和 macOS「無法打開」警告的處理方式
 - 需要其他平台的安裝檔時，AI 會說明要在那個平台的電腦上打包

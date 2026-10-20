@@ -6,8 +6,8 @@
 use ak_project::{Project, ProjectError};
 use ak_types::i18n::Locale;
 use ak_types::stack::{
-    BundlePlan, CommandSpec, KnowledgePack, LogMarkers, PreviewPlan, ReadySignal, StackProfile,
-    Template, TemplateFile, TemplateValue, Tool,
+    BundlePlan, CommandSpec, JsonField, KnowledgePack, LogMarkers, PreviewPlan, ReadySignal,
+    StackProfile, Template, TemplateFile, TemplateValue, Tool,
 };
 
 struct Fake(&'static str);
@@ -77,8 +77,17 @@ impl StackProfile for Fake {
     }
     fn bundle(&self) -> BundlePlan {
         BundlePlan {
-            command: cmd(),
-            artifacts: &[],
+            targets: Vec::new(),
+            program: "app",
+            name: JsonField {
+                file: "app.json",
+                pointer: "/name",
+            },
+            version: JsonField {
+                file: "app.json",
+                pointer: "/version",
+            },
+            preview_markers: &[],
         }
     }
 }

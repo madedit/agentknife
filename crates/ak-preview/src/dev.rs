@@ -13,7 +13,7 @@ use tokio::task::JoinHandle;
 
 use crate::log::{BuildTracker, Tail};
 use crate::process::{
-    Tools, encode_query_value, free_port, kill_tree, kill_tree_now, random_token,
+    Tools, encode_query_value, free_port, kill_tree, kill_tree_now, random_token, read_lines,
 };
 
 /// After a process exits, how long to wait for the rest of its output.
@@ -223,27 +223,6 @@ impl Drop for Preview {
             r.task.abort();
         }
     }
-}
-
-/// Sends the process's output, line by line (a blocking read on its own thread).
-fn read_lines(reader: std::io::PipeReader, tx: mpsc::UnboundedSender<String>) {
-    std::thread::spawn(move || {
-        let mut reader = std::io::BufReader::new(reader);
-        let mut buf = Vec::new();
-        loop {
-            buf.clear();
-            match std::io::BufRead::read_until(&mut reader, b'\n', &mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(_) => {
-                    let line = String::from_utf8_lossy(&buf);
-                    let line = line.trim_end_matches(['\n', '\r']).to_owned();
-                    if tx.send(line).is_err() {
-                        break;
-                    }
-                }
-            }
-        }
-    });
 }
 
 fn set(status: &watch::Sender<PreviewStatus>, side: Side, state: ServerState, url: Option<String>) {

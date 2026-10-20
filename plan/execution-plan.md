@@ -381,7 +381,7 @@ APP and E2E integrate all tracks.
 - Owner: unassigned
 - Depends on: P1-DOC-002, P1-TPL-001
 - Acceptance:
-  - Runs `cargo tauri build` for the host and produces: Windows NSIS `.exe`, macOS `.dmg`, Linux `.AppImage` + `.deb`.
+  - Runs `cargo tauri build` for the host and produces: Windows `.zip`, macOS `.dmg`, Linux `.tar.gz` (changed by the user 2026-10-20; installers are P1-BUNDLE-003).
   - Bridge and inspector are absent from the output.
   - Creates a bundle checkpoint.
   - Returns artifact paths.
@@ -394,6 +394,15 @@ APP and E2E integrate all tracks.
   - Per-platform plain-language install steps in fluent, including the SmartScreen "More info → Run anyway" and Gatekeeper right-click-Open / System Settings flows.
   - An "open folder" action.
   - When the user asks for another OS, explains that they need to build on that OS.
+
+### P1-BUNDLE-003 — Installers
+- Crate(s): ak-bundle
+- Owner: unassigned
+- Depends on: P1-BUNDLE-001
+- Acceptance:
+  - Windows NSIS `.exe` and Linux `.deb` (tauri-bundler), next to the archives.
+  - Decide first whether the doctor provisions NSIS (tauri-bundler downloads it to %LOCALAPPDATA%\tauri\NSIS on first use) or AgentKnife asks before downloading.
+  - Install guidance covers both kinds.
 
 ---
 
