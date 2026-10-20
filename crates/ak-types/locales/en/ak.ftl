@@ -364,3 +364,7 @@ bundle-error-cancelled = Packaging was stopped.
 bundle-error-other = Packaging did not work.
 # Sent to the AI as the user's message
 bundle-fix-message = Packaging the app failed because it does not build. Please fix it.
+
+## Requests AgentKnife sends to the AI for the user (buttons in the chat)
+agent-continue-request = Please continue.
+agent-try-another-request = That did not work. Please try a different way.

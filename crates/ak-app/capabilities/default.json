@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "AgentKnife's window: its own commands and Tauri events.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

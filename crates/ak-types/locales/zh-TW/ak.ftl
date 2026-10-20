@@ -361,3 +361,7 @@ bundle-error-cancelled = 打包已停止。
 bundle-error-other = 打包沒有成功。
 # 以使用者的身分傳給 AI
 bundle-fix-message = 打包 App 失敗了，因為它無法建置。請幫我修正。
+
+## AgentKnife 代使用者傳給 AI 的要求（對話中的按鈕）
+agent-continue-request = 請繼續。
+agent-try-another-request = 這樣行不通，請換個做法試試。

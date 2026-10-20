@@ -16,6 +16,9 @@ ak-providers = { path = "crates/ak-providers" }
 # Pinned stack — must match versions.toml exactly (checked by `cargo xtask ci`).
 tauri = "=2.12.4"
 tauri-build = "=2.7.3"
+# Tauri plugins used by ak-app (2.x line, compatible with the pinned tauri).
+tauri-plugin-dialog = "2.8.3"
+tauri-plugin-opener = "2.7.2"
 leptos = "=0.8.22"
 wasm-bindgen = "=0.2.129"
 

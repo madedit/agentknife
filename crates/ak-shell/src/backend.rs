@@ -154,6 +154,27 @@ impl Backend {
         }
     }
 
+    /// Opens an https page in the user's browser (links inside the window do
+    /// not navigate it).
+    pub fn open_url(&self, url: &str) {
+        match self {
+            Backend::Tauri => {
+                let (b, url) = (self.clone(), url.to_owned());
+                leptos::task::spawn_local(async move {
+                    let _ = b.call::<()>(cmd::OPEN_URL, Some(url)).await;
+                });
+            }
+            Backend::Demo(_) => {
+                #[cfg(target_arch = "wasm32")]
+                if let Some(w) = web_sys::window() {
+                    let _ = w.open_with_url_and_target(url, "_blank");
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                let _ = url;
+            }
+        }
+    }
+
     pub async fn reveal(&self, path: &str) -> Result<(), CallError> {
         self.call(cmd::REVEAL, Some(path)).await
     }

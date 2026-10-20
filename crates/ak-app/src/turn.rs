@@ -1,0 +1,534 @@
+//! Running the agent for the open project: one agent per turn (so a changed AI
+//! connection applies at once), its events forwarded to the window, and the
+//! answers it waits for coming back through the chat's commands.
+
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use ak_agent::permission::{ConfirmRequest, Confirmer};
+use ak_agent::plan::PlanReviewer;
+use ak_agent::policy::{PermissionMode, ProjectPolicy};
+use ak_agent::tools::{Asker, Question, ToolEnv, project_tools, with_preview_tools};
+use ak_agent::{Agent, AgentConfig, Checkpointer, ConversationStore, TurnSummary, prompt, usage};
+use ak_project::{CheckpointKind, Project, Timeline};
+use ak_types::agent::{AgentEvent, PlanDecision, PlanProposal, TurnOutcome};
+use ak_types::chat::{Conversation, Message};
+use ak_types::i18n::I18n;
+use ak_types::ipc::{AGENT_EVENT, Answer, InterruptionChoice, SendMessage, StuckChoice};
+use ak_types::preview::Picked;
+use futures_util::future::BoxFuture;
+use tauri::{AppHandle, Emitter, Manager, State};
+use tokio_util::sync::CancellationToken;
+
+use crate::state::{AppState, Pending};
+use crate::{Res, fail, ui_locale};
+
+/// The chat's side of the agent's questions: each waits for its command.
+struct UiBridge(Arc<std::sync::Mutex<Pending>>);
+
+impl Confirmer for UiBridge {
+    fn confirm(&self, request: ConfirmRequest) -> BoxFuture<'_, bool> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        if let Ok(mut p) = self.0.lock() {
+            p.confirmations.insert(request.request_id, tx);
+        }
+        Box::pin(async move { rx.await.unwrap_or(false) })
+    }
+}
+
+impl PlanReviewer for UiBridge {
+    fn review(&self, request_id: String, _: PlanProposal) -> BoxFuture<'_, PlanDecision> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        if let Ok(mut p) = self.0.lock() {
+            p.plans.insert(request_id, tx);
+        }
+        Box::pin(async move { rx.await.unwrap_or(PlanDecision::Cancel) })
+    }
+}
+
+impl Asker for UiBridge {
+    fn ask(&self, q: Question) -> BoxFuture<'_, Option<String>> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        if let Ok(mut p) = self.0.lock() {
+            p.questions.insert(q.request_id, tx);
+        }
+        Box::pin(async move { rx.await.ok().flatten() })
+    }
+}
+
+struct Store(Arc<std::sync::Mutex<Project>>);
+
+impl ConversationStore for Store {
+    fn save(&self, conversation: &Conversation) -> Result<(), String> {
+        let p = self
+            .0
+            .lock()
+            .map_err(|_| "project state poisoned".to_owned())?;
+        p.save_conversation(conversation).map_err(|e| e.to_string())
+    }
+}
+
+/// A timeline entry after every turn that changed something.
+struct Checkpoints(PathBuf);
+
+impl Checkpointer for Checkpoints {
+    fn checkpoint<'a>(
+        &'a self,
+        summary: &'a TurnSummary,
+    ) -> BoxFuture<'a, Result<Option<(String, String)>, String>> {
+        let root = self.0.clone();
+        let label = summary.request.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                let mut t = Timeline::open(&root).map_err(|e| e.to_string())?;
+                let entry = t
+                    .checkpoint(CheckpointKind::Turn, &label, None)
+                    .map_err(|e| e.to_string())?;
+                Ok(entry.map(|e| (e.id, e.label)))
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        })
+    }
+}
+
+/// Everything a turn needs from the open project.
+struct Parts {
+    root: PathBuf,
+    project: Arc<std::sync::Mutex<Project>>,
+    preview: Arc<ak_preview::PreviewSession>,
+    conversation: Arc<tokio::sync::Mutex<Conversation>>,
+    cancel: CancellationToken,
+}
+
+/// The agent for the open project with the current AI connection.
+async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
+    let (profile, effective) = {
+        let inner = state.inner.lock().await;
+        let global = inner
+            .settings
+            .ai
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("no AI is connected"))?;
+        let project = parts
+            .project
+            .lock()
+            .map_err(|_| anyhow::anyhow!("project state poisoned"))?;
+        (
+            crate::home::profile_of(&project),
+            project.effective_ai(&global),
+        )
+    };
+    let provider =
+        crate::connect::provider(&effective, None).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let caps = provider
+        .capabilities(&effective.model)
+        .await
+        .unwrap_or_default();
+
+    let mut config = AgentConfig::new(effective.model.clone());
+    config.system = Some(prompt::product_prompt().to_owned());
+    config.project_dir = Some(parts.root.clone());
+    config.ui_locale = ui_locale();
+    config.context_window = caps.context_window;
+    if let Some(max) = caps.max_output_tokens {
+        config.max_tokens = config.max_tokens.min(max);
+    }
+    config.cost_basis = usage::cost_basis(
+        &effective.provider,
+        effective.base_url.as_deref(),
+        &effective.model,
+    );
+
+    let bridge = Arc::new(UiBridge(state.pending.clone()));
+    let env = ToolEnv {
+        path_prefix: state.tools.path_prefix.clone(),
+        vars: state.tools.env.clone(),
+    };
+    let registry = with_preview_tools(
+        project_tools(env, bridge.clone(), Some(profile.knowledge_pack())),
+        parts.preview.clone(),
+        caps.vision,
+    );
+    Ok(Agent::new(provider, registry, config)
+        .with_gate(Arc::new(ProjectPolicy::new(PermissionMode::Standard)))
+        .with_confirmer(bridge.clone())
+        .with_plan_reviewer(bridge)
+        .with_preview(parts.preview.clone())
+        .with_id_pass(Arc::new(move |rel: &str, src: &str| {
+            profile.add_missing_ids(rel, src)
+        }))
+        .with_checkpointer(Arc::new(Checkpoints(parts.root.clone())))
+        .with_store(Arc::new(Store(parts.project.clone())))
+        .with_usage_ledger(state.ledger.clone()))
+}
+
+/// What a turn starts from.
+enum Start {
+    /// The user's words, after an optional note for the AI.
+    Message { text: String, note: Option<String> },
+    /// The interrupted turn in `turn.lock`.
+    Resume,
+    /// The first message in a new chat.
+    Greet,
+}
+
+/// Claims the open project for a turn; `None` when nothing is open or a turn runs.
+async fn claim(state: &AppState) -> Option<Parts> {
+    let mut inner = state.inner.lock().await;
+    let open = inner.open.as_mut()?;
+    if open.cancel.is_some() {
+        return None;
+    }
+    let cancel = CancellationToken::new();
+    open.cancel = Some(cancel.clone());
+    open.before_turn = Timeline::open(&open.root)
+        .ok()
+        .and_then(|t| t.entries().last().map(|e| e.id.clone()));
+    Some(Parts {
+        root: open.root.clone(),
+        project: open.project.clone(),
+        preview: open.preview.clone(),
+        conversation: open.conversation.clone(),
+        cancel,
+    })
+}
+
+fn emit(app: &AppHandle, event: AgentEvent) {
+    let _ = app.emit(AGENT_EVENT, event);
+}
+
+/// Runs one turn in the background.
+fn spawn(app: AppHandle, start: Start) {
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        let Some(parts) = claim(&state).await else {
+            if !matches!(start, Start::Greet) {
+                emit(
+                    &app,
+                    AgentEvent::TurnFinished {
+                        outcome: TurnOutcome::Failed {
+                            message: "the AI is still working on the last request".into(),
+                            retryable: false,
+                        },
+                    },
+                );
+            }
+            return;
+        };
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let forward = {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                while let Some(e) = rx.recv().await {
+                    emit(&app, e);
+                }
+            })
+        };
+        match agent(&state, &parts).await {
+            Err(e) => {
+                if !matches!(start, Start::Greet) {
+                    let _ = tx.send(AgentEvent::TurnFinished {
+                        outcome: TurnOutcome::Failed {
+                            message: e.to_string(),
+                            retryable: false,
+                        },
+                    });
+                }
+            }
+            Ok(agent) => {
+                let mut conversation = parts.conversation.lock().await;
+                match start {
+                    Start::Message { text, note } => {
+                        if let Some(n) = note {
+                            conversation.push_context(n);
+                        }
+                        agent
+                            .run_turn(
+                                &mut conversation,
+                                Message::user_text(text),
+                                &tx,
+                                &parts.cancel,
+                            )
+                            .await;
+                    }
+                    Start::Resume => {
+                        if agent
+                            .resume_turn(&mut conversation, &tx, &parts.cancel)
+                            .await
+                            .is_none()
+                        {
+                            let _ = tx.send(AgentEvent::TurnFinished {
+                                outcome: TurnOutcome::Completed,
+                            });
+                        }
+                    }
+                    Start::Greet => {
+                        let _ = agent.greet(&mut conversation, &tx, &parts.cancel).await;
+                    }
+                }
+            }
+        }
+        drop(tx);
+        let _ = forward.await;
+        if let Some(open) = state.inner.lock().await.open.as_mut() {
+            open.cancel = None;
+        }
+    });
+}
+
+/// After a project opens: the project notes for the AI, then the greeting.
+pub async fn on_open(app: AppHandle, greet: bool) {
+    let state = app.state::<AppState>();
+    let Some(parts) = claim(&state).await else {
+        return;
+    };
+    if let Ok(agent) = agent(&state, &parts).await {
+        let mut conversation = parts.conversation.lock().await;
+        let _ = agent.open_session(&mut conversation);
+    }
+    if let Some(open) = state.inner.lock().await.open.as_mut() {
+        open.cancel = None;
+    }
+    if greet {
+        spawn(app, Start::Greet);
+    }
+}
+
+/// What the user pointed at, for the AI (English: notes are for the model).
+pub fn selection_note(p: &Picked) -> String {
+    let id = match (&p.ak_id, p.exact) {
+        (Some(id), true) => format!(" data-ak-id=\"{id}\""),
+        (Some(id), false) => format!(" (inside the element with data-ak-id=\"{id}\")"),
+        (None, _) => " (no data-ak-id nearby)".to_owned(),
+    };
+    let text = p
+        .text
+        .as_deref()
+        .map(|t| format!(", text \"{t}\""))
+        .unwrap_or_default();
+    format!(
+        "With this message the user pointed at an element in the preview: <{}>{id}{text}, \
+         CSS path `{}`. \"This\", \"here\" and similar words mean that element. \
+         get_selection has the details.",
+        p.tag, p.path
+    )
+}
+
+/// A fixed request in the user's language (continue, try another way).
+fn words(id: &str) -> String {
+    I18n::new(ui_locale())
+        .map(|i| i.t(id))
+        .unwrap_or_else(|_| id.to_owned())
+}
+
+#[tauri::command]
+pub async fn send_message(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: SendMessage,
+) -> Res<()> {
+    let note = {
+        let inner = state.inner.lock().await;
+        let open = inner
+            .open
+            .as_ref()
+            .ok_or_else(|| fail("no project is open"))?;
+        open.preview.set_selection(request.selection.clone());
+        request.selection.as_ref().map(selection_note)
+    };
+    spawn(
+        app,
+        Start::Message {
+            text: request.text,
+            note,
+        },
+    );
+    Ok(())
+}
+
+#[tauri::command]
+pub fn answer_confirmation(state: State<'_, AppState>, request: Answer<bool>) -> Res<()> {
+    let tx = state
+        .pending
+        .lock()
+        .ok()
+        .and_then(|mut p| p.confirmations.remove(&request.request_id));
+    tx.map(|t| t.send(request.answer))
+        .ok_or_else(|| fail("nothing is waiting for that answer"))?
+        .map_err(|_| fail("the step no longer waits"))
+}
+
+#[tauri::command]
+pub fn answer_plan(state: State<'_, AppState>, request: Answer<PlanDecision>) -> Res<()> {
+    let tx = state
+        .pending
+        .lock()
+        .ok()
+        .and_then(|mut p| p.plans.remove(&request.request_id));
+    tx.map(|t| t.send(request.answer))
+        .ok_or_else(|| fail("nothing is waiting for that answer"))?
+        .map_err(|_| fail("the plan no longer waits"))
+}
+
+#[tauri::command]
+pub fn answer_question(state: State<'_, AppState>, request: Answer<String>) -> Res<()> {
+    let tx = state
+        .pending
+        .lock()
+        .ok()
+        .and_then(|mut p| p.questions.remove(&request.request_id));
+    tx.map(|t| t.send(Some(request.answer)))
+        .ok_or_else(|| fail("nothing is waiting for that answer"))?
+        .map_err(|_| fail("the question no longer waits"))
+}
+
+#[tauri::command]
+pub async fn cancel_turn(state: State<'_, AppState>) -> Res<()> {
+    if let Some(c) = state
+        .inner
+        .lock()
+        .await
+        .open
+        .as_ref()
+        .and_then(|o| o.cancel.clone())
+    {
+        c.cancel();
+    }
+    // Whatever waited for an answer stops waiting.
+    if let Ok(mut p) = state.pending.lock() {
+        *p = Pending::default();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn continue_turn(app: AppHandle) -> Res<()> {
+    spawn(
+        app,
+        Start::Message {
+            text: words("agent-continue-request"),
+            note: None,
+        },
+    );
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn stuck_choice(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: StuckChoice,
+) -> Res<()> {
+    match request {
+        StuckChoice::TryAnotherWay => {
+            spawn(
+                app,
+                Start::Message {
+                    text: words("agent-try-another-request"),
+                    note: None,
+                },
+            );
+            Ok(())
+        }
+        StuckChoice::RollBack => {
+            let (root, before, preview) = {
+                let inner = state.inner.lock().await;
+                let open = inner
+                    .open
+                    .as_ref()
+                    .ok_or_else(|| fail("no project is open"))?;
+                (
+                    open.root.clone(),
+                    open.before_turn.clone(),
+                    open.preview.clone(),
+                )
+            };
+            let id = before.ok_or_else(|| fail("there is no earlier version"))?;
+            let restored = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<String>> {
+                let mut t = Timeline::open(&root)?;
+                let label = t
+                    .entries()
+                    .iter()
+                    .find(|e| e.id == id)
+                    .map(|e| e.label.clone())
+                    .unwrap_or_default();
+                Ok(t.restore(&id, &label)?.changed_files)
+            })
+            .await
+            .map_err(fail)?
+            .map_err(fail)?;
+            let _ = preview.files_changed(&restored).await;
+            Ok(())
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn resolve_interruption(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: InterruptionChoice,
+) -> Res<()> {
+    match request {
+        InterruptionChoice::Continue => {
+            spawn(app, Start::Resume);
+            Ok(())
+        }
+        InterruptionChoice::GoBack => {
+            let root = state
+                .inner
+                .lock()
+                .await
+                .open
+                .as_ref()
+                .map(|o| o.root.clone())
+                .ok_or_else(|| fail("no project is open"))?;
+            let label = words("timeline-abandoned");
+            tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+                Timeline::open(&root)?.discard_interrupted(&label)?;
+                Ok(())
+            })
+            .await
+            .map_err(fail)?
+            .map_err(fail)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ak_types::preview::{Rect, Size};
+
+    use super::*;
+
+    #[test]
+    fn the_selection_note_names_the_element_for_the_ai() {
+        let mut p = Picked {
+            ak_id: Some("greet-button".into()),
+            exact: true,
+            path: "main > button".into(),
+            tag: "button".into(),
+            text: Some("Greet".into()),
+            rect: Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            viewport: Size {
+                width: 1.0,
+                height: 1.0,
+            },
+            canvas: None,
+        };
+        let note = selection_note(&p);
+        assert!(
+            note.contains("<button> data-ak-id=\"greet-button\""),
+            "{note}"
+        );
+        assert!(note.contains("text \"Greet\"") && note.contains("main > button"));
+        p.exact = false;
+        assert!(selection_note(&p).contains("inside the element with data-ak-id"));
+    }
+}

@@ -4,8 +4,37 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "AgentKnife itself: the Tauri window around ak-shell and the commands behind it."
+
+[[bin]]
+name = "agentknife"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build.workspace = true
 
 [dependencies]
+ak-agent = { path = "../ak-agent" }
+ak-bundle = { path = "../ak-bundle" }
+ak-doctor = { path = "../ak-doctor" }
+ak-preview = { path = "../ak-preview" }
+ak-project = { path = "../ak-project" }
+ak-providers.workspace = true
+ak-types.workspace = true
+anyhow.workspace = true
+dirs.workspace = true
+futures-util.workspace = true
+ignore.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tauri.workspace = true
+tauri-plugin-dialog.workspace = true
+tauri-plugin-opener.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time", "process"] }
+tokio-util.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

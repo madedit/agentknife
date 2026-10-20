@@ -81,6 +81,42 @@ pub mod cmd {
     pub const BUNDLE: &str = "bundle";
     /// `String` (a file's full path) → `()`: shows it in the file manager.
     pub const REVEAL: &str = "reveal";
+    /// `String` (an `https://` address) → `()`: opens it in the user's browser
+    /// (links inside AgentKnife's window do not navigate it).
+    pub const OPEN_URL: &str = "open_url";
+
+    /// Every command, for checking that the app handles them all.
+    pub const ALL: &[&str] = &[
+        HOME_STATE,
+        CREATE_PROJECT,
+        OPEN_PROJECT,
+        OPEN_FOLDER,
+        LIST_MODELS,
+        CHECK_MODEL,
+        SAVE_CONNECTION,
+        SEND_MESSAGE,
+        ANSWER_CONFIRMATION,
+        ANSWER_PLAN,
+        ANSWER_QUESTION,
+        CANCEL_TURN,
+        CONTINUE_TURN,
+        STUCK_CHOICE,
+        RESOLVE_INTERRUPTION,
+        PREVIEW_STATUS,
+        RUN_APP,
+        LIST_FILES,
+        READ_FILE,
+        WRITE_FILE,
+        TIMELINE,
+        RESTORE,
+        MARK_VERSION,
+        DOCTOR_CHECK,
+        DOCTOR_INSTALL,
+        DOCTOR_ACTION,
+        BUNDLE,
+        REVEAL,
+        OPEN_URL,
+    ];
 }
 
 /// Tauri event carrying [`DoctorProgress`](crate::doctor::DoctorProgress)

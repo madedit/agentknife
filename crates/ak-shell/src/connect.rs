@@ -337,6 +337,10 @@ fn DetailsStep(
                     target="_blank"
                     rel="noreferrer"
                     class="mt-3 inline-block text-sm text-blue-700 underline dark:text-blue-300"
+                    on:click=move |e| {
+                        e.prevent_default();
+                        expect_context::<Backend>().open_url(page);
+                    }
                 >
                     {move || if preset().is_some_and(|p| p.needs_key) {
                         t("connect-get-key")()

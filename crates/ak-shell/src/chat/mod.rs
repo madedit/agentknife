@@ -492,15 +492,25 @@ fn Expired() -> impl IntoView {
 fn OutcomeCard(outcome: TurnOutcome, handled: bool) -> impl IntoView {
     let chat = expect_context::<Chat>();
     let go_on = move |what: Option<StuckChoice>| {
+        // Rolling back runs no turn: the files and history reload instead.
+        let turn = what != Some(StuckChoice::RollBack);
         chat.log.update(|l| {
             l.outcome_handled();
-            l.running = true;
+            l.running = turn;
         });
+        let files = use_context::<crate::files::Files>();
         call(chat.log, move |b| async move {
-            match what {
+            let result = match what {
                 Some(c) => b.stuck_choice(c).await,
                 None => b.continue_turn().await,
+            };
+            if !turn
+                && result.is_ok()
+                && let Some(f) = files
+            {
+                f.refresh(b);
             }
+            result
         });
     };
     let continue_button = move |label: &'static str| {
@@ -572,10 +582,18 @@ fn Interrupted(request: String) -> impl IntoView {
             l.interrupted = None;
             l.running = c == InterruptionChoice::Continue;
         });
-        call(
-            chat.log,
-            move |b| async move { b.resolve_interruption(c).await },
-        );
+        // Going back changes files without a turn: reload them after.
+        let files = use_context::<crate::files::Files>();
+        call(chat.log, move |b| async move {
+            let result = b.resolve_interruption(c).await;
+            if c == InterruptionChoice::GoBack
+                && result.is_ok()
+                && let Some(f) = files
+            {
+                f.refresh(b);
+            }
+            result
+        });
     };
     let back = choose;
     view! {

@@ -70,8 +70,11 @@ fn item(id: &str, scope: CheckScope, status: CheckStatus) -> CheckItem {
     }
 }
 
-/// The first `1.2` / `1.2.3` / `v4.1.0`-like token.
+/// The first `1.2` / `1.2.3` / `v4.1.0`-like token. Colour codes are ignored:
+/// some tools colour their output when the environment asks for it
+/// (`FORCE_COLOR`, as under `cargo tauri dev`).
 pub fn parse_version(text: &str) -> Option<String> {
+    let text = strip_ansi(text);
     text.split(|c: char| c.is_whitespace() || matches!(c, '(' | ')' | ',' | '"'))
         .map(|t| t.trim_start_matches('v'))
         .find(|t| {
@@ -82,6 +85,27 @@ pub fn parse_version(text: &str) -> Option<String> {
                     .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
         })
         .map(str::to_owned)
+}
+
+/// `text` without ANSI escape sequences (`ESC [ … letter`).
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                for c in chars.by_ref() {
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// Runs `--version`-style probes for a pinned tool.

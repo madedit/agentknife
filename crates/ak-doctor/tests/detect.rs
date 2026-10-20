@@ -174,6 +174,12 @@ fn version_parsing() {
         Some("4.3.3")
     );
     assert_eq!(parse_version("tauri-cli 2.12.3").as_deref(), Some("2.12.3"));
+    // Coloured output (FORCE_COLOR in the environment, as under `cargo tauri dev`).
+    assert_eq!(
+        parse_version("\u{1b}[3m\u{1b}[1m\u{1b}[34m≈\u{1b}[39m\u{1b}[22m\u{1b}[23m tailwindcss \u{1b}[34mv4.3.3\u{1b}[39m\n")
+            .as_deref(),
+        Some("4.3.3")
+    );
     assert_eq!(
         parse_version("pv    REG_SZ    141.0.3537.71").as_deref(),
         Some("141.0.3537.71")

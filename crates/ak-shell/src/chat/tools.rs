@@ -136,7 +136,18 @@ fn Step(step: GuideStep, #[prop(optional)] args: Vec<(&'static str, String)>) ->
             {step.link.map(|l| {
                 let href = l.clone();
                 view! {
-                    <a href=href target="_blank" rel="noreferrer" class="mt-1 block truncate text-xs text-blue-700 underline dark:text-blue-300">{l}</a>
+                    <a
+                        href=href.clone()
+                        target="_blank"
+                        rel="noreferrer"
+                        class="mt-1 block truncate text-xs text-blue-700 underline dark:text-blue-300"
+                        on:click=move |e| {
+                            e.prevent_default();
+                            expect_context::<Backend>().open_url(&href);
+                        }
+                    >
+                        {l}
+                    </a>
                 }
             })}
         </li>
