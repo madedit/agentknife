@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::agent::PlanDecision;
 use crate::chat::Entry;
+use crate::doctor::{DoctorReport, GuideStep, SystemGuide};
 use crate::preview::Picked;
 use crate::settings::AiConnection;
 
@@ -65,6 +66,69 @@ pub mod cmd {
     pub const RESTORE: &str = "restore";
     /// [`MarkVersion`](super::MarkVersion) → `()`
     pub const MARK_VERSION: &str = "mark_version";
+    /// `()` → [`DoctorCheck`](super::DoctorCheck): checks the development tools.
+    pub const DOCTOR_CHECK: &str = "doctor_check";
+    /// `()` → [`DoctorCheck`](super::DoctorCheck): installs the missing tools
+    /// that AgentKnife keeps in its own folder, then checks again. Progress
+    /// arrives as [`DOCTOR_EVENT`](super::DOCTOR_EVENT).
+    pub const DOCTOR_INSTALL: &str = "doctor_install";
+    /// [`SystemAction`](crate::doctor::SystemAction) → `()`: starts an official
+    /// installer or opens a page. The UI asks the user first.
+    pub const DOCTOR_ACTION: &str = "doctor_action";
+    /// `()` → [`BundleResult`](super::BundleResult), or a
+    /// [`BundleFailure`](super::BundleFailure) as the error. Progress arrives as
+    /// [`BUNDLE_EVENT`](super::BUNDLE_EVENT).
+    pub const BUNDLE: &str = "bundle";
+    /// `String` (a file's full path) → `()`: shows it in the file manager.
+    pub const REVEAL: &str = "reveal";
+}
+
+/// Tauri event carrying [`DoctorProgress`](crate::doctor::DoctorProgress)
+/// while tools install.
+pub const DOCTOR_EVENT: &str = "doctor-progress";
+/// Tauri event carrying [`BundleProgress`] while the app is packaged.
+pub const BUNDLE_EVENT: &str = "bundle-progress";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DoctorCheck {
+    pub report: DoctorReport,
+    /// How to get each missing system dependency.
+    #[serde(default)]
+    pub guides: Vec<SystemGuide>,
+}
+
+/// One update while packaging: a new stage (fluent `bundle-…`) or a line of
+/// build output.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BundleProgress {
+    Stage { message: String },
+    Output { line: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BundleResult {
+    /// Full path of the packed file.
+    pub path: String,
+    /// Its file name (`My App_0.1.0_x64.zip`): `$file` in the steps.
+    pub file: String,
+    /// The app's folder and program name: `$app` in the steps.
+    pub app: String,
+    /// The system it was made for (`windows`, `macos`, `linux`).
+    pub os: String,
+    /// How to install and start it (`ak_bundle::guide::install_guide`).
+    pub steps: Vec<GuideStep>,
+}
+
+/// Why packaging failed; the UI shows fluent `bundle-error-<kind>`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BundleFailure {
+    /// `build-failed`, `preview-code`, `unsupported`, `app-info`, `cancelled`,
+    /// `other`.
+    pub kind: String,
+    /// Technical detail (compiler output) for "Details".
+    #[serde(default)]
+    pub detail: String,
 }
 
 /// Tauri event carrying the open project's

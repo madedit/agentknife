@@ -5,6 +5,8 @@ use ak_types::agent::{
     AgentEvent, ConfirmReason, PlanDecision, PlanProposal, TurnOutcome, UsageSummary,
 };
 use ak_types::chat::{ContentPart, Entry, Message};
+use ak_types::doctor::DoctorProgress;
+use ak_types::ipc::{BundleFailure, BundleProgress, BundleResult, DoctorCheck};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StepState {
@@ -21,6 +23,33 @@ pub enum BuildLine {
     Ok,
     Fixing { attempt: u32, max: u32 },
 }
+
+/// The tools check, shown in the chat.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct DoctorCard {
+    pub check: Option<DoctorCheck>,
+    /// The install step running now.
+    pub progress: Option<DoctorProgress>,
+    /// Checking or installing.
+    pub busy: bool,
+    pub error: Option<String>,
+}
+
+/// Packaging the app, shown in the chat.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BundleCard {
+    Running {
+        /// Fluent id of the stage (`bundle-building`).
+        stage: Option<String>,
+        /// The last lines of build output.
+        lines: Vec<String>,
+    },
+    Done(BundleResult),
+    Failed(BundleFailure),
+}
+
+/// Lines of build output kept on the bundle card.
+const BUNDLE_LINES: usize = 30;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
@@ -66,6 +95,8 @@ pub enum Item {
         answered: Option<String>,
         expired: bool,
     },
+    Doctor(DoctorCard),
+    Bundle(BundleCard),
     /// How a turn ended, when it did not simply complete.
     Outcome {
         outcome: TurnOutcome,
@@ -367,6 +398,89 @@ impl ChatLog {
         }
     }
 
+    /// A new tools check at the end of the chat.
+    pub fn new_doctor(&mut self) -> &mut DoctorCard {
+        self.items.push(Item::Doctor(DoctorCard {
+            busy: true,
+            ..DoctorCard::default()
+        }));
+        self.doctor()
+    }
+
+    /// The latest tools check (a new one if there is none).
+    pub fn doctor(&mut self) -> &mut DoctorCard {
+        let found = self
+            .items
+            .iter()
+            .rposition(|i| matches!(i, Item::Doctor(_)));
+        let index = match found {
+            Some(i) => i,
+            None => {
+                self.items.push(Item::Doctor(DoctorCard::default()));
+                self.items.len() - 1
+            }
+        };
+        match &mut self.items[index] {
+            Item::Doctor(card) => card,
+            // INVARIANT: `index` points at a Doctor item (found or just pushed).
+            _ => unreachable!("a doctor card"),
+        }
+    }
+
+    pub fn doctor_progress(&mut self, p: DoctorProgress) {
+        self.doctor().progress = Some(p);
+    }
+
+    pub fn bundle_started(&mut self) {
+        self.items.push(Item::Bundle(BundleCard::Running {
+            stage: None,
+            lines: Vec::new(),
+        }));
+    }
+
+    pub fn bundle_progress(&mut self, p: BundleProgress) {
+        let Some(Item::Bundle(BundleCard::Running { stage, lines })) = self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|i| matches!(i, Item::Bundle(_)))
+        else {
+            return;
+        };
+        match p {
+            BundleProgress::Stage { message } => *stage = Some(message),
+            BundleProgress::Output { line } => {
+                if lines.len() == BUNDLE_LINES {
+                    lines.remove(0);
+                }
+                lines.push(line);
+            }
+        }
+    }
+
+    pub fn bundle_finished(&mut self, result: Result<BundleResult, BundleFailure>) {
+        let card = match result {
+            Ok(r) => BundleCard::Done(r),
+            Err(f) => BundleCard::Failed(f),
+        };
+        match self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|i| matches!(i, Item::Bundle(_)))
+        {
+            Some(item) => *item = Item::Bundle(card),
+            None => self.items.push(Item::Bundle(card)),
+        }
+    }
+
+    /// Packaging is running.
+    pub fn bundling(&self) -> bool {
+        self.items
+            .iter()
+            .any(|i| matches!(i, Item::Bundle(BundleCard::Running { .. })))
+    }
+
     /// The agent waits for the user (a card without an answer).
     pub fn waiting(&self) -> bool {
         self.items.iter().any(|i| {
@@ -480,6 +594,53 @@ mod tests {
                 Item::Build(BuildLine::Ok),
             ]
         );
+    }
+
+    #[test]
+    fn tools_checks_and_bundles_update_their_latest_card() {
+        let mut log = ChatLog::default();
+        log.new_doctor();
+        log.doctor_progress(DoctorProgress {
+            item: "trunk".into(),
+            step: 1,
+            total: 2,
+            phase: ak_types::doctor::InstallPhase::Verify,
+        });
+        assert!(matches!(
+            &log.items[0],
+            Item::Doctor(DoctorCard {
+                busy: true,
+                progress: Some(_),
+                ..
+            })
+        ));
+        log.doctor().busy = false;
+        assert_eq!(log.items.len(), 1, "updates, not a second card");
+
+        log.bundle_started();
+        assert!(log.bundling());
+        log.bundle_progress(BundleProgress::Stage {
+            message: "bundle-building".into(),
+        });
+        for n in 0..40 {
+            log.bundle_progress(BundleProgress::Output {
+                line: format!("line {n}"),
+            });
+        }
+        match &log.items[1] {
+            Item::Bundle(BundleCard::Running { stage, lines }) => {
+                assert_eq!(stage.as_deref(), Some("bundle-building"));
+                assert_eq!(lines.len(), BUNDLE_LINES);
+                assert_eq!(lines.last().map(String::as_str), Some("line 39"));
+            }
+            other => panic!("{other:?}"),
+        }
+        log.bundle_finished(Err(BundleFailure {
+            kind: "build-failed".into(),
+            detail: "error".into(),
+        }));
+        assert!(!log.bundling());
+        assert!(matches!(log.items[1], Item::Bundle(BundleCard::Failed(_))));
     }
 
     #[test]

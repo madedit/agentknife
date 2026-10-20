@@ -339,3 +339,28 @@ time-days-ago = { $n ->
     [one] Yesterday
    *[other] { $n } days ago
 }
+
+## Tools check and packaging in the chat
+chat-check-tools = Check tools
+chat-bundle = Package the app
+chat-bundle-hint = Make the file to install your app on this computer or share it
+doctor-title = Development tools
+doctor-checking = Checking what is installed…
+doctor-isolated-note = AgentKnife installs these in its own folder; nothing else on your computer changes.
+doctor-install-button = Install the missing tools
+doctor-system-intro = A few things must be installed on the computer itself. Here is how:
+doctor-copy = Copy
+doctor-copied = Copied
+doctor-confirm-yes = Go ahead
+doctor-error = The check did not work.
+bundle-title = Packaging the app
+bundle-steps-title = How to install it
+bundle-other-os-question = Need it for another system?
+bundle-error-build-failed = The finished app could not be built. The AI can usually fix this.
+bundle-error-preview-code = The finished app still contained preview-only parts. The AI can fix this.
+bundle-error-unsupported = AgentKnife cannot package apps on this kind of computer yet.
+bundle-error-app-info = The app’s name or version is missing from its settings.
+bundle-error-cancelled = Packaging was stopped.
+bundle-error-other = Packaging did not work.
+# Sent to the AI as the user's message
+bundle-fix-message = Packaging the app failed because it does not build. Please fix it.

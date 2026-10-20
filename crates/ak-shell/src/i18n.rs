@@ -89,3 +89,15 @@ pub fn t_count(
         i18n.with(|i| i.t_args(id, &a))
     }
 }
+
+/// [`tr`] with fluent arguments.
+pub fn tr_with(
+    id: String,
+    args: Vec<(&'static str, String)>,
+) -> impl Fn() -> String + Clone + Send + Sync + 'static {
+    let Tr(i18n) = expect_context::<Tr>();
+    move || {
+        let a = ak_types::i18n::args(args.clone());
+        i18n.with(|i| i.t_args(&id, &a))
+    }
+}

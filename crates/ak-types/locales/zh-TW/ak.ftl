@@ -336,3 +336,28 @@ time-just-now = 剛剛
 time-minutes-ago = { $n } 分鐘前
 time-hours-ago = { $n } 小時前
 time-days-ago = { $n } 天前
+
+## 對話中的工具檢查和打包
+chat-check-tools = 檢查工具
+chat-bundle = 打包 App
+chat-bundle-hint = 做出可以在這台電腦安裝、也能分享給別人的檔案
+doctor-title = 開發工具
+doctor-checking = 正在檢查裝了哪些工具…
+doctor-isolated-note = 這些工具會裝在 AgentKnife 自己的資料夾，不會動到電腦的其他地方。
+doctor-install-button = 安裝缺少的工具
+doctor-system-intro = 有幾樣東西必須裝在電腦本身。做法如下：
+doctor-copy = 複製
+doctor-copied = 已複製
+doctor-confirm-yes = 好，開始
+doctor-error = 檢查沒有成功。
+bundle-title = 打包 App
+bundle-steps-title = 安裝方式
+bundle-other-os-question = 需要其他系統的版本？
+bundle-error-build-failed = 完成版的 App 建置失敗。通常 AI 可以修好。
+bundle-error-preview-code = 完成版裡還有預覽專用的部分。AI 可以修好。
+bundle-error-unsupported = AgentKnife 還不能在這種電腦上打包 App。
+bundle-error-app-info = App 的設定裡缺少名稱或版本。
+bundle-error-cancelled = 打包已停止。
+bundle-error-other = 打包沒有成功。
+# 以使用者的身分傳給 AI
+bundle-fix-message = 打包 App 失敗了，因為它無法建置。請幫我修正。

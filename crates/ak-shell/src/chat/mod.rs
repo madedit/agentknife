@@ -2,6 +2,9 @@
 //! input with the selected-element chip.
 
 pub mod log;
+mod tools;
+
+pub use tools::{bundle, check_tools, check_tools_quietly};
 
 use ak_types::agent::{PlanDecision, TurnOutcome, UsageSummary};
 use ak_types::ipc::{InterruptionChoice, SendMessage, StuckChoice};
@@ -100,9 +103,9 @@ where
     });
 }
 
-const PRIMARY: &str = "rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50";
-const SECONDARY: &str = "rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800";
-const CARD: &str = "rounded-xl border border-gray-200 bg-white p-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900";
+pub(crate) const PRIMARY: &str = "rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50";
+pub(crate) const SECONDARY: &str = "rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800";
+pub(crate) const CARD: &str = "rounded-xl border border-gray-200 bg-white p-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900";
 
 /// Sends `message` (with the current selection) and shows it at once.
 pub fn send_message(chat: Chat, message: String) {
@@ -122,6 +125,7 @@ pub fn send_message(chat: Chat, message: String) {
 #[component]
 pub fn ChatPane() -> impl IntoView {
     let chat = expect_context::<Chat>();
+    let backend = StoredValue::new(expect_context::<Backend>());
     let list = NodeRef::<leptos::html::Div>::new();
     // Keep the newest message in view (browser only: effects need its executor).
     #[cfg(target_arch = "wasm32")]
@@ -154,6 +158,27 @@ pub fn ChatPane() -> impl IntoView {
                 {t("shell-chat")}
             </h2>
             <span data-usage="" class="truncate text-xs text-gray-500 dark:text-gray-400">{usage}</span>
+        </div>
+        <div class="flex gap-2 px-3 pb-2">
+            <button
+                type="button"
+                data-action="check-tools"
+                class="rounded-full border border-gray-300 px-3 py-0.5 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                disabled=move || chat.log.with(|l| l.items.iter().any(|i| matches!(i, Item::Doctor(c) if c.busy)))
+                on:click=move |_| check_tools(chat, backend.get_value(), true)
+            >
+                {t("chat-check-tools")}
+            </button>
+            <button
+                type="button"
+                data-action="bundle"
+                title=t("chat-bundle-hint")
+                class="rounded-full border border-gray-300 px-3 py-0.5 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                disabled=move || chat.log.with(|l| l.running || l.bundling())
+                on:click=move |_| bundle(chat, backend.get_value())
+            >
+                {t("chat-bundle")}
+            </button>
         </div>
         {budget}
         <div node_ref=list data-chat="log" class="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-3 pb-3">
@@ -257,6 +282,8 @@ fn ItemView(index: usize) -> impl IntoView {
                 view! { <QuestionCard request_id question options allow_other answered expired /> }.into_any()
             }
             Item::Outcome { outcome, handled } => view! { <OutcomeCard outcome handled /> }.into_any(),
+            Item::Doctor(card) => view! { <tools::DoctorCardView card /> }.into_any(),
+            Item::Bundle(card) => view! { <tools::BundleCardView card /> }.into_any(),
         })
     }
 }

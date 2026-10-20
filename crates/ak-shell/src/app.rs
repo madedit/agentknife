@@ -1,8 +1,6 @@
 //! Which screen shows: the connect wizard on first run, the home screen, or a
 //! project's workspace; plus the top bar they share.
 
-use std::sync::Arc;
-
 use ak_types::ipc::{HomeState, OpenedProject, ProjectRow};
 use ak_types::settings::AiConnection;
 use leptos::prelude::*;
@@ -42,17 +40,23 @@ pub fn App() -> impl IntoView {
     let files = Files::new();
     provide_context(files);
     let b = backend.clone();
-    backend.listen(Arc::new(move |event| {
+    backend.listen(move |event| {
         // A finished turn may have changed files and added a version.
         let finished = matches!(event, ak_types::agent::AgentEvent::TurnFinished { .. });
         chat.log.update(|l| l.apply(event));
         if finished {
             files.refresh(b.clone());
         }
-    }));
+    });
     let preview = Preview::new();
     provide_context(preview);
-    backend.listen_preview(Arc::new(move |status| preview.status.set(status)));
+    backend.listen_preview(move |status| preview.status.set(status));
+    backend.on(ak_types::ipc::DOCTOR_EVENT, move |p| {
+        chat.log.update(|l| l.doctor_progress(p));
+    });
+    backend.on(ak_types::ipc::BUNDLE_EVENT, move |p| {
+        chat.log.update(|l| l.bundle_progress(p));
+    });
     let home = RwSignal::new(HomeState::default());
     let screen = RwSignal::new(Screen::Loading);
     reload(&backend, home, screen, true);
@@ -138,6 +142,7 @@ pub fn AppView(
             preview.picking.set(false);
             files.reset();
             files.refresh(backend.clone());
+            crate::chat::check_tools_quietly(chat, backend.clone());
             let backend = backend.clone();
             leptos::task::spawn_local(async move {
                 if let Ok(status) = backend.preview_status().await {

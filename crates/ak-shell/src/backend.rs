@@ -5,10 +5,11 @@
 use std::sync::{Arc, Mutex};
 
 use ak_types::agent::{AgentEvent, PlanDecision};
+use ak_types::doctor::SystemAction;
 use ak_types::ipc::{
-    AGENT_EVENT, Answer, ConnectError, ConnectRequest, FileEntry, FileText, HomeState,
-    InterruptionChoice, MarkVersion, ModelCheck, ModelChoice, NewProject, OpenedProject,
-    PREVIEW_EVENT, SaveFile, SendMessage, StuckChoice, TimelineRow, cmd,
+    AGENT_EVENT, Answer, BundleFailure, BundleResult, ConnectError, ConnectRequest, DoctorCheck,
+    FileEntry, FileText, HomeState, InterruptionChoice, MarkVersion, ModelCheck, ModelChoice,
+    NewProject, OpenedProject, PREVIEW_EVENT, SaveFile, SendMessage, StuckChoice, TimelineRow, cmd,
 };
 use ak_types::preview::PreviewStatus;
 use serde::Serialize;
@@ -30,10 +31,8 @@ impl From<ConnectError> for CallError {
     }
 }
 
-/// Receives the agent's events for the open project.
-pub type Listener = Arc<dyn Fn(AgentEvent) + Send + Sync>;
-/// Receives the open project's preview status whenever it changes.
-pub type PreviewListener = Arc<dyn Fn(PreviewStatus) + Send + Sync>;
+/// A demo listener: the raw payload of one event.
+pub type Handler = Arc<dyn Fn(serde_json::Value) + Send + Sync>;
 
 #[derive(Clone)]
 pub enum Backend {
@@ -59,46 +58,44 @@ impl Backend {
         matches!(self, Backend::Demo(_))
     }
 
-    /// Sends every agent event to `listener` from now on.
-    pub fn listen(&self, listener: Listener) {
+    /// Calls `f` with every `event` (a Tauri event name from `ak_types::ipc`)
+    /// from now on; payloads that do not parse as `T` are skipped.
+    pub fn on<T: DeserializeOwned + 'static>(
+        &self,
+        event: &'static str,
+        f: impl Fn(T) + Send + Sync + 'static,
+    ) {
+        let handler = move |payload: serde_json::Value| {
+            if let Ok(v) = serde_json::from_value::<T>(payload) {
+                f(v);
+            }
+        };
         match self {
             #[cfg(target_arch = "wasm32")]
-            Backend::Tauri => tauri::listen(AGENT_EVENT, move |payload| {
-                if let Ok(event) = serde_json::from_value::<AgentEvent>(payload) {
-                    listener(event);
-                }
-            }),
+            Backend::Tauri => tauri::listen(event, handler),
             #[cfg(not(target_arch = "wasm32"))]
             Backend::Tauri => {
-                let _ = (AGENT_EVENT, listener);
+                let _ = (event, handler);
             }
             Backend::Demo(demo) => {
                 if let Ok(mut d) = demo.lock() {
-                    d.listener = Some(listener);
+                    d.listeners
+                        .entry(event)
+                        .or_default()
+                        .push(Arc::new(handler));
                 }
             }
         }
     }
 
-    /// Sends every preview status change to `listener` from now on.
-    pub fn listen_preview(&self, listener: PreviewListener) {
-        match self {
-            #[cfg(target_arch = "wasm32")]
-            Backend::Tauri => tauri::listen(PREVIEW_EVENT, move |payload| {
-                if let Ok(status) = serde_json::from_value::<PreviewStatus>(payload) {
-                    listener(status);
-                }
-            }),
-            #[cfg(not(target_arch = "wasm32"))]
-            Backend::Tauri => {
-                let _ = (PREVIEW_EVENT, listener);
-            }
-            Backend::Demo(demo) => {
-                if let Ok(mut d) = demo.lock() {
-                    d.preview_listener = Some(listener);
-                }
-            }
-        }
+    /// The agent's events for the open project.
+    pub fn listen(&self, f: impl Fn(AgentEvent) + Send + Sync + 'static) {
+        self.on(AGENT_EVENT, f);
+    }
+
+    /// The open project's preview status, whenever it changes.
+    pub fn listen_preview(&self, f: impl Fn(PreviewStatus) + Send + Sync + 'static) {
+        self.on(PREVIEW_EVENT, f);
     }
 
     pub async fn preview_status(&self) -> Result<PreviewStatus, CallError> {
@@ -131,6 +128,34 @@ impl Backend {
 
     pub async fn restore(&self, id: &str) -> Result<(), CallError> {
         self.call(cmd::RESTORE, Some(id)).await
+    }
+
+    pub async fn doctor_check(&self) -> Result<DoctorCheck, CallError> {
+        self.call(cmd::DOCTOR_CHECK, None::<()>).await
+    }
+
+    pub async fn doctor_install(&self) -> Result<DoctorCheck, CallError> {
+        self.call(cmd::DOCTOR_INSTALL, None::<()>).await
+    }
+
+    pub async fn doctor_action(&self, action: &SystemAction) -> Result<(), CallError> {
+        self.call(cmd::DOCTOR_ACTION, Some(action)).await
+    }
+
+    /// Packages the app; a failure comes back as its [`BundleFailure`].
+    pub async fn bundle(&self) -> Result<BundleResult, Result<BundleFailure, CallError>> {
+        match self.call_raw(cmd::BUNDLE, None::<()>).await {
+            Ok(v) => serde_json::from_value(v).map_err(|e| Err(CallError::Other(e.to_string()))),
+            Err(e) => Err(
+                serde_json::from_value::<BundleFailure>(e.clone()).map_err(|_| {
+                    CallError::Other(e.as_str().map_or_else(|| e.to_string(), str::to_owned))
+                }),
+            ),
+        }
+    }
+
+    pub async fn reveal(&self, path: &str) -> Result<(), CallError> {
+        self.call(cmd::REVEAL, Some(path)).await
     }
 
     pub async fn mark_version(&self, label: &str) -> Result<(), CallError> {
@@ -224,19 +249,7 @@ impl Backend {
         command: &str,
         request: Option<impl Serialize>,
     ) -> Result<R, CallError> {
-        let request = match request {
-            Some(r) => Some(serde_json::to_value(r).map_err(|e| CallError::Other(e.to_string()))?),
-            None => None,
-        };
-        let answer = match self {
-            #[cfg(target_arch = "wasm32")]
-            Backend::Tauri => tauri::invoke(command, request).await,
-            #[cfg(not(target_arch = "wasm32"))]
-            Backend::Tauri => Err(serde_json::Value::String(
-                "Tauri runs only in the window".into(),
-            )),
-            Backend::Demo(demo) => Demo::answer(demo, command, request),
-        };
+        let answer = self.call_raw(command, request).await;
         match answer {
             Ok(v) => serde_json::from_value(v).map_err(|e| CallError::Other(e.to_string())),
             Err(e) => Err(serde_json::from_value::<ConnectError>(e.clone())
@@ -244,6 +257,35 @@ impl Backend {
                 .unwrap_or_else(|_| {
                     CallError::Other(e.as_str().map_or_else(|| e.to_string(), str::to_owned))
                 })),
+        }
+    }
+
+    /// The answer or the error as JSON.
+    async fn call_raw(
+        &self,
+        command: &str,
+        request: Option<impl Serialize>,
+    ) -> Result<serde_json::Value, serde_json::Value> {
+        let request = match request {
+            Some(r) => Some(
+                serde_json::to_value(r).map_err(|e| serde_json::Value::String(e.to_string()))?,
+            ),
+            None => None,
+        };
+        match self {
+            #[cfg(target_arch = "wasm32")]
+            Backend::Tauri => tauri::invoke(command, request).await,
+            #[cfg(not(target_arch = "wasm32"))]
+            Backend::Tauri => {
+                let _ = (command, request);
+                Err(serde_json::Value::String(
+                    "Tauri runs only in the window".into(),
+                ))
+            }
+            Backend::Demo(demo) => match Demo::answer_slow(demo, command).await {
+                Some(answer) => answer,
+                None => Demo::answer(demo, command, request),
+            },
         }
     }
 }

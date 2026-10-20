@@ -7,6 +7,7 @@
 //! point-and-select against `cargo run -p ak-preview --example preview_live`).
 // xtask-i18n: demo data (the AI's words, not UI text)
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use ak_types::agent::{
@@ -14,18 +15,21 @@ use ak_types::agent::{
     UsageSummary,
 };
 use ak_types::chat::{Entry, Message};
-use std::collections::BTreeMap;
-
+use ak_types::doctor::{
+    CheckItem, CheckScope, CheckStatus, DoctorProgress, DoctorReport, GuideStep, InstallPhase,
+    SystemAction, SystemGuide,
+};
 use ak_types::ipc::{
-    ConnectError, ConnectRequest, FileEntry, FileText, HomeState, ModelCheck, ModelChoice,
-    OpenedProject, ProjectRow, SaveFile, SendMessage, TimelineRow, cmd,
+    BundleProgress, BundleResult, ConnectError, ConnectRequest, DoctorCheck, FileEntry, FileText,
+    HomeState, ModelCheck, ModelChoice, OpenedProject, ProjectRow, SaveFile, SendMessage,
+    TimelineRow, cmd,
 };
 use ak_types::preview::{PreviewStatus, ServerState};
 use ak_types::settings::AiConnection;
 use futures_channel::oneshot;
 use serde_json::{Value, json};
 
-use crate::backend::{Listener, PreviewListener, now, sleep};
+use crate::backend::{Handler, now, sleep};
 
 /// The preview URL that stands for [`DEMO_PAGE`].
 pub const DEMO_URL: &str = "about:srcdoc";
@@ -66,8 +70,10 @@ pub struct Demo {
     projects: Vec<ProjectRow>,
     ai: Option<AiConnection>,
     next: u32,
-    pub(crate) listener: Option<Listener>,
-    pub(crate) preview_listener: Option<PreviewListener>,
+    /// Event name → listeners (`Backend::on`).
+    pub(crate) listeners: BTreeMap<&'static str, Vec<Handler>>,
+    /// The tools check: what is still missing.
+    doctor_missing: Vec<&'static str>,
     preview: PreviewStatus,
     /// The scripted turn waits here for a card's answer.
     waiting: Option<oneshot::Sender<Value>>,
@@ -139,8 +145,8 @@ impl Demo {
             ],
             ai: None,
             next: 3,
-            listener: None,
-            preview_listener: None,
+            listeners: BTreeMap::new(),
+            doctor_missing: vec!["trunk", "tauri-cli", "webview2"],
             preview: PreviewStatus::default(),
             waiting: None,
             running: false,
@@ -182,6 +188,44 @@ impl Demo {
             project: row,
             interrupted,
             history,
+        }
+    }
+
+    /// The commands that take a while (installing, packaging); `None` for the rest.
+    pub async fn answer_slow(
+        demo: &Arc<Mutex<Demo>>,
+        command: &str,
+    ) -> Option<Result<Value, Value>> {
+        match command {
+            cmd::DOCTOR_INSTALL => {
+                doctor_install(demo).await;
+                let missing = demo
+                    .lock()
+                    .map(|d| d.doctor_missing.clone())
+                    .unwrap_or_default();
+                Some(Ok(json!(doctor_check(&missing))))
+            }
+            cmd::BUNDLE => {
+                // The demo packages a fresh project; "Broken" in its name fails.
+                let broken = demo
+                    .lock()
+                    .map(|d| {
+                        d.files
+                            .get("README.md")
+                            .is_some_and(|r| r.contains("Broken"))
+                    })
+                    .unwrap_or(false);
+                if broken {
+                    return Some(Err(json!(ak_types::ipc::BundleFailure {
+                        kind: "build-failed".into(),
+                        detail: "error[E0308]: mismatched types
+ --> src/main.rs:12:5"
+                            .into(),
+                    })));
+                }
+                Some(Ok(json!(bundle(demo).await)))
+            }
+            _ => None,
         }
     }
 
@@ -237,7 +281,13 @@ impl Demo {
             }
             cmd::OPEN_FOLDER => Ok(Value::Null),
             cmd::PREVIEW_STATUS => Ok(json!(d.preview)),
-            cmd::RUN_APP => Ok(Value::Null),
+            cmd::RUN_APP | cmd::REVEAL => Ok(Value::Null),
+            cmd::DOCTOR_CHECK => Ok(json!(doctor_check(&d.doctor_missing))),
+            cmd::DOCTOR_ACTION => {
+                // As if the official installer ran: the next check finds it.
+                d.doctor_missing.retain(|id| *id != "webview2");
+                Ok(Value::Null)
+            }
             cmd::LIST_FILES => {
                 let list: Vec<FileEntry> = d
                     .files
@@ -386,14 +436,24 @@ fn play(demo: Arc<Mutex<Demo>>, text: String) {
     let _ = (demo, text, turn);
 }
 
-fn set_preview(demo: &Arc<Mutex<Demo>>, status: PreviewStatus) {
-    let listener = demo.lock().ok().and_then(|mut d| {
-        d.preview = status.clone();
-        d.preview_listener.clone()
-    });
-    if let Some(l) = listener {
-        l(status);
+/// Sends `payload` to every listener of `event`.
+fn send(demo: &Arc<Mutex<Demo>>, event: &str, payload: impl serde::Serialize) {
+    let handlers = demo
+        .lock()
+        .ok()
+        .and_then(|d| d.listeners.get(event).cloned())
+        .unwrap_or_default();
+    let value = serde_json::to_value(payload).unwrap_or(Value::Null);
+    for h in handlers {
+        h(value.clone());
     }
+}
+
+fn set_preview(demo: &Arc<Mutex<Demo>>, status: PreviewStatus) {
+    if let Ok(mut d) = demo.lock() {
+        d.preview = status.clone();
+    }
+    send(demo, ak_types::ipc::PREVIEW_EVENT, status);
 }
 
 /// Starting → first build → ready, like a real preview (shortened).
@@ -455,9 +515,149 @@ async fn rebuild(demo: &Arc<Mutex<Demo>>, error: Option<&str>) {
 }
 
 fn emit(demo: &Arc<Mutex<Demo>>, event: AgentEvent) {
-    let listener = demo.lock().ok().and_then(|d| d.listener.clone());
-    if let Some(l) = listener {
-        l(event);
+    send(demo, ak_types::ipc::AGENT_EVENT, event);
+}
+
+fn doctor_check(missing: &[&str]) -> DoctorCheck {
+    let item = |id: &str, scope: CheckScope| CheckItem {
+        id: id.into(),
+        scope,
+        status: if missing.contains(&id) {
+            CheckStatus::Missing
+        } else {
+            CheckStatus::Ok
+        },
+        found: None,
+        wanted: None,
+        detail: None,
+    };
+    let report = DoctorReport {
+        items: vec![
+            item("rust", CheckScope::Isolated),
+            item("wasm32-target", CheckScope::Isolated),
+            item("trunk", CheckScope::Isolated),
+            item("tauri-cli", CheckScope::Isolated),
+            item("tailwind", CheckScope::Isolated),
+            item("msvc-build-tools", CheckScope::System),
+            item("webview2", CheckScope::System),
+        ],
+    };
+    let step = |m: &str| GuideStep {
+        message: m.into(),
+        command: None,
+        link: None,
+    };
+    let guides = if missing.contains(&"webview2") {
+        vec![SystemGuide {
+            item: "webview2".into(),
+            covers: vec!["webview2".into()],
+            steps: vec![
+                step("doctor-guide-webview2-what"),
+                step("doctor-guide-webview2-winget"),
+                step("doctor-guide-check-again"),
+            ],
+            action: Some(SystemAction::WingetWebView2),
+        }]
+    } else {
+        Vec::new()
+    };
+    DoctorCheck { report, guides }
+}
+
+/// Installs the missing isolated tools, with progress like the real one.
+async fn doctor_install(demo: &Arc<Mutex<Demo>>) {
+    let missing: Vec<&'static str> = demo
+        .lock()
+        .map(|d| d.doctor_missing.clone())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|id| *id != "webview2")
+        .collect();
+    let total = u32::try_from(missing.len()).unwrap_or(0);
+    for (n, item) in missing.iter().enumerate() {
+        let step = u32::try_from(n).unwrap_or(0) + 1;
+        let progress = |phase| DoctorProgress {
+            item: (*item).into(),
+            step,
+            total,
+            phase,
+        };
+        let size = 8_000_000u64;
+        for k in 1..=5u64 {
+            send(
+                demo,
+                ak_types::ipc::DOCTOR_EVENT,
+                progress(InstallPhase::Download {
+                    done: size * k / 5,
+                    size: Some(size),
+                }),
+            );
+            sleep(250).await;
+        }
+        send(
+            demo,
+            ak_types::ipc::DOCTOR_EVENT,
+            progress(InstallPhase::Verify),
+        );
+        sleep(300).await;
+        send(
+            demo,
+            ak_types::ipc::DOCTOR_EVENT,
+            progress(InstallPhase::Unpack),
+        );
+        sleep(300).await;
+        send(
+            demo,
+            ak_types::ipc::DOCTOR_EVENT,
+            progress(InstallPhase::Done),
+        );
+    }
+    if let Ok(mut d) = demo.lock() {
+        d.doctor_missing.retain(|id| *id == "webview2");
+    }
+}
+
+async fn bundle(demo: &Arc<Mutex<Demo>>) -> BundleResult {
+    let stage = |m: &str| BundleProgress::Stage { message: m.into() };
+    send(demo, ak_types::ipc::BUNDLE_EVENT, stage("bundle-building"));
+    for line in [
+        "   Compiling app-ui v0.1.0",
+        "   Compiling app v0.1.0 (src-tauri)",
+        "    Finished `release` profile [optimized] target(s) in 41.20s",
+    ] {
+        sleep(700).await;
+        send(
+            demo,
+            ak_types::ipc::BUNDLE_EVENT,
+            BundleProgress::Output { line: line.into() },
+        );
+    }
+    send(demo, ak_types::ipc::BUNDLE_EVENT, stage("bundle-checking"));
+    sleep(400).await;
+    send(demo, ak_types::ipc::BUNDLE_EVENT, stage("bundle-packing"));
+    sleep(400).await;
+    let step = |m: &str| GuideStep {
+        message: m.into(),
+        command: None,
+        link: None,
+    };
+    BundleResult {
+        path:
+            "C:/Users/me/AgentKnife/Projects/My App/target/release/bundle/zip/My App_0.1.0_x64.zip"
+                .into(),
+        file: "My App_0.1.0_x64.zip".into(),
+        app: "My App".into(),
+        os: "windows".into(),
+        steps: [
+            "bundle-guide-win-extract",
+            "bundle-guide-win-move",
+            "bundle-guide-win-run",
+            "bundle-guide-win-smartscreen",
+            "bundle-guide-win-shortcut",
+            "bundle-guide-share-windows",
+        ]
+        .map(step)
+        .into(),
     }
 }
 

@@ -16,6 +16,7 @@ serde_json.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 web-sys = { workspace = true, features = [
+    "Clipboard",
     "Element",
     "HtmlIFrameElement",
     "KeyboardEvent",
