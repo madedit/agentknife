@@ -4,8 +4,32 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+description = "AgentKnife's own UI (Leptos). `trunk serve` in this folder runs it in a browser."
 
 [dependencies]
+ak-types.workspace = true
+js-sys.workspace = true
+leptos.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+wasm-bindgen.workspace = true
+web-sys = { workspace = true, features = [
+    "Element",
+    "KeyboardEvent",
+    "Location",
+    "MouseEvent",
+    "Navigator",
+    "PointerEvent",
+    "Storage",
+    "Window",
+] }
+
+[features]
+# The browser build (index.html enables it); native tests render with `ssr`.
+csr = ["leptos/csr"]
+
+[dev-dependencies]
+leptos = { workspace = true, features = ["ssr"] }
 
 [lints]
 workspace = true

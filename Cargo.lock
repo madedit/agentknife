@@ -160,6 +160,15 @@ dependencies = [
 [[package]]
 name = "ak-shell"
 version = "0.1.0"
+dependencies = [
+ "ak-types",
+ "js-sys",
+ "leptos",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "web-sys",
+]
 
 [[package]]
 name = "ak-types"

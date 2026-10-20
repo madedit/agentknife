@@ -1,6 +1,7 @@
 //! Fluent locale parity (AGENTS.md §5): every locale has the same files, and every
 //! file defines the same messages, terms and attributes. Every file must also be
 //! embedded by `ak-types` (`include_str!`), or it would silently never load.
+//! AgentKnife's UI (`ak-shell`) must not write user-visible text in its views.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -12,6 +13,7 @@ use crate::Result;
 const LOCALES_DIR: &str = "crates/ak-types/locales";
 const EMBEDDING_SOURCE: &str = "crates/ak-types/src/i18n.rs";
 const REFERENCE_LOCALE: &str = "en";
+const SHELL_SOURCES: &str = "crates/ak-shell/src";
 
 /// locale -> file name -> source text
 type Tree = BTreeMap<String, BTreeMap<String, String>>;
@@ -19,7 +21,8 @@ type Tree = BTreeMap<String, BTreeMap<String, String>>;
 pub fn check(root: &Path) -> Result<()> {
     let tree = load(&root.join(LOCALES_DIR))?;
     let embedding = std::fs::read_to_string(root.join(EMBEDDING_SOURCE))?;
-    let errors = violations(&tree, &embedding);
+    let mut errors = violations(&tree, &embedding);
+    errors.extend(shell_text(&root.join(SHELL_SOURCES), root)?);
     if errors.is_empty() {
         Ok(())
     } else {
@@ -127,9 +130,100 @@ fn violations(tree: &Tree, embedding: &str) -> Vec<String> {
     errors
 }
 
+/// Text literals in ak-shell views that look like words for the user: a line
+/// that is only a string literal, or a literal between `>` and `<`, holding an
+/// uppercase or non-ASCII letter (Tailwind classes and data values are
+/// lowercase ASCII). Test modules are skipped.
+fn shell_text(dir: &Path, root: &Path) -> Result<Vec<String>> {
+    let mut errors = Vec::new();
+    let mut files = Vec::new();
+    rust_files(dir, &mut files)?;
+    for file in files {
+        let source = std::fs::read_to_string(&file)?;
+        let rel = file
+            .strip_prefix(root)
+            .unwrap_or(&file)
+            .display()
+            .to_string();
+        for (line, text) in literal_text(&source) {
+            errors.push(format!(
+                "{rel}:{line}: `{text}` is UI text; use a fluent message (i18n::t)"
+            ));
+        }
+    }
+    Ok(errors)
+}
+
+fn rust_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            rust_files(&path, out)?;
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn literal_text(source: &str) -> Vec<(usize, String)> {
+    let alone = regex::Regex::new(r#"^\s*"((?:[^"\\]|\\.)*)"\s*$"#);
+    let between = regex::Regex::new(r#">\s*"((?:[^"\\]|\\.)*)"\s*<"#);
+    let (Ok(alone), Ok(between)) = (alone, between) else {
+        return Vec::new();
+    };
+    let wordy = |t: &str| {
+        t.chars()
+            .any(|c| c.is_uppercase() || (c.is_alphabetic() && !c.is_ascii()))
+    };
+    let mut out = Vec::new();
+    for (n, line) in source.lines().enumerate() {
+        if line.trim_start().starts_with("#[cfg(test)]") {
+            break;
+        }
+        if line.trim_start().starts_with("//") {
+            continue;
+        }
+        for re in [&alone, &between] {
+            for cap in re.captures_iter(line) {
+                let text = &cap[1];
+                if wordy(text) {
+                    out.push((n + 1, text.to_owned()));
+                }
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plain_ui_text_in_views_is_found() {
+        let src = r#"
+view! {
+    <p class="text-sm text-gray-500">
+        "Hello there"
+    </p>
+    <span>"待辦"</span>
+    <b>{t("shell-files")}</b>
+    <div class=move || {
+        if on() {
+            "rounded-md bg-white px-3 dark:hover:text-white"
+        } else {
+            "rounded-md px-3"
+        }
+    }></div>
+}
+// "Comments Are Fine"
+#[cfg(test)]
+mod tests { const X: &str = "Tests Are Fine"; }
+"#;
+        let found: Vec<_> = literal_text(src).into_iter().map(|(_, t)| t).collect();
+        assert_eq!(found, ["Hello there", "待辦"]);
+    }
 
     const EMBED: &str =
         r#"include_str!("../locales/en/ak.ftl") include_str!("../locales/zh-TW/ak.ftl")"#;

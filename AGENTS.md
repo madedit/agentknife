@@ -211,6 +211,12 @@ plan/            STATUS.md and execution-plan.md (format in §8).
 - **Running trunk** (preview, gallery): put the toolchain's `cargo/bin` and `bin` first on PATH, so trunk uses the pinned wasm-bindgen and tailwindcss and downloads nothing.
   - Remove `NO_COLOR`: trunk parses it as a true/false flag, and `NO_COLOR=1` makes it exit.
   - Set `TRUNK_SKIP_VERSION_CHECK=true`; otherwise trunk checks the network for updates.
+- **AgentKnife window** (`ak-shell`, Leptos CSR; `csr` feature for the browser build, native tests render with `ssr`):
+  - Top bar with the Simple/Full switch. Full: files + timeline | preview/code tabs | chat. Simple (default): preview | chat. `layout::Layout` (mode, tab, pane widths) is saved in localStorage `agentknife.layout.v1`; unreadable values give the defaults, widths are clamped (`layout::LEFT`, `layout::CHAT`).
+  - Splitters (`role="separator"`): pointer-capture drag, arrow keys, Home/Enter or double-click for the default width.
+  - Text comes from fluent through `i18n::t(id)` (an `I18n` context). xtask (step `i18n`) rejects plain text literals in ak-shell views (a literal alone on a line, or between `>` and `<`, with an uppercase or non-ASCII letter).
+  - Browser-only code (storage, navigator) sits behind `cfg(target_arch = "wasm32")`. In a browser, `?lang=zh-TW` forces the language.
+  - `cargo test --workspace` unifies leptos features (the gallery's `csr` with the tests' `ssr`), and an `Effect` then panics without an executor. Code the render tests reach saves on change (`shell::change`) instead of using effects.
 - **Point-and-select:**
   - Every meaningful element in generated UI carries a stable `data-ak-id`. The agent must add these, and AgentKnife auto-inserts missing ones.
     - `StackProfile::add_missing_ids(rel_path, source)` (default: none). For tauri-leptos it is `ak_preview::ids` on `src/**.rs`: syn (span-locations) finds each `view!`, rstml 0.13 parses it like leptos_macro (`recover_block`), and ` data-ak-id="…"` goes right after the tag name.
@@ -325,7 +331,7 @@ Prerequisites for developing AgentKnife:
 | Task | Command |
 |---|---|
 | Run AgentKnife (shell + UI, hot reload) | `cargo tauri dev` (from `crates/ak-app`) |
-| Run the UI alone in a browser | `trunk serve` (from `crates/ak-shell`) |
+| Run the UI alone in a browser (http://127.0.0.1:47120, toolchain on PATH as for the gallery) | `trunk serve` (from `crates/ak-shell`) |
 | Test one crate | `cargo test -p <crate>` |
 | Full pre-commit gate | `cargo xtask ci` |
 | Refresh the vendored CodeMirror | `cargo xtask vendor-codemirror` |

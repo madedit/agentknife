@@ -163,3 +163,25 @@ bundle-guide-share-macos = 想把 App 給別人：把「{ $file }」傳給對方
 bundle-guide-share-linux = 想把 App 給別人：把「{ $file }」傳給對方，照同樣的步驟做就行。只能在 Linux 電腦上用。
 # $host、$requested：作業系統名稱（os-*）
 bundle-other-os = 這台電腦是 { $host }，所以 AgentKnife 在這裡只能做出 { $host } 版。想要 { $requested } 版的話，請把這個專案資料夾複製到一台 { $requested } 電腦，在那裡用 AgentKnife 打開再打包一次。
+
+## AgentKnife 視窗（shell）
+shell-no-project = 還沒有打開專案
+shell-mode = 畫面
+shell-mode-simple = 簡單
+shell-mode-simple-hint = 只顯示預覽和對話
+shell-mode-full = 完整
+shell-mode-full-hint = 也顯示檔案、版本紀錄和程式碼
+shell-files = 檔案
+shell-files-empty = 打開專案後，檔案會列在這裡。
+shell-timeline = 版本紀錄
+shell-timeline-empty = 每次修改都會記在這裡，隨時可以回到之前的版本。
+shell-tab-preview = 預覽
+shell-tab-code = 程式碼
+shell-preview-empty = 你的 App 會顯示在這裡
+shell-preview-empty-hint = 打開或建立一個專案，再告訴 AI 你想做什麼。
+shell-code-empty = 在左邊選一個檔案，就能看到它的程式碼。
+shell-chat = 與 AI 對話
+shell-chat-empty = 先連接一個 AI 就能開始。
+shell-chat-placeholder = 說說你想做什麼…
+shell-resize-files = 調整檔案面板寬度
+shell-resize-chat = 調整對話面板寬度

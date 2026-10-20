@@ -163,3 +163,25 @@ bundle-guide-share-macos = To give the app to someone else, send them “{ $file
 bundle-guide-share-linux = To give the app to someone else, send them “{ $file }”. They follow the same steps. It works on Linux computers only.
 # $host, $requested: names of operating systems (os-*)
 bundle-other-os = This computer runs { $host }, so AgentKnife can only make the { $host } version here. To get a { $requested } version, copy this project folder to a { $requested } computer, open it in AgentKnife there and package it again.
+
+## AgentKnife window (shell)
+shell-no-project = No project open
+shell-mode = View
+shell-mode-simple = Simple
+shell-mode-simple-hint = Only the preview and the chat
+shell-mode-full = Full
+shell-mode-full-hint = Also files, version history and code
+shell-files = Files
+shell-files-empty = The project’s files appear here once a project is open.
+shell-timeline = Version history
+shell-timeline-empty = Every change is saved here, so you can always go back.
+shell-tab-preview = Preview
+shell-tab-code = Code
+shell-preview-empty = Your app will appear here
+shell-preview-empty-hint = Open or create a project, then tell the AI what you want to build.
+shell-code-empty = Pick a file on the left to see its code.
+shell-chat = Chat with the AI
+shell-chat-empty = Connect an AI to get started.
+shell-chat-placeholder = Describe what you want…
+shell-resize-files = Resize the files panel
+shell-resize-chat = Resize the chat panel

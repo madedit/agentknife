@@ -329,10 +329,18 @@
   - ak_preview::process::read_lines is now shared (moved from dev.rs).
   - Tests (fake `cargo tauri build`, ak-bundle-fake-build): pack + archive contents + stages + output lines + Bundle checkpoints (twice); failure keeps the compiler output; a leaked marker in the program or in dist/ is refused with nothing packed; missing program / empty name (checked before building); cancel. Unit: tar.gz mode, file names, marker search.
   - Live (bundle_live, fresh project, isolated toolchain, Windows 11): `Bundle Check_0.1.0_x64.zip` (2.7 MB) in 112 s with a Bundle checkpoint. The dev builds of the same project contain both markers, the release program does not. Unzipped `Bundle Check/Bundle Check.exe` starts and shows the Home screen.
-- P1-BUNDLE-002 — (hash in next commit) — install guidance:
+- P1-BUNDLE-002 — acec7ca — install guidance:
   - ak_bundle::guide: install_guide(os, output) -> doctor GuideSteps. Windows zip: extract, move, run, SmartScreen "More info → Run anyway", desktop shortcut. macOS dmg: open, drag to Applications, eject, Control-click Open, System Settings → Privacy & Security → "Open Anyway". Linux tar.gz: extract, WebKitGTK 4.1 (apt command, other distros named), run ("Run as a Program"). Unknown combinations: "open the file". Each ends with sharing (same OS only). guide_args gives $file and $app (Bundle has a new `app` field).
   - reveal(path): explorer /select,"path" (raw_arg, backslashes), `open -R`, xdg-open on the folder. Archive paths are now built from separate components (they mixed `/` and `\` on Windows).
   - other_os_note + bundle-other-os/os-* (copy the project folder to that computer and package there). Product prompt version 3 adds a Packaging section; the greeting says "package it" instead of "installer".
   - Fluent (en, zh-TW): bundle-done, bundle-open-folder, os-*, bundle-guide-*, bundle-other-os.
   - Tests: steps per system and fallback, the other-OS note, reveal commands; every step renders in every locale with no unfilled argument.
   - Live (bundle_live on the BUNDLE-001 project, Windows 11): rebuilt in 16 s, printed the zh-TW steps with the real file and app names; AK_REVEAL=1 opened Explorer with the zip selected.
+- P1-SHELL-001 — (hash in next commit) — layout & simple mode:
+  - ak-shell is now a Leptos CSR app: lib (App, shell::Shell, layout, i18n, splitter, placeholder panes) + main.rs, index.html/Trunk.toml (127.0.0.1:47120)/Tailwind like the gallery; feature `csr` for the browser, `ssr` in dev-dependencies for tests. Depends on ak-types only.
+  - Top bar (app name, "no project" placeholder, Simple/Full switch with hints). Full: files + version history | Preview/Code tabs | chat; simple (default): preview | chat. Pane contents are placeholders for SHELL-002..006.
+  - Splitters: pointer-capture drag, arrow keys ±16 px, Home/Enter/double-click reset; ARIA separator with value. Widths clamped (files 180–480, chat 300–640) and capped by the window (30vw / 45vw).
+  - Layout persists in localStorage agentknife.layout.v1 (saved on every change, not by an Effect: workspace tests unify csr+ssr and effects panic there); garbage or unknown values → defaults.
+  - Fluent shell-* (en, zh-TW). Locale from navigator.languages, `?lang=` override; APP-001 will pass the settings locale. xtask i18n now also rejects plain UI text literals in ak-shell views (unit-tested).
+  - Tests: layout (defaults, round trip, clamping, garbage); SSR render per mode (panes, splitters, tab bar, code tab not leaking into simple mode) and per language (no English in zh-TW, no raw ids).
+  - Browser (trunk serve, Chrome): zh-TW text; simple 896|380 → full 260|632|380; arrow keys 276/428 with matching aria-valuenow; drag −100 px → chat 528, no movement after pointerup; double-click → 380; code tab; layout restored after reload. Headless screenshot checked. (Chrome-extension screenshots time out on this machine; DOM checks via JS instead.)
