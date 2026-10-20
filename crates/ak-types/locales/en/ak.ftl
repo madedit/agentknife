@@ -181,7 +181,6 @@ shell-preview-empty = Your app will appear here
 shell-preview-empty-hint = Open or create a project, then tell the AI what you want to build.
 shell-code-empty = Pick a file on the left to see its code.
 shell-chat = Chat with the AI
-shell-chat-empty = Connect an AI to get started.
 shell-chat-placeholder = Describe what you want…
 shell-resize-files = Resize the files panel
 shell-resize-chat = Resize the chat panel
@@ -252,3 +251,42 @@ connect-error-wrong-address = Something answered, but it is not an AI service. C
 connect-error-no-models = Connected, but there are no models yet. Download a model in the program first.
 connect-error-rate-limited = The service is busy. Try again in a minute.
 connect-error-other = Something went wrong. The details may help.
+
+## Chat pane
+chat-empty = Tell the AI what you want to build or change. You can also click something in the preview first.
+# $what: the element the user picked in the preview
+chat-selected = Selected: { $what }
+chat-selected-remove = Remove the selection
+chat-thinking = How the AI thought about it
+chat-thinking-now = Thinking…
+chat-compacted = The AI summarized the earlier conversation to make room. Nothing was lost here.
+chat-allow = Allow
+chat-deny = Don’t allow
+chat-allowed = You allowed this step.
+chat-denied = You did not allow this step.
+# $estimate: the AI's own estimate ("about 3 minutes")
+chat-plan-estimate = Estimate: { $estimate }
+chat-plan-feedback = What should change in the plan?
+chat-plan-started = You started this plan.
+chat-plan-revised = You asked for changes to this plan.
+chat-plan-cancelled = You cancelled this plan.
+chat-answered = Your answer: { $answer }
+chat-other-answer = Or type your own answer
+chat-send = Send
+chat-stop = Stop
+chat-continue = Continue
+chat-step-limit = I took many steps and paused so you can check. Shall I continue?
+chat-max-tokens = My answer was cut off because it got too long. Shall I continue?
+chat-refused = The AI declined this request. Try asking in a different way.
+# $spent, $cap: US dollars
+chat-over-budget = Stopped for today: US${ $spent } of your US${ $cap } daily limit is used.
+chat-cancelled = Stopped.
+chat-failed = Something went wrong with the AI service.
+# $request: what the user had asked for
+chat-interrupted = Last time I stopped halfway (doing: “{ $request }”). Shall I continue, or go back to the last checkpoint?
+chat-interrupted-continue = Continue
+chat-interrupted-go-back = Go back to the last checkpoint
+# $session, $today: US dollars
+chat-usage = This session US${ $session } · today US${ $today }
+chat-usage-at-least = This session at least US${ $session } · today at least US${ $today }
+chat-expired = This is no longer needed: the AI stopped before you answered.

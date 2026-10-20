@@ -1,6 +1,5 @@
-//! The panes' contents. Placeholders until their tasks fill them: chat
-//! (P1-SHELL-003), preview (P1-SHELL-004), files, timeline and code
-//! (P1-SHELL-005).
+//! The panes' contents. Placeholders until their tasks fill them: preview
+//! (P1-SHELL-004), files, timeline and code (P1-SHELL-005).
 
 use leptos::prelude::*;
 
@@ -67,25 +66,6 @@ pub fn CodePane() -> impl IntoView {
             class="flex min-h-0 flex-1 items-center justify-center bg-white p-6 dark:bg-gray-950"
         >
             <Empty text="shell-code-empty" />
-        </div>
-    }
-}
-
-#[component]
-pub fn ChatPane() -> impl IntoView {
-    view! {
-        <Heading text="shell-chat" />
-        <div class="min-h-0 flex-1 overflow-auto">
-            <Empty text="shell-chat-empty" />
-        </div>
-        <div class="border-t border-gray-200 p-3 dark:border-gray-800">
-            <textarea
-                rows="3"
-                disabled=true
-                placeholder=t("shell-chat-placeholder")
-                aria-label=t("shell-chat-placeholder")
-                class="w-full resize-none rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900"
-            ></textarea>
         </div>
     }
 }

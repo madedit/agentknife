@@ -4,12 +4,15 @@
 
 use std::sync::{Arc, Mutex};
 
+use ak_types::agent::{AgentEvent, PlanDecision};
 use ak_types::ipc::{
-    ConnectError, ConnectRequest, HomeState, ModelCheck, ModelChoice, NewProject, ProjectRow, cmd,
+    AGENT_EVENT, Answer, ConnectError, ConnectRequest, HomeState, InterruptionChoice, ModelCheck,
+    ModelChoice, NewProject, OpenedProject, SendMessage, StuckChoice, cmd,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use serde_json::{Value, json};
+
+use crate::demo::Demo;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CallError {
@@ -25,6 +28,9 @@ impl From<ConnectError> for CallError {
     }
 }
 
+/// Receives the agent's events for the open project.
+pub type Listener = Arc<dyn Fn(AgentEvent) + Send + Sync>;
+
 #[derive(Clone)]
 pub enum Backend {
     Tauri,
@@ -38,6 +44,10 @@ impl Backend {
         if tauri::available() {
             return Backend::Tauri;
         }
+        Backend::demo()
+    }
+
+    pub fn demo() -> Backend {
         Backend::Demo(Arc::new(Mutex::new(Demo::new())))
     }
 
@@ -45,22 +55,43 @@ impl Backend {
         matches!(self, Backend::Demo(_))
     }
 
+    /// Sends every agent event to `listener` from now on.
+    pub fn listen(&self, listener: Listener) {
+        match self {
+            #[cfg(target_arch = "wasm32")]
+            Backend::Tauri => tauri::listen(AGENT_EVENT, move |payload| {
+                if let Ok(event) = serde_json::from_value::<AgentEvent>(payload) {
+                    listener(event);
+                }
+            }),
+            #[cfg(not(target_arch = "wasm32"))]
+            Backend::Tauri => {
+                let _ = (AGENT_EVENT, listener);
+            }
+            Backend::Demo(demo) => {
+                if let Ok(mut d) = demo.lock() {
+                    d.listener = Some(listener);
+                }
+            }
+        }
+    }
+
     pub async fn home_state(&self) -> Result<HomeState, CallError> {
         self.call(cmd::HOME_STATE, None::<()>).await
     }
 
-    pub async fn create_project(&self, name: &str) -> Result<ProjectRow, CallError> {
+    pub async fn create_project(&self, name: &str) -> Result<OpenedProject, CallError> {
         let request = NewProject {
             name: name.to_owned(),
         };
         self.call(cmd::CREATE_PROJECT, Some(request)).await
     }
 
-    pub async fn open_project(&self, id: &str) -> Result<ProjectRow, CallError> {
+    pub async fn open_project(&self, id: &str) -> Result<OpenedProject, CallError> {
         self.call(cmd::OPEN_PROJECT, Some(id)).await
     }
 
-    pub async fn open_folder(&self) -> Result<Option<ProjectRow>, CallError> {
+    pub async fn open_folder(&self) -> Result<Option<OpenedProject>, CallError> {
         self.call(cmd::OPEN_FOLDER, None::<()>).await
     }
 
@@ -76,6 +107,54 @@ impl Backend {
         self.call(cmd::SAVE_CONNECTION, Some(r)).await
     }
 
+    pub async fn send_message(&self, m: &SendMessage) -> Result<(), CallError> {
+        self.call(cmd::SEND_MESSAGE, Some(m)).await
+    }
+
+    pub async fn answer_confirmation(
+        &self,
+        request_id: &str,
+        allow: bool,
+    ) -> Result<(), CallError> {
+        let a = Answer {
+            request_id: request_id.to_owned(),
+            answer: allow,
+        };
+        self.call(cmd::ANSWER_CONFIRMATION, Some(a)).await
+    }
+
+    pub async fn answer_plan(&self, request_id: &str, d: PlanDecision) -> Result<(), CallError> {
+        let a = Answer {
+            request_id: request_id.to_owned(),
+            answer: d,
+        };
+        self.call(cmd::ANSWER_PLAN, Some(a)).await
+    }
+
+    pub async fn answer_question(&self, request_id: &str, text: &str) -> Result<(), CallError> {
+        let a = Answer {
+            request_id: request_id.to_owned(),
+            answer: text.to_owned(),
+        };
+        self.call(cmd::ANSWER_QUESTION, Some(a)).await
+    }
+
+    pub async fn cancel_turn(&self) -> Result<(), CallError> {
+        self.call(cmd::CANCEL_TURN, None::<()>).await
+    }
+
+    pub async fn continue_turn(&self) -> Result<(), CallError> {
+        self.call(cmd::CONTINUE_TURN, None::<()>).await
+    }
+
+    pub async fn stuck_choice(&self, c: StuckChoice) -> Result<(), CallError> {
+        self.call(cmd::STUCK_CHOICE, Some(c)).await
+    }
+
+    pub async fn resolve_interruption(&self, c: InterruptionChoice) -> Result<(), CallError> {
+        self.call(cmd::RESOLVE_INTERRUPTION, Some(c)).await
+    }
+
     async fn call<R: DeserializeOwned>(
         &self,
         command: &str,
@@ -89,11 +168,10 @@ impl Backend {
             #[cfg(target_arch = "wasm32")]
             Backend::Tauri => tauri::invoke(command, request).await,
             #[cfg(not(target_arch = "wasm32"))]
-            Backend::Tauri => Err(Value::String("Tauri runs only in the window".into())),
-            Backend::Demo(demo) => demo
-                .lock()
-                .map_err(|_| Value::String("demo state poisoned".into()))
-                .and_then(|mut d| d.answer(command, request)),
+            Backend::Tauri => Err(serde_json::Value::String(
+                "Tauri runs only in the window".into(),
+            )),
+            Backend::Demo(demo) => Demo::answer(demo, command, request),
         };
         match answer {
             Ok(v) => serde_json::from_value(v).map_err(|e| CallError::Other(e.to_string())),
@@ -108,11 +186,12 @@ impl Backend {
 
 #[cfg(target_arch = "wasm32")]
 mod tauri {
-    //! `window.__TAURI_INTERNALS__.invoke(cmd, args)`, reached through
-    //! `Reflect` so no extern block (and no unsafe) is needed.
+    //! `window.__TAURI_INTERNALS__` (`invoke`, `transformCallback`), reached
+    //! through `Reflect` so no extern block (and no unsafe) is needed.
 
     use js_sys::{Function, JSON, Promise, Reflect};
-    use serde_json::Value;
+    use serde_json::{Value, json};
+    use wasm_bindgen::closure::Closure;
     use wasm_bindgen::{JsCast, JsValue};
     use wasm_bindgen_futures::JsFuture;
 
@@ -121,6 +200,12 @@ mod tauri {
         Reflect::get(&window, &JsValue::from_str("__TAURI_INTERNALS__"))
             .ok()
             .filter(|v| v.is_object())
+    }
+
+    fn function(of: &JsValue, name: &str) -> Option<Function> {
+        Reflect::get(of, &JsValue::from_str(name))
+            .ok()
+            .and_then(|f| f.dyn_into::<Function>().ok())
     }
 
     pub fn available() -> bool {
@@ -142,19 +227,12 @@ mod tauri {
             .unwrap_or_else(|| Value::String(format!("{v:?}")))
     }
 
-    pub async fn invoke(command: &str, request: Option<Value>) -> Result<Value, Value> {
+    async fn invoke_raw(command: &str, args: Value) -> Result<Value, Value> {
         let missing = || Value::String("not running inside AgentKnife".into());
         let internals = internals().ok_or_else(missing)?;
-        let invoke = Reflect::get(&internals, &JsValue::from_str("invoke"))
-            .ok()
-            .and_then(|f| f.dyn_into::<Function>().ok())
-            .ok_or_else(missing)?;
-        let args = match request {
-            Some(r) => to_js(&serde_json::json!({ "request": r })),
-            None => to_js(&serde_json::json!({})),
-        };
+        let invoke = function(&internals, "invoke").ok_or_else(missing)?;
         let promise = invoke
-            .call2(&internals, &JsValue::from_str(command), &args)
+            .call2(&internals, &JsValue::from_str(command), &to_js(&args))
             .map_err(|e| from_js(&e))?
             .dyn_into::<Promise>()
             .map_err(|e| from_js(&e))?;
@@ -163,133 +241,54 @@ mod tauri {
             .map(|v| from_js(&v))
             .map_err(|e| from_js(&e))
     }
-}
 
-/// In-memory stand-in for the app, for trying the screens in a browser. Keys
-/// containing `bad` are refused; addresses containing `nothing` do not answer;
-/// models with `3b` in the name cannot use tools.
-pub struct Demo {
-    projects: Vec<ProjectRow>,
-    ai: Option<ak_types::settings::AiConnection>,
-    next: u32,
-}
-
-const DEMO_FOLDER: &str = "~/AgentKnife/Projects";
-
-impl Demo {
-    pub fn new() -> Demo {
-        let now = now();
-        Demo {
-            projects: vec![
-                ProjectRow {
-                    id: "demo-1".into(),
-                    name: "Todo List".into(),
-                    path: format!("{DEMO_FOLDER}/Todo List"),
-                    last_opened_at: now.saturating_sub(3_600),
-                    exists: true,
-                },
-                ProjectRow {
-                    id: "demo-2".into(),
-                    name: "Recipe Box".into(),
-                    path: "~/Desktop/Recipe Box".into(),
-                    last_opened_at: now.saturating_sub(9 * 86_400),
-                    exists: false,
-                },
-            ],
-            ai: None,
-            next: 3,
-        }
+    pub async fn invoke(command: &str, request: Option<Value>) -> Result<Value, Value> {
+        let args = match request {
+            Some(r) => json!({ "request": r }),
+            None => json!({}),
+        };
+        invoke_raw(command, args).await
     }
 
-    fn answer(&mut self, command: &str, request: Option<Value>) -> Result<Value, Value> {
-        let req = request.unwrap_or(Value::Null);
-        let err = |e: ConnectError| serde_json::to_value(e).unwrap_or(Value::Null);
-        let ok = |v: Value| Ok(v);
-        match command {
-            cmd::HOME_STATE => {
-                let mut projects = self.projects.clone();
-                projects.sort_by_key(|p| std::cmp::Reverse(p.last_opened_at));
-                ok(json!(HomeState {
-                    projects,
-                    ai: self.ai.clone(),
-                    projects_folder: DEMO_FOLDER.into(),
-                }))
-            }
-            cmd::CREATE_PROJECT => {
-                let name = req["name"].as_str().unwrap_or_default().trim().to_owned();
-                let row = ProjectRow {
-                    id: format!("demo-{}", self.next),
-                    path: format!("{DEMO_FOLDER}/{name}"),
-                    name,
-                    last_opened_at: now(),
-                    exists: true,
-                };
-                self.next += 1;
-                self.projects.push(row.clone());
-                ok(json!(row))
-            }
-            cmd::OPEN_PROJECT => {
-                let id = req.as_str().unwrap_or_default();
-                let row = self
-                    .projects
-                    .iter_mut()
-                    .find(|p| p.id == id)
-                    .ok_or_else(|| Value::String(format!("no project {id}")))?;
-                row.last_opened_at = now();
-                ok(json!(row))
-            }
-            cmd::OPEN_FOLDER => ok(Value::Null),
-            cmd::LIST_MODELS | cmd::CHECK_MODEL => {
-                let r: ConnectRequest =
-                    serde_json::from_value(req).map_err(|e| Value::String(e.to_string()))?;
-                let key = r.api_key.as_deref().unwrap_or_default().trim();
-                let address = r.connection.base_url.clone().unwrap_or_default();
-                let needs_key =
-                    ak_types::ipc::preset(&r.connection.provider).is_some_and(|p| p.needs_key);
-                if (needs_key && key.is_empty()) || key.contains("bad") {
-                    return Err(err(ConnectError::WrongKey));
-                }
-                if address.contains("nothing") {
-                    return Err(err(ConnectError::Unreachable {
-                        detail: format!("error sending request for url ({address}/models)"),
-                    }));
-                }
-                if command == cmd::CHECK_MODEL {
-                    let m = &r.connection.model;
-                    return ok(json!(ModelCheck {
-                        tool_calling: !m.contains("3b"),
-                        vision: m.starts_with("claude") || m.starts_with("gpt"),
-                    }));
-                }
-                let ids: &[&str] = match r.connection.provider.as_str() {
-                    "anthropic" => &["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"],
-                    "openai" => &["gpt-5.2", "gpt-5-mini"],
-                    _ => &["qwen3:8b", "llama3.2:3b"],
-                };
-                ok(json!(
-                    ids.iter()
-                        .map(|id| ModelChoice {
-                            id: (*id).to_owned(),
-                            display_name: None,
-                        })
-                        .collect::<Vec<_>>()
-                ))
-            }
-            cmd::SAVE_CONNECTION => {
-                let r: ConnectRequest =
-                    serde_json::from_value(req).map_err(|e| Value::String(e.to_string()))?;
-                self.ai = Some(r.connection);
-                ok(Value::Null)
-            }
-            other => Err(Value::String(format!("unknown command {other}"))),
-        }
+    /// Like `@tauri-apps/api/event`'s `listen`: registers a callback id and asks
+    /// the event plugin to call it for `event`.
+    pub fn listen(event: &str, on_payload: impl Fn(Value) + 'static) {
+        let Some(internals) = internals() else { return };
+        let Some(transform) = function(&internals, "transformCallback") else {
+            return;
+        };
+        let callback = Closure::<dyn Fn(JsValue)>::new(move |e: JsValue| {
+            on_payload(from_js(&e)["payload"].take());
+        });
+        let Ok(id) = transform.call1(&internals, callback.as_ref()) else {
+            return;
+        };
+        // The listener lives as long as the window.
+        callback.forget();
+        let args = json!({
+            "event": event,
+            "target": { "kind": "Any" },
+            "handler": from_js(&id),
+        });
+        leptos::task::spawn_local(async move {
+            let _ = invoke_raw("plugin:event|listen", args).await;
+        });
     }
 }
 
-impl Default for Demo {
-    fn default() -> Self {
-        Demo::new()
+/// Waits `ms` milliseconds in the browser (the demo's pacing); no wait natively.
+pub async fn sleep(ms: i32) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let promise = js_sys::Promise::new(&mut |resolve, _| {
+            if let Some(w) = web_sys::window() {
+                let _ = w.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
+            }
+        });
+        let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = ms;
 }
 
 /// Unix seconds.
@@ -304,65 +303,5 @@ pub fn now() -> u64 {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use ak_types::settings::AiConnection;
-
-    use super::*;
-
-    fn block<F: std::future::Future>(f: F) -> F::Output {
-        // The demo never awaits anything: one poll finishes it.
-        let mut f = std::pin::pin!(f);
-        let waker = std::task::Waker::noop();
-        match f.as_mut().poll(&mut std::task::Context::from_waker(waker)) {
-            std::task::Poll::Ready(v) => v,
-            std::task::Poll::Pending => panic!("demo call did not finish"),
-        }
-    }
-
-    fn request(provider: &str, key: Option<&str>, model: &str) -> ConnectRequest {
-        ConnectRequest {
-            connection: AiConnection {
-                provider: provider.into(),
-                base_url: None,
-                model: model.into(),
-                effort: None,
-            },
-            api_key: key.map(Into::into),
-        }
-    }
-
-    #[test]
-    fn the_demo_answers_like_the_app() {
-        let b = Backend::Demo(Arc::new(Mutex::new(Demo::new())));
-        let home = block(b.home_state()).unwrap();
-        assert_eq!(home.projects.len(), 2);
-        assert!(home.ai.is_none());
-
-        let row = block(b.create_project("Shop")).unwrap();
-        assert_eq!(block(b.home_state()).unwrap().projects[0].id, row.id);
-        assert_eq!(block(b.open_project(&row.id)).unwrap().name, "Shop");
-
-        assert_eq!(
-            block(b.list_models(&request("anthropic", None, ""))),
-            Err(CallError::Connect(ConnectError::WrongKey))
-        );
-        let models = block(b.list_models(&request("anthropic", Some("sk-1"), ""))).unwrap();
-        assert_eq!(models[0].id, "claude-opus-5-5");
-        let weak = block(b.check_model(&request("ollama", None, "llama3.2:3b"))).unwrap();
-        assert!(!weak.tool_calling);
-
-        block(b.save_connection(&request("ollama", None, "qwen3:8b"))).unwrap();
-        assert_eq!(
-            block(b.home_state()).unwrap().ai.map(|a| a.model),
-            Some("qwen3:8b".into())
-        );
-        assert!(matches!(
-            block(b.open_project("nope")),
-            Err(CallError::Other(_))
-        ));
     }
 }

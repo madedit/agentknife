@@ -3,9 +3,10 @@
 
 use leptos::prelude::*;
 
+use crate::chat::ChatPane;
 use crate::i18n::t;
 use crate::layout::{self, CHAT, CenterTab, LEFT, Layout, Mode};
-use crate::panes::{ChatPane, CodePane, FilesPane, PreviewPane, TimelinePane};
+use crate::panes::{CodePane, FilesPane, PreviewPane, TimelinePane};
 use crate::splitter::{Grows, Splitter};
 
 #[component]

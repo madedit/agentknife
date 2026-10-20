@@ -43,10 +43,17 @@ pub enum AgentEvent {
         step_id: String,
         tool: String,
         label: String,
+        /// What exactly runs (the command, the file, or the arguments), for
+        /// "Details". Shortened.
+        #[serde(default)]
+        detail: String,
     },
     StepFinished {
         step_id: String,
         ok: bool,
+        /// The tool's output, for "Details". Shortened.
+        #[serde(default)]
+        output: String,
     },
     /// The agent waits for the user to allow or decline this step.
     NeedsConfirmation {
@@ -257,6 +264,7 @@ mod tests {
             step_id: "s1".into(),
             tool: "read_file".into(),
             label: "正在讀取登入頁面".into(),
+            detail: "src/login.rs".into(),
         };
         let json = serde_json::to_string(&e).unwrap();
         assert!(json.contains(r#""event":"step_started""#));

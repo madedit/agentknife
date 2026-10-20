@@ -4,18 +4,21 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::agent::PlanDecision;
+use crate::chat::Entry;
+use crate::preview::Picked;
 use crate::settings::AiConnection;
 
 /// Command names.
 pub mod cmd {
     /// `()` → [`HomeState`](super::HomeState)
     pub const HOME_STATE: &str = "home_state";
-    /// [`NewProject`](super::NewProject) → [`ProjectRow`](super::ProjectRow)
+    /// [`NewProject`](super::NewProject) → [`OpenedProject`](super::OpenedProject)
     pub const CREATE_PROJECT: &str = "create_project";
-    /// `String` (project id) → [`ProjectRow`](super::ProjectRow)
+    /// `String` (project id) → [`OpenedProject`](super::OpenedProject)
     pub const OPEN_PROJECT: &str = "open_project";
-    /// `()` → `Option<ProjectRow>`: asks for a folder (the system's folder picker)
-    /// and opens it as a project; `None` when the user cancels.
+    /// `()` → `Option<OpenedProject>`: asks for a folder (the system's folder
+    /// picker) and opens it as a project; `None` when the user cancels.
     pub const OPEN_FOLDER: &str = "open_folder";
     /// [`ConnectRequest`](super::ConnectRequest) → `Vec<ModelChoice>`
     pub const LIST_MODELS: &str = "list_models";
@@ -24,6 +27,74 @@ pub mod cmd {
     /// [`ConnectRequest`](super::ConnectRequest) → `()`: the key goes to the
     /// system keychain, the connection to the settings.
     pub const SAVE_CONNECTION: &str = "save_connection";
+    /// [`SendMessage`](super::SendMessage) → `()`: starts a turn in the open
+    /// project; its progress arrives as [`AGENT_EVENT`](super::AGENT_EVENT).
+    pub const SEND_MESSAGE: &str = "send_message";
+    /// [`Answer<bool>`](super::Answer) (allow the step?) → `()`
+    pub const ANSWER_CONFIRMATION: &str = "answer_confirmation";
+    /// [`Answer<PlanDecision>`](super::Answer) → `()`
+    pub const ANSWER_PLAN: &str = "answer_plan";
+    /// [`Answer<String>`](super::Answer) → `()`
+    pub const ANSWER_QUESTION: &str = "answer_question";
+    /// `()` → `()`: stops the running turn.
+    pub const CANCEL_TURN: &str = "cancel_turn";
+    /// `()` → `()`: goes on after the step limit or a cut-off answer.
+    pub const CONTINUE_TURN: &str = "continue_turn";
+    /// [`StuckChoice`](super::StuckChoice) → `()`
+    pub const STUCK_CHOICE: &str = "stuck_choice";
+    /// [`InterruptionChoice`](super::InterruptionChoice) → `()`
+    pub const RESOLVE_INTERRUPTION: &str = "resolve_interruption";
+}
+
+/// Tauri event carrying each [`AgentEvent`](crate::agent::AgentEvent) of the
+/// open project's running turn.
+pub const AGENT_EVENT: &str = "agent-event";
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OpenedProject {
+    pub project: ProjectRow,
+    /// The request of a turn that was interrupted (crash, force-quit…): the
+    /// user chooses to continue or go back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interrupted: Option<String>,
+    /// The saved conversation (context notes and checkpoints included; the chat
+    /// shows messages only).
+    #[serde(default)]
+    pub history: Vec<Entry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SendMessage {
+    pub text: String,
+    /// What the user pointed at in the preview.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection: Option<Picked>,
+}
+
+/// The user's answer to a request the agent is waiting on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Answer<T> {
+    pub request_id: String,
+    pub answer: T,
+}
+
+pub type PlanAnswer = Answer<PlanDecision>;
+
+/// After the automatic fixes gave up (`TurnOutcome::Stuck`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StuckChoice {
+    TryAnotherWay,
+    RollBack,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InterruptionChoice {
+    /// The AI picks up where it stopped.
+    Continue,
+    /// Back to the last checkpoint; the half-done work is set aside (restorable).
+    GoBack,
 }
 
 /// A home-screen row.

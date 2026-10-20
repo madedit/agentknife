@@ -181,7 +181,6 @@ shell-preview-empty = 你的 App 會顯示在這裡
 shell-preview-empty-hint = 打開或建立一個專案，再告訴 AI 你想做什麼。
 shell-code-empty = 在左邊選一個檔案，就能看到它的程式碼。
 shell-chat = 與 AI 對話
-shell-chat-empty = 先連接一個 AI 就能開始。
 shell-chat-placeholder = 說說你想做什麼…
 shell-resize-files = 調整檔案面板寬度
 shell-resize-chat = 調整對話面板寬度
@@ -252,3 +251,42 @@ connect-error-wrong-address = 有回應，但不是 AI 服務。請檢查網址�
 connect-error-no-models = 連上了，但還沒有任何模型。請先在程式裡下載一個模型。
 connect-error-rate-limited = 服務太忙了，請過一分鐘再試。
 connect-error-other = 發生問題了，詳細資訊可能有幫助。
+
+## 對話面板
+chat-empty = 告訴 AI 你想做什麼或改什麼。也可以先在預覽裡點一下要改的地方。
+# $what：使用者在預覽裡選的元素
+chat-selected = 已選取：{ $what }
+chat-selected-remove = 取消選取
+chat-thinking = AI 的思考過程
+chat-thinking-now = 思考中…
+chat-compacted = AI 把之前的對話整理成摘要以騰出空間。這裡的內容都還在。
+chat-allow = 允許
+chat-deny = 不允許
+chat-allowed = 你允許了這個步驟。
+chat-denied = 你沒有允許這個步驟。
+# $estimate：AI 自己的估計（「大約 3 分鐘」）
+chat-plan-estimate = 預估：{ $estimate }
+chat-plan-feedback = 計畫要怎麼改？
+chat-plan-started = 你開始了這個計畫。
+chat-plan-revised = 你要求修改這個計畫。
+chat-plan-cancelled = 你取消了這個計畫。
+chat-answered = 你的回答：{ $answer }
+chat-other-answer = 或自己輸入答案
+chat-send = 送出
+chat-stop = 停止
+chat-continue = 繼續
+chat-step-limit = 我已經做了很多步，先停下來讓你看看。要繼續嗎？
+chat-max-tokens = 我的回答太長被截斷了。要繼續嗎？
+chat-refused = AI 拒絕了這個要求。請換個方式問問看。
+# $spent、$cap：美元
+chat-over-budget = 今天先停在這裡：每日上限 US${ $cap } 已經用了 US${ $spent }。
+chat-cancelled = 已停止。
+chat-failed = AI 服務出了問題。
+# $request：使用者之前的要求
+chat-interrupted = 上次做到一半中斷了（正在：「{ $request }」）。要接著做，還是回到上一個檢查點？
+chat-interrupted-continue = 接著做
+chat-interrupted-go-back = 回到上一個檢查點
+# $session、$today：美元
+chat-usage = 這次 US${ $session } · 今天 US${ $today }
+chat-usage-at-least = 這次至少 US${ $session } · 今天至少 US${ $today }
+chat-expired = 不需要再回答了：AI 在你回答之前就停下來了。

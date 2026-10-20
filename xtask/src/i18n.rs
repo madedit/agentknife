@@ -14,6 +14,8 @@ const LOCALES_DIR: &str = "crates/ak-types/locales";
 const EMBEDDING_SOURCE: &str = "crates/ak-types/src/i18n.rs";
 const REFERENCE_LOCALE: &str = "en";
 const SHELL_SOURCES: &str = "crates/ak-shell/src";
+/// A shell file holding demo data (the AI's scripted words), not UI text.
+const DEMO_MARKER: &str = "// xtask-i18n: demo data";
 
 /// locale -> file name -> source text
 type Tree = BTreeMap<String, BTreeMap<String, String>>;
@@ -140,6 +142,9 @@ fn shell_text(dir: &Path, root: &Path) -> Result<Vec<String>> {
     rust_files(dir, &mut files)?;
     for file in files {
         let source = std::fs::read_to_string(&file)?;
+        if source.contains(DEMO_MARKER) {
+            continue;
+        }
         let rel = file
             .strip_prefix(root)
             .unwrap_or(&file)

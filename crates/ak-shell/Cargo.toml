@@ -8,6 +8,7 @@ description = "AgentKnife's own UI (Leptos). `trunk serve` in this folder runs i
 
 [dependencies]
 ak-types.workspace = true
+futures-channel.workspace = true
 js-sys.workspace = true
 leptos.workspace = true
 serde.workspace = true

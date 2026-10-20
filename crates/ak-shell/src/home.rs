@@ -1,6 +1,6 @@
 //! The home screen: recent projects, a new project, or a folder to open.
 
-use ak_types::ipc::{HomeState, ProjectRow};
+use ak_types::ipc::{HomeState, OpenedProject, ProjectRow};
 use leptos::prelude::*;
 
 use crate::backend::{Backend, CallError};
@@ -19,7 +19,7 @@ pub fn HomeScreen(
     home: Signal<HomeState>,
     /// Unix seconds, for "opened 3 days ago".
     now: u64,
-    on_open: Callback<ProjectRow>,
+    on_open: Callback<OpenedProject>,
 ) -> impl IntoView {
     let creating = RwSignal::new(false);
     let name = RwSignal::new(String::new());
@@ -42,7 +42,7 @@ pub fn HomeScreen(
             let backend = backend.clone();
             leptos::task::spawn_local(async move {
                 match backend.create_project(&n).await {
-                    Ok(row) => on_open.run(row),
+                    Ok(opened) => on_open.run(opened),
                     Err(e) => report(e),
                 }
             });
@@ -54,7 +54,7 @@ pub fn HomeScreen(
             let backend = backend.clone();
             leptos::task::spawn_local(async move {
                 match backend.open_folder().await {
-                    Ok(Some(row)) => on_open.run(row),
+                    Ok(Some(opened)) => on_open.run(opened),
                     Ok(None) => {}
                     Err(e) => report(e),
                 }
@@ -65,7 +65,7 @@ pub fn HomeScreen(
         let backend = backend.clone();
         leptos::task::spawn_local(async move {
             match backend.open_project(&row.id).await {
-                Ok(row) => on_open.run(row),
+                Ok(opened) => on_open.run(opened),
                 Err(e) => report(e),
             }
         });

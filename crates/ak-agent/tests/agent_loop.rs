@@ -202,13 +202,13 @@ async fn tool_loop_with_ai_labels() {
         *read.calls.lock().unwrap(),
         [json!({ "path": "src/app.rs" })]
     );
+    // "Details" shows the file, not the label.
     assert!(events.iter().any(|e| matches!(e,
-        AgentEvent::StepStarted { tool, label, .. } if tool == "read_file" && label == "正在讀取 app.rs")));
-    assert!(
-        events
-            .iter()
-            .any(|e| matches!(e, AgentEvent::StepFinished { ok: true, .. }))
-    );
+        AgentEvent::StepStarted { tool, label, detail, .. }
+            if tool == "read_file" && label == "正在讀取 app.rs" && detail == "src/app.rs")));
+    assert!(events.iter().any(
+        |e| matches!(e, AgentEvent::StepFinished { ok: true, output, .. } if !output.is_empty())
+    ));
 
     let reqs = p.requests();
     assert_eq!(reqs.len(), 2);

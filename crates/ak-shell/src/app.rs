@@ -1,11 +1,15 @@
 //! Which screen shows: the connect wizard on first run, the home screen, or a
 //! project's workspace; plus the top bar they share.
 
-use ak_types::ipc::{HomeState, ProjectRow};
+use std::sync::Arc;
+
+use ak_types::ipc::{HomeState, OpenedProject, ProjectRow};
 use ak_types::settings::AiConnection;
 use leptos::prelude::*;
 
 use crate::backend::{Backend, CallError};
+use crate::chat::Chat;
+use crate::chat::log::ChatLog;
 use crate::connect::ConnectWizard;
 use crate::home::HomeScreen;
 use crate::i18n::{self, t, t_with, tr};
@@ -31,6 +35,9 @@ pub fn App() -> impl IntoView {
     i18n::provide(i18n::browser_locale());
     let backend = Backend::detect();
     provide_context(backend.clone());
+    let chat = Chat::new(ChatLog::default());
+    provide_context(chat);
+    backend.listen(Arc::new(move |event| chat.log.update(|l| l.apply(event))));
     let home = RwSignal::new(HomeState::default());
     let screen = RwSignal::new(Screen::Loading);
     reload(&backend, home, screen, true);
@@ -68,6 +75,11 @@ pub fn AppView(
 ) -> impl IntoView {
     let layout = RwSignal::new(layout.unwrap_or_else(layout::load));
     let backend = expect_context::<Backend>();
+    let chat = use_context::<Chat>().unwrap_or_else(|| {
+        let c = Chat::new(ChatLog::default());
+        provide_context(c);
+        c
+    });
     // Where "Cancel" in the wizard goes back to.
     let before_connect = StoredValue::new(Screen::Home);
 
@@ -92,7 +104,12 @@ pub fn AppView(
         }
         screen.set(Screen::Connect { back: true });
     });
-    let open = Callback::new(move |row: ProjectRow| screen.set(Screen::Workspace(row)));
+    let open = Callback::new(move |o: OpenedProject| {
+        chat.log
+            .set(ChatLog::from_history(&o.history, o.interrupted));
+        chat.selection.set(None);
+        screen.set(Screen::Workspace(o.project));
+    });
 
     view! {
         <div class="flex h-screen flex-col bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">

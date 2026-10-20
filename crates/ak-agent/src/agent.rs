@@ -976,6 +976,7 @@ impl Agent {
                 step_id: step_id.to_owned(),
                 tool: call.name.clone(),
                 label: label.clone(),
+                detail: step_detail(&args),
             },
         );
         let output = if call.invalid_arguments.is_some() {
@@ -1051,6 +1052,7 @@ impl Agent {
             AgentEvent::StepFinished {
                 step_id: step_id.to_owned(),
                 ok: !output.is_error,
+                output: details_text(&output),
             },
         );
         Some(output)
@@ -1159,4 +1161,42 @@ fn plain_text(m: &Message) -> String {
             .join("\n"),
         _ => String::new(),
     }
+}
+
+/// Characters of a step's arguments and output kept for the UI's "Details".
+const DETAIL_CHARS: usize = 4_000;
+
+fn shorten(text: &str) -> String {
+    if text.chars().count() <= DETAIL_CHARS {
+        return text.to_owned();
+    }
+    let mut out: String = text.chars().take(DETAIL_CHARS).collect();
+    out.push_str("\n…");
+    out
+}
+
+/// The command or path of a step when it has one, else its arguments as JSON.
+fn step_detail(args: &serde_json::Value) -> String {
+    for key in ["command", "path", "query", "ak_id"] {
+        if let Some(v) = args.get(key).and_then(|v| v.as_str()) {
+            return shorten(v);
+        }
+    }
+    match args {
+        serde_json::Value::Object(m) if m.is_empty() => String::new(),
+        serde_json::Value::Null => String::new(),
+        other => shorten(&other.to_string()),
+    }
+}
+
+fn details_text(output: &ToolOutput) -> String {
+    let text: Vec<&str> = output
+        .content
+        .iter()
+        .map(|c| match c {
+            ContentPart::Text { text } => text.as_str(),
+            ContentPart::Image { .. } => "[image]",
+        })
+        .collect();
+    shorten(&text.join("\n"))
 }

@@ -3,10 +3,14 @@
 //! browser.
 
 #![deny(unsafe_code)]
+// Leptos views nest deeply in types (the chat pane).
+#![recursion_limit = "256"]
 
 pub mod app;
 pub mod backend;
+pub mod chat;
 pub mod connect;
+mod demo;
 pub mod home;
 pub mod i18n;
 pub mod layout;

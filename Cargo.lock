@@ -162,6 +162,7 @@ name = "ak-shell"
 version = "0.1.0"
 dependencies = [
  "ak-types",
+ "futures-channel",
  "js-sys",
  "leptos",
  "serde",

@@ -3,11 +3,11 @@
 
 // Test code: clippy's allow-unwrap-in-tests does not cover helper fns here.
 #![allow(clippy::unwrap_used)]
-
-use std::sync::{Arc, Mutex};
+// Leptos views nest deeply in types (the chat pane).
+#![recursion_limit = "256"]
 
 use ak_shell::app::{AppView, Screen};
-use ak_shell::backend::{Backend, CallError, Demo};
+use ak_shell::backend::{Backend, CallError};
 use ak_shell::connect::{ConnectWizard, Wizard, error_ids};
 use ak_shell::i18n;
 use ak_shell::layout::{CenterTab, Layout, Mode};
@@ -22,7 +22,7 @@ fn with_context(locale: Locale, f: impl FnOnce() -> String) -> String {
     let owner = Owner::new();
     owner.with(|| {
         i18n::provide(locale);
-        provide_context(Backend::Demo(Arc::new(Mutex::new(Demo::new()))));
+        provide_context(Backend::demo());
         f()
     })
 }
