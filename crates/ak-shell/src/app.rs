@@ -27,6 +27,7 @@ pub enum Screen {
     },
     Home,
     Workspace(ProjectRow),
+    Settings,
 }
 
 /// The whole UI, in the browser's language, talking to the app (or the demo).
@@ -60,6 +61,18 @@ pub fn App() -> impl IntoView {
     let home = RwSignal::new(HomeState::default());
     let screen = RwSignal::new(Screen::Loading);
     reload(&backend, home, screen, true);
+    // The language chosen in the settings replaces the browser's.
+    {
+        let backend = backend.clone();
+        let tr = i18n::Tr::get();
+        leptos::task::spawn_local(async move {
+            if let Ok(s) = backend.get_settings().await
+                && let Some(l) = s.language
+            {
+                tr.set_locale(l);
+            }
+        });
+    }
     view! { <AppView screen home /> }
 }
 
@@ -133,6 +146,15 @@ pub fn AppView(
         }
         screen.set(Screen::Connect { back: true });
     });
+    // Where "Back" on the settings page goes.
+    let before_settings = StoredValue::new(Screen::Home);
+    let open_settings = Callback::new(move |()| {
+        let now = screen.get_untracked();
+        if !matches!(now, Screen::Settings | Screen::Connect { .. }) {
+            before_settings.set_value(now);
+        }
+        screen.set(Screen::Settings);
+    });
     let open = {
         let backend = backend.clone();
         Callback::new(move |o: OpenedProject| {
@@ -155,7 +177,7 @@ pub fn AppView(
 
     view! {
         <div class="flex h-screen flex-col bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-            <TopBar screen home layout go_home change_ai demo=backend.is_demo() />
+            <TopBar screen home layout go_home change_ai open_settings demo=backend.is_demo() />
             {move || match screen.get() {
                 Screen::Loading => view! {
                     <p class="m-auto text-sm text-gray-500 dark:text-gray-400">{t("shell-loading")}</p>
@@ -182,6 +204,16 @@ pub fn AppView(
                     <HomeScreen home=home.into() now=crate::backend::now() on_open=open />
                 }.into_any(),
                 Screen::Workspace(_) => view! { <Workspace layout /> }.into_any(),
+                Screen::Settings => {
+                    let back = before_settings.get_value();
+                    view! {
+                        <crate::settings::SettingsScreen
+                            ai=Signal::derive(move || home.with(|h| h.ai.clone()))
+                            change_ai=change_ai
+                            on_close=Callback::new(move |()| screen.set(back.clone()))
+                        />
+                    }.into_any()
+                }
             }}
         </div>
     }
@@ -194,6 +226,7 @@ fn TopBar(
     layout: RwSignal<Layout>,
     go_home: Callback<()>,
     change_ai: Callback<()>,
+    open_settings: Callback<()>,
     demo: bool,
 ) -> impl IntoView {
     let project = move || match screen.get() {
@@ -256,6 +289,16 @@ fn TopBar(
                 })}
             </div>
             <div class="flex shrink-0 items-center gap-3">
+                <Show when=move || !matches!(screen.get(), Screen::Connect { .. } | Screen::Settings)>
+                    <button
+                        type="button"
+                        data-action="settings"
+                        class="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                        on:click=move |_| open_settings.run(())
+                    >
+                        {t("settings-title")}
+                    </button>
+                </Show>
                 // Not on the wizard itself (on first run there is nothing to go back to).
                 <Show when=move || !matches!(screen.get(), Screen::Connect { .. })>
                 <button

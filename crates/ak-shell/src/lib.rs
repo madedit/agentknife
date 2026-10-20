@@ -20,6 +20,7 @@ pub mod layout;
 #[allow(unsafe_code)]
 mod interop;
 pub mod preview;
+pub mod settings;
 pub mod shell;
 mod splitter;
 

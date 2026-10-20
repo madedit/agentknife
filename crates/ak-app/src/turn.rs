@@ -8,6 +8,7 @@ use std::sync::Arc;
 use ak_agent::permission::{ConfirmRequest, Confirmer};
 use ak_agent::plan::PlanReviewer;
 use ak_agent::policy::{PermissionMode, ProjectPolicy};
+use ak_agent::prompt::PlanMode;
 use ak_agent::tools::{Asker, Question, ToolEnv, project_tools, with_preview_tools};
 use ak_agent::{Agent, AgentConfig, Checkpointer, ConversationStore, TurnSummary, prompt, usage};
 use ak_project::{CheckpointKind, Project, Timeline};
@@ -16,6 +17,7 @@ use ak_types::chat::{Conversation, Message};
 use ak_types::i18n::I18n;
 use ak_types::ipc::{AGENT_EVENT, Answer, InterruptionChoice, SendMessage, StuckChoice};
 use ak_types::preview::Picked;
+use ak_types::settings::{Permissions, Plans};
 use futures_util::future::BoxFuture;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio_util::sync::CancellationToken;
@@ -103,7 +105,7 @@ struct Parts {
 
 /// The agent for the open project with the current AI connection.
 async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
-    let (profile, effective) = {
+    let (profile, effective, settings) = {
         let inner = state.inner.lock().await;
         let global = inner
             .settings
@@ -117,6 +119,7 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
         (
             crate::home::profile_of(&project),
             project.effective_ai(&global),
+            inner.settings.clone(),
         )
     };
     let provider =
@@ -130,6 +133,17 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
     config.system = Some(prompt::product_prompt().to_owned());
     config.project_dir = Some(parts.root.clone());
     config.ui_locale = ui_locale();
+    config.max_fix_attempts = settings.max_fix_attempts;
+    config.daily_cap_usd = settings.daily_cap_usd;
+    config.plan_mode = match settings.plans {
+        Plans::BigChanges => PlanMode::Auto,
+        Plans::Always => PlanMode::AlwaysAsk,
+        Plans::Never => PlanMode::NeverAsk,
+    };
+    let mode = match settings.permissions {
+        Permissions::Standard => PermissionMode::Standard,
+        Permissions::AskEveryChange => PermissionMode::AskEveryChange,
+    };
     config.context_window = caps.context_window;
     if let Some(max) = caps.max_output_tokens {
         config.max_tokens = config.max_tokens.min(max);
@@ -151,7 +165,7 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
         caps.vision,
     );
     Ok(Agent::new(provider, registry, config)
-        .with_gate(Arc::new(ProjectPolicy::new(PermissionMode::Standard)))
+        .with_gate(Arc::new(ProjectPolicy::new(mode)))
         .with_confirmer(bridge.clone())
         .with_plan_reviewer(bridge)
         .with_preview(parts.preview.clone())
@@ -271,9 +285,18 @@ fn spawn(app: AppHandle, start: Start) {
         }
         drop(tx);
         let _ = forward.await;
-        if let Some(open) = state.inner.lock().await.open.as_mut() {
-            open.cancel = None;
-        }
+        let keep = {
+            let mut inner = state.inner.lock().await;
+            if let Some(open) = inner.open.as_mut() {
+                open.cancel = None;
+            }
+            inner.settings.keep_turns as usize
+        };
+        // Older changes fold into their task (the version-history setting).
+        let root = parts.root.clone();
+        let _ =
+            tokio::task::spawn_blocking(move || Timeline::open(&root).and_then(|mut t| t.gc(keep)))
+                .await;
     });
 }
 

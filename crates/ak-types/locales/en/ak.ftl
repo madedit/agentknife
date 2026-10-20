@@ -368,3 +368,40 @@ bundle-fix-message = Packaging the app failed because it does not build. Please 
 ## Requests AgentKnife sends to the AI for the user (buttons in the chat)
 agent-continue-request = Please continue.
 agent-try-another-request = That did not work. Please try a different way.
+
+## Settings
+settings-title = Settings
+settings-save = Save
+settings-saved = Saved.
+settings-language = Language
+settings-language-system = Same as the computer
+# Language names are written in their own language.
+language-en = English
+language-zh-TW = 繁體中文
+settings-ai = AI
+settings-permissions = What the AI may do on its own
+settings-permissions-standard = Usual
+settings-permissions-standard-about = Changes inside the project happen right away; downloads, deleting files and anything outside the project ask you first.
+settings-permissions-ask = Ask me before every change
+settings-permissions-ask-about = Every file change and command waits for your OK.
+settings-plans = Plans before changes
+settings-plans-about = A plan lists the steps, the time and the cost, and waits for you to click Start.
+settings-plans-big = For bigger changes (the AI decides)
+settings-plans-always = Before every change
+settings-plans-never = Never
+settings-fix = Automatic fixes
+settings-fix-about = When the app stops building, the AI tries to fix it on its own this many times before it stops and asks you.
+settings-fix-unit = tries
+settings-history = Version history
+settings-history-about = How many recent changes stay one by one. Older ones are combined into their finished task; tasks, packaged versions and versions you marked are always kept.
+settings-history-unit = recent changes
+settings-cap = Daily spending limit
+settings-cap-about = For AI services that charge. AgentKnife warns you at 80% and asks before going over. Leave it empty for no limit.
+settings-cap-currency = US$
+settings-cap-none = No limit
+settings-privacy = Privacy
+settings-privacy-text = AgentKnife collects no usage data and sends nothing about you. Your projects, your conversations and your API keys stay on this computer (keys in the system keychain), except what you send to the AI service you chose.
+settings-crash = Crash reports
+settings-crash-about = If AgentKnife ever crashes, a report is saved on this computer. It is never sent automatically; to report a problem, copy a report and share it yourself.
+settings-crash-none = No crash reports.
+settings-crash-copy = Copy

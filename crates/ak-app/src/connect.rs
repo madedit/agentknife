@@ -63,6 +63,7 @@ pub async fn save_connection(
     }
     let mut inner = state.inner.lock().await;
     inner.settings.ai = Some(request.connection);
+    use crate::state::SettingsFile;
     inner.settings.save(&state.state_dir).map_err(|e| {
         to_value(ConnectError::Other {
             detail: e.to_string(),

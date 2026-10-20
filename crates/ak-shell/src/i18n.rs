@@ -16,6 +16,24 @@ pub fn provide(locale: Locale) -> Tr {
     tr
 }
 
+impl Tr {
+    /// The UI's localizer (take it before going async: contexts are not
+    /// reachable from a spawned task).
+    pub fn get() -> Tr {
+        expect_context::<Tr>()
+    }
+
+    /// Switches the UI language (everything showing fluent text updates).
+    pub fn set_locale(self, locale: Locale) {
+        self.0.set(Arc::new(localizer(locale)));
+    }
+}
+
+/// The language the settings choose, else the browser's.
+pub fn chosen_locale(setting: Option<Locale>) -> Locale {
+    setting.unwrap_or_else(browser_locale)
+}
+
 fn localizer(locale: Locale) -> I18n {
     I18n::new(locale)
         .or_else(|_| I18n::new(Locale::FALLBACK))

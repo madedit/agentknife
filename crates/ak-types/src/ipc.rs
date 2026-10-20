@@ -84,6 +84,12 @@ pub mod cmd {
     /// `String` (an `https://` address) → `()`: opens it in the user's browser
     /// (links inside AgentKnife's window do not navigate it).
     pub const OPEN_URL: &str = "open_url";
+    /// `()` → [`AppSettings`](crate::settings::AppSettings)
+    pub const GET_SETTINGS: &str = "get_settings";
+    /// [`AppSettings`](crate::settings::AppSettings) → `()` (values are clamped).
+    pub const SAVE_SETTINGS: &str = "save_settings";
+    /// `()` → [`CrashReports`](super::CrashReports)
+    pub const CRASH_REPORTS: &str = "crash_reports";
 
     /// Every command, for checking that the app handles them all.
     pub const ALL: &[&str] = &[
@@ -116,6 +122,9 @@ pub mod cmd {
         BUNDLE,
         REVEAL,
         OPEN_URL,
+        GET_SETTINGS,
+        SAVE_SETTINGS,
+        CRASH_REPORTS,
     ];
 }
 
@@ -459,6 +468,24 @@ impl ProviderPreset {
     pub fn asks_address(&self) -> bool {
         self.id == "openai-compatible"
     }
+}
+
+/// Crash reports kept on this computer (never sent by AgentKnife).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CrashReports {
+    /// Where they are (for "Show in folder").
+    pub folder: String,
+    /// Newest first.
+    pub reports: Vec<CrashReport>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CrashReport {
+    pub path: String,
+    /// Unix seconds.
+    pub created_at: u64,
+    /// The report itself (for "Copy").
+    pub text: String,
 }
 
 #[cfg(test)]

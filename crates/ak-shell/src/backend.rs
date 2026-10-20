@@ -6,12 +6,14 @@ use std::sync::{Arc, Mutex};
 
 use ak_types::agent::{AgentEvent, PlanDecision};
 use ak_types::doctor::SystemAction;
+use ak_types::ipc::CrashReports;
 use ak_types::ipc::{
     AGENT_EVENT, Answer, BundleFailure, BundleResult, ConnectError, ConnectRequest, DoctorCheck,
     FileEntry, FileText, HomeState, InterruptionChoice, MarkVersion, ModelCheck, ModelChoice,
     NewProject, OpenedProject, PREVIEW_EVENT, SaveFile, SendMessage, StuckChoice, TimelineRow, cmd,
 };
 use ak_types::preview::PreviewStatus;
+use ak_types::settings::AppSettings;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -173,6 +175,18 @@ impl Backend {
                 let _ = url;
             }
         }
+    }
+
+    pub async fn get_settings(&self) -> Result<AppSettings, CallError> {
+        self.call(cmd::GET_SETTINGS, None::<()>).await
+    }
+
+    pub async fn save_settings(&self, s: &AppSettings) -> Result<(), CallError> {
+        self.call(cmd::SAVE_SETTINGS, Some(s)).await
+    }
+
+    pub async fn crash_reports(&self) -> Result<CrashReports, CallError> {
+        self.call(cmd::CRASH_REPORTS, None::<()>).await
     }
 
     pub async fn reveal(&self, path: &str) -> Result<(), CallError> {

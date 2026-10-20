@@ -72,6 +72,7 @@ pub struct Demo {
     next: u32,
     /// Event name → listeners (`Backend::on`).
     pub(crate) listeners: BTreeMap<&'static str, Vec<Handler>>,
+    settings: ak_types::settings::AppSettings,
     /// The tools check: what is still missing.
     doctor_missing: Vec<&'static str>,
     preview: PreviewStatus,
@@ -147,6 +148,7 @@ impl Demo {
             next: 3,
             listeners: BTreeMap::new(),
             doctor_missing: vec!["trunk", "tauri-cli", "webview2"],
+            settings: ak_types::settings::AppSettings::default(),
             preview: PreviewStatus::default(),
             waiting: None,
             running: false,
@@ -282,6 +284,26 @@ impl Demo {
             cmd::OPEN_FOLDER => Ok(Value::Null),
             cmd::PREVIEW_STATUS => Ok(json!(d.preview)),
             cmd::RUN_APP | cmd::REVEAL => Ok(Value::Null),
+            cmd::GET_SETTINGS => {
+                let mut s = d.settings.clone();
+                s.ai = d.ai.clone();
+                Ok(json!(s))
+            }
+            cmd::SAVE_SETTINGS => {
+                let s: ak_types::settings::AppSettings =
+                    serde_json::from_value(req).map_err(|e| text(e.to_string()))?;
+                d.settings = ak_types::settings::AppSettings { ai: None, ..s }.clamped();
+                Ok(Value::Null)
+            }
+            cmd::CRASH_REPORTS => Ok(json!(ak_types::ipc::CrashReports {
+                folder: "~/AppData/Roaming/AgentKnife/crash-reports".into(),
+                reports: vec![ak_types::ipc::CrashReport {
+                    path: "~/AppData/Roaming/AgentKnife/crash-reports/1792500000.txt".into(),
+                    created_at: now().saturating_sub(2 * 86_400),
+                    text: "AgentKnife 0.1.0 crash report\nsystem: windows x86_64\nmessage: demo\n"
+                        .into(),
+                }],
+            })),
             cmd::DOCTOR_CHECK => Ok(json!(doctor_check(&d.doctor_missing))),
             cmd::DOCTOR_ACTION => {
                 // As if the official installer ran: the next check finds it.

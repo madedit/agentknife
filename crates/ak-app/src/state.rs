@@ -10,27 +10,26 @@ use ak_preview::{PreviewSession, Tools};
 use ak_project::{Project, Registry};
 use ak_types::agent::PlanDecision;
 use ak_types::chat::Conversation;
-use ak_types::settings::AiConnection;
-use serde::{Deserialize, Serialize};
+use ak_types::settings::AppSettings;
 use tokio::sync::{Mutex, oneshot};
 use tokio_util::sync::CancellationToken;
 
-/// `<data>/AgentKnife/settings.json`. API keys are never here (keychain).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Settings {
-    pub ai: Option<AiConnection>,
+/// Loads and saves [`AppSettings`] in `<data>/AgentKnife/settings.json`.
+pub trait SettingsFile: Sized {
+    fn load(state_dir: &Path) -> Self;
+    fn save(&self, state_dir: &Path) -> anyhow::Result<()>;
 }
 
-impl Settings {
-    pub fn load(state_dir: &Path) -> Settings {
+impl SettingsFile for AppSettings {
+    fn load(state_dir: &Path) -> AppSettings {
         std::fs::read_to_string(state_dir.join(SETTINGS_FILE))
             .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
+            .and_then(|t| serde_json::from_str::<AppSettings>(&t).ok())
             .unwrap_or_default()
+            .clamped()
     }
 
-    pub fn save(&self, state_dir: &Path) -> anyhow::Result<()> {
+    fn save(&self, state_dir: &Path) -> anyhow::Result<()> {
         std::fs::create_dir_all(state_dir)?;
         let tmp = state_dir.join(format!("{SETTINGS_FILE}.tmp"));
         std::fs::write(&tmp, serde_json::to_string_pretty(self)?)?;
@@ -66,8 +65,14 @@ pub struct OpenProject {
 
 pub struct Inner {
     pub registry: Registry,
-    pub settings: Settings,
+    pub settings: AppSettings,
     pub open: Option<OpenProject>,
+}
+
+/// AgentKnife's data folder (`<data>/AgentKnife`).
+pub fn state_dir() -> PathBuf {
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    dirs::data_dir().unwrap_or(home).join("AgentKnife")
 }
 
 /// Shared by all commands (`tauri::State`).
@@ -83,17 +88,14 @@ pub struct AppState {
 
 impl AppState {
     pub fn load() -> anyhow::Result<AppState> {
-        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        let state_dir = dirs::data_dir()
-            .unwrap_or_else(|| home.clone())
-            .join("AgentKnife");
+        let state_dir = state_dir();
         let registry = Registry::load_default()?;
         let pinned = ak_doctor::Pinned::builtin().map_err(anyhow::Error::msg)?;
         let toolchain = ak_doctor::Toolchain::new(ak_doctor::Toolchain::default_root(), &pinned);
         Ok(AppState {
             inner: Mutex::new(Inner {
                 registry,
-                settings: Settings::load(&state_dir),
+                settings: AppSettings::load(&state_dir),
                 open: None,
             }),
             pending: Arc::new(std::sync::Mutex::new(Pending::default())),
@@ -108,22 +110,27 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
+    use ak_types::settings::{AiConnection, Permissions};
+
     use super::*;
 
     #[test]
     fn settings_round_trip_and_tolerate_a_missing_file() {
         let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(Settings::load(dir.path()), Settings::default());
-        let s = Settings {
+        assert_eq!(AppSettings::load(dir.path()), AppSettings::default());
+        let s = AppSettings {
             ai: Some(AiConnection {
                 provider: "ollama".into(),
                 base_url: Some("http://localhost:11434/v1".into()),
                 model: "qwen3:8b".into(),
                 effort: None,
             }),
+            permissions: Permissions::AskEveryChange,
+            daily_cap_usd: Some(2.5),
+            ..AppSettings::default()
         };
         s.save(dir.path()).unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(Settings::load(dir.path()), s);
+        assert_eq!(AppSettings::load(dir.path()), s);
         let text = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap_or_default();
         assert!(!text.contains("key"), "no keys in settings: {text}");
     }

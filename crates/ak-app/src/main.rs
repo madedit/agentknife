@@ -6,7 +6,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod connect;
+mod crash;
 mod home;
+mod settings;
 mod state;
 mod tools;
 mod turn;
@@ -22,9 +24,19 @@ pub fn fail(e: impl std::fmt::Display) -> serde_json::Value {
     serde_json::Value::String(e.to_string())
 }
 
-/// The UI language (the system's until settings can change it, P1-APP-002).
+/// The language chosen in the settings (`None`: the system's).
+static LANGUAGE: std::sync::RwLock<Option<Locale>> = std::sync::RwLock::new(None);
+
+pub fn set_language(language: Option<Locale>) {
+    if let Ok(mut l) = LANGUAGE.write() {
+        *l = language;
+    }
+}
+
+/// The UI language: the settings' choice, else the system's.
 pub fn ui_locale() -> Locale {
-    Locale::resolve(None, &Locale::os_preferences())
+    let chosen = LANGUAGE.read().ok().and_then(|l| *l);
+    Locale::resolve(chosen, &Locale::os_preferences())
 }
 
 /// Every command the window can call, named as in `ak_types::ipc::cmd`.
@@ -59,10 +71,17 @@ const COMMANDS: &[&str] = &[
     "bundle",
     "reveal",
     "open_url",
+    "get_settings",
+    "save_settings",
+    "crash_reports",
 ];
 
 fn main() -> anyhow::Result<()> {
+    crash::install(state::state_dir().join(crash::FOLDER));
     let state = state::AppState::load()?;
+    set_language(tauri::async_runtime::block_on(async {
+        state.inner.lock().await.settings.language
+    }));
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -97,6 +116,9 @@ fn main() -> anyhow::Result<()> {
             tools::bundle,
             tools::reveal,
             tools::open_url,
+            settings::get_settings,
+            settings::save_settings,
+            settings::crash_reports,
         ])
         .build(tauri::generate_context!())?;
     app.run(|handle, event| {

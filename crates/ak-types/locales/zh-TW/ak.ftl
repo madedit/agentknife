@@ -365,3 +365,40 @@ bundle-fix-message = 打包 App 失敗了，因為它無法建置。請幫我修
 ## AgentKnife 代使用者傳給 AI 的要求（對話中的按鈕）
 agent-continue-request = 請繼續。
 agent-try-another-request = 這樣行不通，請換個做法試試。
+
+## 設定
+settings-title = 設定
+settings-save = 儲存
+settings-saved = 已儲存。
+settings-language = 語言
+settings-language-system = 跟電腦一樣
+# 語言名稱用該語言本身書寫。
+language-en = English
+language-zh-TW = 繁體中文
+settings-ai = AI
+settings-permissions = AI 可以自己做的事
+settings-permissions-standard = 一般
+settings-permissions-standard-about = 專案內的修改會直接進行；下載、刪除檔案和專案外的事會先問你。
+settings-permissions-ask = 每個修改都先問我
+settings-permissions-ask-about = 每次改檔案、執行指令都會等你同意。
+settings-plans = 修改前先給計畫
+settings-plans-about = 計畫會列出步驟、時間和花費，等你按「開始」才動手。
+settings-plans-big = 比較大的修改（由 AI 判斷）
+settings-plans-always = 每次修改前
+settings-plans-never = 不用
+settings-fix = 自動修正
+settings-fix-about = App 無法建置時，AI 會自己修正最多這麼多次，還不行才停下來問你。
+settings-fix-unit = 次
+settings-history = 版本紀錄
+settings-history-about = 最近的修改會逐筆保留這麼多筆，更早的會併入所屬的完成任務；任務、打包過的版本和你標記的版本永遠保留。
+settings-history-unit = 筆最近的修改
+settings-cap = 每日花費上限
+settings-cap-about = 給要收費的 AI 服務用。用到 80% 時會提醒你，超過前會先問你。留空就是不設上限。
+settings-cap-currency = US$
+settings-cap-none = 不設上限
+settings-privacy = 隱私
+settings-privacy-text = AgentKnife 不收集任何使用資料，也不會傳送關於你的任何資訊。你的專案、對話和 API 金鑰都留在這台電腦上（金鑰存在系統鑰匙圈），只有你傳給所選 AI 服務的內容例外。
+settings-crash = 當機報告
+settings-crash-about = 如果 AgentKnife 當機，會在這台電腦上存一份報告。報告絕不會自動傳送；想回報問題時，可以複製報告自己分享。
+settings-crash-none = 沒有當機報告。
+settings-crash-copy = 複製
