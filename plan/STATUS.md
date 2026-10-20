@@ -101,7 +101,7 @@
   - `Agent::greet` runs once, on a conversation without messages (session notes do not count); takes no lock; asks for the UI language explicitly.
   - Test with the fake LLM.
   - Live (zh-TW and en, real product prompt plus all 8 tools): greeting in the right language, 4 points, proposes the tool check and asks to start, 0 tool calls.
-- P1-DOC-001 — (hash in next commit) — ak-doctor detection:
+- P1-DOC-001 — c7bd00d — ak-doctor detection:
   - Isolated Toolchain layout; pinned versions from the embedded versions.toml; probes always set RUSTUP_AUTO_INSTALL=0 and RUSTUP_TOOLCHAIN.
   - Checks:
     - rust, wasm32-target, trunk, wasm-bindgen, tauri-cli, tailwind (exact version)
@@ -110,4 +110,14 @@
     - Linux: pkg-config packages and cc
   - DoctorReport DTO in ak-types; fluent names and statuses (en and zh-TW).
   - Fake-probe tests for all 3 OSes.
+- P1-DOC-002 — (hash in next commit) — isolated toolchain install (owner decision Q61 (c)):
+  - assets: download URLs for rustup-init, trunk, wasm-bindgen, tauri-cli and tailwind on win-x64, linux-x64, mac-x64 and mac-arm64.
+  - versions.toml [tools] rustup and [downloads]: 20 sha256 pins written by `cargo xtask pin-downloads`. CI step "downloads" fails on missing or stale keys.
+  - Installer: check → plan (isolated items that are not Ok) → install → check again; errors go into the item detail.
+    - Rust: rustup-init -y --no-modify-path --profile minimal --default-toolchain <pin> --target wasm32 (or `rustup toolchain install` if our rustup exists; `rustup target add` if only the target is missing).
+    - Tools: prebuilt download with .part resume, sha256 check (a bad file is deleted), unpack from raw/zip/tar.gz via tmp + rename; fallback `cargo install --locked --force --root`; Tailwind has no fallback.
+  - SystemProbe drops inherited RUSTUP_TOOLCHAIN/RUSTUP_HOME/CARGO_HOME/CARGO/RUSTC/RUSTDOC.
+  - DoctorProgress + InstallPhase DTO; fluent doctor-install-<phase> (en, zh-TW).
+  - Tests: plan, resume, Range ignored, checksum mismatch, all 3 archive kinds, rustup-init args and env, cargo fallback env, nothing-to-do.
+  - Real install on this Windows machine: 856 MB in %APPDATA%/AgentKnife/toolchain; doctor ready; second run installs nothing. User PATH (HKCU\Environment), the Rustup uninstall key and C:\tools\rustup were unchanged.
   - Real run on this machine: MSVC 17.14, SDK 10.0.26100, WebView2 155.0 detected. The real rustc 1.99.1 and wasm32 target were detected through junctions into the AgentKnife layout.

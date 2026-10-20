@@ -81,6 +81,8 @@ impl Probe for Fake {
 fn pinned() -> Pinned {
     Pinned {
         rust: "1.99.1".into(),
+        rustup: "1.29.1".into(),
+        downloads: Default::default(),
         trunk: "0.21.14".into(),
         wasm_bindgen: "0.2.129".into(),
         tauri_cli: "2.12.3".into(),

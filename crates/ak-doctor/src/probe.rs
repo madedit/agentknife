@@ -32,6 +32,16 @@ pub trait Probe: Send + Sync {
     fn env_var(&self, name: &str) -> Option<String>;
 }
 
+/// Variables that make rustup or cargo pick another toolchain.
+const INHERITED_TOOLCHAIN_VARS: &[&str] = &[
+    "RUSTUP_TOOLCHAIN",
+    "RUSTUP_HOME",
+    "CARGO_HOME",
+    "CARGO",
+    "RUSTC",
+    "RUSTDOC",
+];
+
 /// The real computer.
 pub struct SystemProbe {
     pub timeout: Duration,
@@ -59,6 +69,11 @@ impl Probe for SystemProbe {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .kill_on_drop(true);
+            // Never inherit a toolchain choice from whoever started AgentKnife
+            // (`cargo run` sets these); only `env` decides.
+            for k in INHERITED_TOOLCHAIN_VARS {
+                cmd.env_remove(k);
+            }
             for (k, v) in env {
                 cmd.env(k, v);
             }

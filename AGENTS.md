@@ -129,8 +129,10 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - When prices change, update the table and its date in the same change.
 - **Doctor:** detection and installation are deterministic Rust code, and the AI only narrates. Install Rust, targets, Trunk, wasm-bindgen, tauri-cli, and Tailwind CLI in AgentKnife's own directory (custom `RUSTUP_HOME`/`CARGO_HOME`). For system-level dependencies (MSVC Build Tools, WebView2, Xcode CLT, Linux webkit packages), guide the user step by step. Installs must be idempotent and resumable.
   - `ak_doctor::Toolchain` lives under `<data_dir>/AgentKnife/toolchain/`, with `rustup/`, `cargo/` and `bin/`. Tools are always called by full path. Pinned versions come from the embedded `versions.toml`.
-  - Anything that runs rustup or cargo must use `Toolchain::env()`, which sets `RUSTUP_AUTO_INSTALL=0` and `RUSTUP_TOOLCHAIN`. Without it, rustup silently installs a missing toolchain.
+  - Anything that runs rustup or cargo must use `Toolchain::env()`, which sets `RUSTUP_AUTO_INSTALL=0` and `RUSTUP_TOOLCHAIN`. Without it, rustup silently installs a missing toolchain. The one exception is installing Rust itself (rustup-init, `rustup toolchain install`), which uses the private homes without `RUSTUP_TOOLCHAIN`. `SystemProbe` drops inherited `RUSTUP_TOOLCHAIN`, `RUSTUP_HOME`, `CARGO_HOME`, `CARGO`, `RUSTC` and `RUSTDOC`, so the parent process (for example `cargo run`) cannot change which toolchain is used.
   - Detection goes through the `Probe` trait, so it can be tested for all OSes on any host with canned outputs.
+  - `ak_doctor::Installer` installs only the isolated items that `check` did not find Ok, then checks again. It uses prebuilt downloads where `assets` has them, and falls back to `cargo install --locked` (Tailwind has no fallback). Each download must match its sha256 in `versions.toml` `[downloads]`; after changing a tool version, run `cargo xtask pin-downloads` (CI fails on missing or stale keys).
+  - Downloads resume from `<file>.part`. A file whose checksum fails is deleted, never used. Programs are written to a temporary file and renamed into place. rustup-init always gets `--no-modify-path`: never touch the user's PATH, dotfiles or registry.
 - **Preview:**
   - The center pane is an iframe on the Trunk dev server.
   - `ak-bridge` exposes the app's Tauri commands over a localhost WebSocket in dev builds, so the preview is fully functional.
@@ -231,7 +233,9 @@ Prerequisites for developing AgentKnife:
 | Test one crate | `cargo test -p <crate>` |
 | Full pre-commit gate | `cargo xtask ci` |
 | Refresh the vendored CodeMirror | `cargo xtask vendor-codemirror` |
-
+| Re-pin download checksums after a tool version change | `cargo xtask pin-downloads` |
+| Doctor report for this computer (read-only) | `cargo run -p ak-doctor --example doctor_report` |
+| Install the isolated toolchain for real (several hundred MB) | `cargo run -p ak-doctor --example doctor_install` |
 | Record real Anthropic fixtures (costs cents) | `ANTHROPIC_API_KEY=… cargo run -p ak-providers --example record_anthropic` |
 | Record real Chat Completions fixtures (free with local Ollama) | `AK_MODEL=qwen3:8b cargo run -p ak-providers --example record_openai_compat` |
 | Run one live agent turn (manual check) | `AK_BASE_URL=http://127.0.0.1:8080/v1 AK_MODEL=… cargo run -p ak-agent --example agent_live` |

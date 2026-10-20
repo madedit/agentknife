@@ -6,6 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+ak-doctor = { path = "../crates/ak-doctor" }
 fluent-syntax.workspace = true
 regex.workspace = true
 serde.workspace = true

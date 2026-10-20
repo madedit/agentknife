@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod ci;
+mod downloads;
 mod i18n;
 mod layering;
 mod nonode;
@@ -20,8 +21,9 @@ fn main() -> ExitCode {
         Some("gen-toolchain") => gen_toolchain(),
         Some("ci") => ci::run(&workspace_root()),
         Some("vendor-codemirror") => vendor::vendor_codemirror(&workspace_root()),
+        Some("pin-downloads") => downloads::pin(&workspace_root()),
         _ => {
-            eprintln!("usage: cargo xtask <gen-toolchain|ci|vendor-codemirror>");
+            eprintln!("usage: cargo xtask <gen-toolchain|ci|vendor-codemirror|pin-downloads>");
             return ExitCode::FAILURE;
         }
     };

@@ -8,12 +8,18 @@ publish.workspace = true
 [dependencies]
 ak-types.workspace = true
 dirs.workspace = true
+flate2.workspace = true
 futures-util.workspace = true
+reqwest.workspace = true
 serde.workspace = true
-tokio = { workspace = true, features = ["process", "time"] }
+sha2.workspace = true
+tar.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "process", "rt", "time"] }
 toml.workspace = true
+zip.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "process", "time"] }
 
 [lints]

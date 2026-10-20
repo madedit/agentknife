@@ -54,3 +54,48 @@ pub enum CheckStatus {
     /// The check itself failed (see `detail`).
     Error,
 }
+
+/// One step of an install, for the progress display.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DoctorProgress {
+    /// The doctor item being installed (`doctor-item-<id>`).
+    pub item: String,
+    /// 1-based position among the items being installed.
+    pub step: u32,
+    pub total: u32,
+    pub phase: InstallPhase,
+}
+
+/// The UI shows fluent `doctor-install-<phase>` (kebab-case).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum InstallPhase {
+    /// `size` is unknown when the server does not say.
+    Download {
+        done: u64,
+        size: Option<u64>,
+    },
+    Verify,
+    Unpack,
+    /// Running the official installer (rustup).
+    Setup,
+    /// No prebuilt download: compiling from source with `cargo install` (slow).
+    Compile,
+    Done,
+    Failed,
+}
+
+impl InstallPhase {
+    /// The fluent key suffix.
+    pub fn key(&self) -> &'static str {
+        match self {
+            InstallPhase::Download { .. } => "download",
+            InstallPhase::Verify => "verify",
+            InstallPhase::Unpack => "unpack",
+            InstallPhase::Setup => "setup",
+            InstallPhase::Compile => "compile",
+            InstallPhase::Done => "done",
+            InstallPhase::Failed => "failed",
+        }
+    }
+}

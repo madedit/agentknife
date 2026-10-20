@@ -1,5 +1,6 @@
 //! Where AgentKnife keeps its own tools, and the pinned versions it wants.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -11,10 +12,13 @@ const VERSIONS_TOML: &str = include_str!("../../../versions.toml");
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pinned {
     pub rust: String,
+    pub rustup: String,
     pub trunk: String,
     pub wasm_bindgen: String,
     pub tauri_cli: String,
     pub tailwind: String,
+    /// `[downloads]`: `tool@version/target` -> sha256.
+    pub downloads: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -22,6 +26,8 @@ struct VersionsFile {
     rust: RustSection,
     crates: CratesSection,
     tools: ToolsSection,
+    #[serde(default)]
+    downloads: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -39,6 +45,7 @@ struct CratesSection {
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct ToolsSection {
+    rustup: String,
     trunk: String,
     tailwind_cli: String,
 }
@@ -46,14 +53,26 @@ struct ToolsSection {
 impl Pinned {
     /// The versions this build of AgentKnife was made with.
     pub fn builtin() -> Result<Pinned, String> {
-        let v: VersionsFile = toml::from_str(VERSIONS_TOML).map_err(|e| e.to_string())?;
+        Self::parse(VERSIONS_TOML)
+    }
+
+    /// Parses a `versions.toml` (xtask uses it on the working copy).
+    pub fn parse(text: &str) -> Result<Pinned, String> {
+        let v: VersionsFile = toml::from_str(text).map_err(|e| e.to_string())?;
         Ok(Pinned {
             rust: v.rust.toolchain,
+            rustup: v.tools.rustup,
             trunk: v.tools.trunk,
             wasm_bindgen: v.crates.wasm_bindgen,
             tauri_cli: v.crates.tauri_cli,
             tailwind: v.tools.tailwind_cli,
+            downloads: v.downloads,
         })
+    }
+
+    /// The pinned sha256 of a download, if recorded.
+    pub fn checksum(&self, key: &str) -> Option<&str> {
+        self.downloads.get(key).map(String::as_str)
     }
 }
 
