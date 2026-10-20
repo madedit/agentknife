@@ -1,0 +1,22 @@
+# Single source of truth for pinned versions (AGENTS.md §2).
+# Empty values must be filled with the latest stable release at bootstrap (task P1-CORE-001).
+# `cargo xtask ci` verifies Cargo.toml, templates/, knowledge/ and vendored hashes against this file.
+
+[rust]
+toolchain = ""
+
+[crates]
+tauri = ""
+tauri-cli = ""
+leptos = ""
+wasm-bindgen = ""
+
+[tools]
+trunk = ""
+tailwind-cli = ""
+
+[vendor]
+codemirror = ""
+
+[knowledge]
+pack = ""
