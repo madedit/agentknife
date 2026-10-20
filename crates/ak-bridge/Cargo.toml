@@ -39,6 +39,17 @@ web-sys = { workspace = true, features = [
     "MessageEvent",
     "CloseEvent",
     "Event",
+    "EventTarget",
+    "AddEventListenerOptions",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlCanvasElement",
+    "HtmlCollection",
+    "CssStyleDeclaration",
+    "DomRect",
+    "MouseEvent",
+    "KeyboardEvent",
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]

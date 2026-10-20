@@ -161,7 +161,7 @@
     - Recorded from the local vLLM-style server (openai-compatible_responses_*): text, tool round trip with replayed encrypted reasoning, vision.
   - Live: agent_tools_live with AK_PROTOCOL=responses behaves the same as Chat Completions on the local server.
   - Not verified against api.openai.com (no key). Synthetic fixtures follow the docs; replaying item ids with store:false is per the SDK types and unconfirmed in the docs.
-- P1-BRIDGE-001 — (hash in next commit) — WebSocket invoke (ak-bridge):
+- P1-BRIDGE-001 — e45f6fe — WebSocket invoke (ak-bridge):
   - Host (native):
     - The `init()` Tauri plugin. With `dev` and AK_BRIDGE_TOKEN set, it hides the app's windows, binds 127.0.0.1 (AK_BRIDGE_PORT, 0 = free port) and prints `AK_BRIDGE_READY {"port":N}`.
     - Clients must send `?token=` (constant-time compare) and, if AK_BRIDGE_ORIGIN is set, the matching Origin.
@@ -172,4 +172,25 @@
   - Tests: mock-runtime app with real `#[tauri::command]`s.
     - Managed state, async commands, the command's own error, missing args, unknown command, 20 requests in flight, two clients.
     - Bad or missing token gives 401; wrong or missing origin gives 403; garbage input gives an error reply.
-  - Not yet verified: the wasm client at runtime and the real wry runtime. Both need the template app (P1-TPL-001) and are part of its live check. Backend-to-frontend events are not bridged.
+  - The wasm client was verified in Chrome during P1-BRIDGE-002 (see there). Not yet verified: the real wry runtime (P1-TPL-001 live check). Backend-to-frontend events are not bridged.
+- P1-BRIDGE-002 — (hash in next commit) — inspector (point-and-select):
+  - Protocol (ak_bridge::protocol):
+    - JSON strings `{"ak_inspector": …}`. InspectorCommand is enable/disable. InspectorEvent is ready/hover/select/cancel.
+    - A selection (Picked) carries: ak_id (closest data-ak-id, plus `exact`), CSS path (starts at the nearest element id, nth-of-type when needed), tag, short text, rect and viewport in CSS px, and an optional canvas point.
+  - Inspector (wasm, `dev` only):
+    - `ak_bridge::start()` installs it inside a frame; `set_hit_test` is for canvas apps. Both are no-ops in release.
+    - It obeys only the parent window, replies only to the enabling origin, and focuses the frame on enable.
+    - Capture-phase listeners keep clicks from reaching the app. The overlay is a fixed box with a data-ak-id tab. Escape sends cancel.
+    - Canvas points are in canvas pixels (content box, so the border is excluded).
+  - Verified live in Chrome:
+    - Setup:
+      - The demo frontend was built with AgentKnife's isolated toolchain (rustup 1.99.1 + wasm-bindgen 0.2.129).
+      - It ran in an iframe on another origin.
+      - The native bridge backend (mock runtime, origin locked) served it.
+    - Results:
+      - WebSocket invoke kept state across calls and a reload.
+      - Hover showed the highlight, with exact:false on an inner `<b>`.
+      - Select reported the button, a paragraph without an id (ak_id null) and the canvas (box-a/box-b from hit_test). Clicks did not reach the app.
+      - Escape sent cancel; disable removed the overlay and restored clicks.
+    - Two bugs were found and fixed: canvas coordinates included the border, and Escape was lost without focus.
+  - Native tests cover the protocol, CSS paths and text shortening. The DOM code is only covered by the manual live check; no browser runs in CI.

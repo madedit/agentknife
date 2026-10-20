@@ -10,6 +10,33 @@ use serde_json::Value;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 
+/// Call once at startup, before mounting the app. In AgentKnife's preview it
+/// lets the user point at elements (the inspector); in release builds it does
+/// nothing.
+pub fn start() {
+    #[cfg(feature = "dev")]
+    crate::inspector::install();
+}
+
+/// What a canvas hit test receives: the canvas's `data-ak-id` and the point in
+/// canvas pixels (the coordinates the drawing code uses).
+#[derive(Debug, Clone, PartialEq)]
+pub struct HitTestInput {
+    pub ak_id: Option<String>,
+    pub x: f64,
+    pub y: f64,
+}
+
+/// For apps that draw on a `<canvas>`: tells the inspector what is at a point
+/// (e.g. `{"shape": "circle-3"}`), so "this one" can mean a drawn shape. Ignored
+/// in release builds.
+pub fn set_hit_test(f: impl Fn(&HitTestInput) -> Option<Value> + 'static) {
+    #[cfg(feature = "dev")]
+    crate::inspector::set_hit_test(f);
+    #[cfg(not(feature = "dev"))]
+    drop(f);
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum InvokeError {
     /// Neither Tauri nor the preview bridge is available (e.g. opened in a
