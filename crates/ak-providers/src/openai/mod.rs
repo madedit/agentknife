@@ -3,9 +3,15 @@
 //!
 //! One adapter; a [`Flavor`] (detected from the base URL or set explicitly) selects
 //! the few protocol differences and where model capabilities come from:
-//! Ollama `POST /api/show`, LM Studio `GET /api/v1/models`, OpenRouter `GET /models`.
+//! Ollama `POST /api/show`, LM Studio `GET /api/v1/models`, OpenRouter `GET /models`,
+//! OpenAI a dated table ([`responses::MODELS`]).
+//!
+//! [`WireApi`] picks the protocol: OpenAI itself uses the Responses API (its current
+//! models only call tools there); everything else defaults to Chat Completions.
 
 mod request;
+pub mod responses;
+mod responses_stream;
 mod stream;
 mod think_tags;
 
@@ -77,6 +83,25 @@ impl Flavor {
     }
 }
 
+/// Which OpenAI protocol to speak.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WireApi {
+    /// `POST /chat/completions`.
+    ChatCompletions,
+    /// `POST /responses` (stateless: `store: false`, encrypted reasoning replayed).
+    Responses,
+}
+
+impl WireApi {
+    pub fn default_for(flavor: Flavor) -> WireApi {
+        match flavor {
+            Flavor::OpenAi => WireApi::Responses,
+            _ => WireApi::ChatCompletions,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct OpenAiCompatConfig {
     /// Including the `/v1` (or `/api/v1`) prefix.
@@ -84,6 +109,8 @@ pub struct OpenAiCompatConfig {
     /// Not needed by local servers.
     pub api_key: Option<ApiKey>,
     pub flavor: Flavor,
+    /// Defaults from the flavor; some servers (vLLM) also speak Responses.
+    pub api: WireApi,
 }
 
 impl OpenAiCompatConfig {
@@ -95,6 +122,7 @@ impl OpenAiCompatConfig {
             base_url,
             api_key,
             flavor,
+            api: WireApi::default_for(flavor),
         }
     }
 
@@ -104,6 +132,7 @@ impl OpenAiCompatConfig {
             base_url: flavor.default_base_url().unwrap_or_default().to_owned(),
             api_key,
             flavor,
+            api: WireApi::default_for(flavor),
         }
     }
 }
@@ -114,6 +143,7 @@ impl fmt::Debug for OpenAiCompatConfig {
             .field("base_url", &self.base_url)
             .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
             .field("flavor", &self.flavor)
+            .field("api", &self.api)
             .finish()
     }
 }
@@ -239,11 +269,8 @@ impl OpenAiCompat {
                         ..Capabilities::default()
                     }))
             }
-            // OpenAI's /models has no capability data (Responses adapter: P1-PROV-005).
-            Flavor::OpenAi => Ok(Capabilities {
-                tool_calling: true,
-                ..Capabilities::default()
-            }),
+            // OpenAI's /models has no capability data: a dated table.
+            Flavor::OpenAi => Ok(responses::capabilities(model)),
         }
     }
 }
@@ -373,33 +400,76 @@ impl Provider for OpenAiCompat {
 
     fn stream(&self, request: ChatRequest) -> BoxFuture<'_, Result<EventStream, ProviderError>> {
         Box::pin(async move {
-            let body = request::build(&request, self.config.flavor);
+            let (path, body) = match self.config.api {
+                WireApi::ChatCompletions => (
+                    "/chat/completions",
+                    request::build(&request, self.config.flavor),
+                ),
+                WireApi::Responses => (
+                    "/responses",
+                    responses::build(&request, self.config.flavor.id()),
+                ),
+            };
             let resp = self
                 .transport
                 .send(HttpRequest {
                     method: Method::Post,
-                    url: self.url("/chat/completions"),
+                    url: self.url(path),
                     headers: self.headers(),
                     body: Some(body.to_string().into_bytes()),
                 })
                 .await?;
             let resp = ok_or_error(resp, self.config.api_key.as_ref()).await?;
-            Ok(decode(resp, self.config.flavor))
+            Ok(match self.config.api {
+                WireApi::ChatCompletions => decode(resp, stream::Decoder::new(self.config.flavor)),
+                WireApi::Responses => decode(resp, responses_stream::Decoder::new()),
+            })
         })
     }
 }
 
-fn decode(resp: HttpResponse, flavor: Flavor) -> EventStream {
-    struct State {
+/// One SSE event at a time -> neutral events. Both wire protocols implement it.
+trait SseDecoder: Send + 'static {
+    fn push(&mut self, ev: &crate::sse::SseEvent) -> Result<Vec<StreamEvent>, ProviderError>;
+    fn end_of_stream(&mut self) -> Result<Vec<StreamEvent>, ProviderError>;
+    fn is_done(&self) -> bool;
+}
+
+impl SseDecoder for stream::Decoder {
+    fn push(&mut self, ev: &crate::sse::SseEvent) -> Result<Vec<StreamEvent>, ProviderError> {
+        stream::Decoder::push(self, ev)
+    }
+    fn end_of_stream(&mut self) -> Result<Vec<StreamEvent>, ProviderError> {
+        stream::Decoder::end_of_stream(self)
+    }
+    fn is_done(&self) -> bool {
+        stream::Decoder::is_done(self)
+    }
+}
+
+impl SseDecoder for responses_stream::Decoder {
+    fn push(&mut self, ev: &crate::sse::SseEvent) -> Result<Vec<StreamEvent>, ProviderError> {
+        responses_stream::Decoder::push(self, ev)
+    }
+    fn end_of_stream(&mut self) -> Result<Vec<StreamEvent>, ProviderError> {
+        responses_stream::Decoder::end_of_stream(self)
+    }
+    fn is_done(&self) -> bool {
+        responses_stream::Decoder::is_done(self)
+    }
+}
+
+fn decode<D: SseDecoder>(resp: HttpResponse, decoder: D) -> EventStream {
+    struct State<D> {
         events:
             futures_util::stream::BoxStream<'static, Result<crate::sse::SseEvent, ProviderError>>,
-        decoder: stream::Decoder,
+        decoder: D,
         queue: VecDeque<StreamEvent>,
         finished: bool,
     }
     let state = State {
         events: sse_events(resp.body),
-        decoder: stream::Decoder::new(flavor),
+        decoder,
         queue: VecDeque::new(),
         finished: false,
     };

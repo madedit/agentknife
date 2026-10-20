@@ -1,0 +1,20 @@
+{
+  "source": "synthetic",
+  "request": {
+    "method": "POST",
+    "path": "/v1/responses"
+  },
+  "response": {
+    "status": 200,
+    "headers": [
+      [
+        "content-type",
+        "text/event-stream"
+      ]
+    ],
+    "chunks": [
+      "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"item_id\":\"msg_F\",\"output_index\":0,\"content_index\":0,\"delta\":\"Partial\",\"sequence_number\":0}\n\n",
+      "event: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"id\":\"resp_1\",\"object\":\"response\",\"status\":\"failed\",\"model\":\"gpt-6.1-sol\",\"output\":[],\"usage\":null,\"error\":{\"code\":\"server_error\",\"message\":\"The server had an error while processing your request.\"}},\"sequence_number\":1}\n\n"
+    ]
+  }
+}

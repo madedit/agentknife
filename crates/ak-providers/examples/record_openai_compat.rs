@@ -6,7 +6,8 @@
 //!
 //! ```text
 //! AK_MODEL=qwen3:8b cargo run -p ak-providers --example record_openai_compat
-//! # optional: AK_BASE_URL (default Ollama, http://localhost:11434/v1), AK_API_KEY
+//! # optional: AK_BASE_URL (default Ollama, http://localhost:11434/v1), AK_API_KEY,
+//! #   AK_WIRE=responses|chat (default: by flavor), AK_VISION=1 (adds an image scenario)
 //! ```
 
 use std::error::Error;
@@ -15,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ak_providers::fixture::RecordingTransport;
-use ak_providers::openai::{Flavor, OpenAiCompat, OpenAiCompatConfig};
+use ak_providers::openai::{Flavor, OpenAiCompat, OpenAiCompatConfig, WireApi};
 use ak_providers::{ChatRequest, Provider, ReqwestTransport, collect};
 use ak_types::chat::{ContentPart, Message, ToolSpec};
 use serde_json::json;
@@ -31,10 +32,19 @@ async fn main() -> Result<()> {
             .unwrap_or_default()
             .to_owned()
     });
-    let config = OpenAiCompatConfig::new(base, std::env::var("AK_API_KEY").ok().map(Into::into));
+    let mut config =
+        OpenAiCompatConfig::new(base, std::env::var("AK_API_KEY").ok().map(Into::into));
+    let mut prefix = config.flavor.id().to_owned();
+    match std::env::var("AK_WIRE").as_deref() {
+        Ok("responses") => {
+            config.api = WireApi::Responses;
+            prefix.push_str("_responses");
+        }
+        Ok("chat") => config.api = WireApi::ChatCompletions,
+        _ => {}
+    }
     let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/openai/recorded");
     std::fs::create_dir_all(&out)?;
-    let prefix = config.flavor.id();
 
     let req = |messages: Vec<Message>, tools: Vec<ToolSpec>| ChatRequest {
         model: model.clone(),
@@ -107,8 +117,34 @@ async fn main() -> Result<()> {
         },
     )
     .await?;
+
+    if std::env::var("AK_VISION").is_ok_and(|v| v == "1") {
+        let r = req(
+            vec![Message::User {
+                content: vec![
+                    ContentPart::Text {
+                        text: "What color is this image? One word.".into(),
+                    },
+                    ContentPart::Image {
+                        media_type: "image/png".into(),
+                        data_base64: RED_PIXEL_PNG.into(),
+                    },
+                ],
+            }],
+            vec![],
+        );
+        record(&out, &format!("{prefix}_vision"), &config, |p| async move {
+            let done = collect(p.stream(r).await?, p.id()).await?;
+            println!("vision answer: {:?}", done.message);
+            Ok(())
+        })
+        .await?;
+    }
     Ok(())
 }
+
+/// A 1x1 red PNG.
+const RED_PIXEL_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
 
 async fn record<F, Fut>(
     out: &Path,

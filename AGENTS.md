@@ -109,6 +109,9 @@ plan/            STATUS.md and execution-plan.md (format in §8).
 - **Agent:** AgentKnife has its own agent loop. Providers sit behind one trait. On connect, check that the model supports tool calling, and warn in plain language if it does not (typical for small local models). API keys go only in the keychain, never in files or logs.
   - Keys: `ak_providers::credentials`. `Keychain` (service `AgentKnife`) is the only persistent store. The account is the provider id, or `<provider>@<base_url>` for a custom endpoint, so a local server never receives a cloud key. Never add a file or env fallback in the app; env vars are for dev examples only.
   - Keys travel as `ApiKey`, which has no `Serialize` or `Display`, a redacted `Debug`, and `expose()` only for the request header. Error messages from servers are scrubbed with `ApiKey::redact`. Keyring errors never show stored bytes.
+  - OpenAI protocols: `OpenAiCompatConfig::api` (`WireApi`). OpenAI itself uses the Responses API, because its current models call tools only there; every other flavor defaults to Chat Completions.
+    - Responses requests are stateless (`store: false`). The replay is the whole `output` array, echoed verbatim and in order, which keeps encrypted reasoning, item ids and `phase`. A Chat Completions replay is an object, so the two never mix.
+    - OpenAI model capabilities come from the dated table in `openai::responses` (`MODEL_TABLE_DATE`). When OpenAI changes its models, update the table and its date in the same change.
 - **AI reply language:** the agent replies in the language of the user's most recent message. If that cannot be determined, it uses the UI language. The rule lives in the system prompt (`ak_agent::prompt`), first and explicit. The system prompt is built once per conversation and never changes between turns, because providers bind reasoning signatures and the prompt cache to it. So the rule is static, with the UI language named as the fallback.
 - **Permissions:** reads, writes, builds, and runs inside the project folder are automatic. Downloads or installs, access outside the project, and deletions need a plain-language confirmation.
   - Implemented by `ak_agent::policy::ProjectPolicy`, the agent's default gate. Use `AllowAll` only in tests.
@@ -245,7 +248,7 @@ Prerequisites for developing AgentKnife:
 | Doctor report for this computer (read-only) | `cargo run -p ak-doctor --example doctor_report` |
 | Install the isolated toolchain for real (several hundred MB) | `cargo run -p ak-doctor --example doctor_install` |
 | Record real Anthropic fixtures (costs cents) | `ANTHROPIC_API_KEY=… cargo run -p ak-providers --example record_anthropic` |
-| Record real Chat Completions fixtures (free with local Ollama) | `AK_MODEL=qwen3:8b cargo run -p ak-providers --example record_openai_compat` |
+| Record real Chat Completions fixtures (free with local Ollama) | `AK_MODEL=qwen3:8b cargo run -p ak-providers --example record_openai_compat` (`AK_WIRE=responses` records the Responses API, `AK_VISION=1` adds an image scenario) |
 | Run one live agent turn (manual check) | `AK_BASE_URL=http://127.0.0.1:8080/v1 AK_MODEL=… cargo run -p ak-agent --example agent_live` |
 | Live check of the project tools (edits a scratch project) | same env vars, `--example agent_tools_live` |
 | Regenerate `rust-toolchain.toml` | `cargo xtask gen-toolchain` (never edit it by hand) |

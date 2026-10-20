@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use ak_providers::fixture::{Fixture, FixtureTransport};
-use ak_providers::openai::{Flavor, OpenAiCompat, OpenAiCompatConfig};
+use ak_providers::openai::{Flavor, OpenAiCompat, OpenAiCompatConfig, WireApi};
 use ak_providers::{ChatRequest, Effort, Provider, ProviderError, StopReason, collect};
 use ak_types::chat::{ContentPart, Message, ToolSpec};
 use serde_json::json;
@@ -22,16 +22,23 @@ fn provider(
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/openai")
         .join(format!("{name}.json"));
-    let mut t = FixtureTransport::new(Fixture::load(path).unwrap());
+    let fixtures = Fixture::load(path).unwrap();
+    // The fixture says which protocol it speaks (OpenAI's Chat Completions fixtures
+    // keep covering that decoder, which other servers use).
+    let api = if fixtures[0].request.path.ends_with("/responses") {
+        WireApi::Responses
+    } else {
+        WireApi::ChatCompletions
+    };
+    let mut t = FixtureTransport::new(fixtures);
     if let Some(n) = chunking {
         t = t.rechunked(n);
     }
     let t = Arc::new(t);
     let key = (flavor == Flavor::OpenAi || flavor == Flavor::OpenRouter).then(|| "sk-test".into());
-    (
-        OpenAiCompat::new(OpenAiCompatConfig::for_flavor(flavor, key), t.clone()),
-        t,
-    )
+    let mut config = OpenAiCompatConfig::for_flavor(flavor, key);
+    config.api = api;
+    (OpenAiCompat::new(config, t.clone()), t)
 }
 
 fn tool() -> ToolSpec {
@@ -263,10 +270,15 @@ async fn recorded_fixtures_decode() {
         .unwrap_or_else(|| panic!("{name}: unknown provider prefix"));
         let mut fx = Fixture::load(&path).unwrap();
         assert!(fx.iter().all(|f| f.source.as_deref() == Some("recorded")));
-        let posts = fx
-            .iter()
-            .filter(|f| f.request.path.ends_with("/chat/completions"))
-            .count();
+        let is_post = |f: &Fixture| {
+            f.request.path.ends_with("/chat/completions") || f.request.path.ends_with("/responses")
+        };
+        let posts = fx.iter().filter(|f| is_post(f)).count();
+        let api = if fx.iter().any(|f| f.request.path.ends_with("/responses")) {
+            WireApi::Responses
+        } else {
+            WireApi::ChatCompletions
+        };
         let probes = fx.len() - posts;
         for f in &mut fx {
             f.request.body = None; // Replay without knowing the original request.
@@ -279,6 +291,7 @@ async fn recorded_fixtures_decode() {
                 .to_owned(),
             api_key: None,
             flavor,
+            api,
         };
         let p = OpenAiCompat::new(config, t.clone());
         if probes > 0 {
@@ -309,4 +322,135 @@ async fn errors_are_typed() {
         p.stream(request("gpt-test", None)).await.err().unwrap(),
         ProviderError::Auth
     );
+}
+
+fn sent_body(t: &FixtureTransport, n: usize) -> serde_json::Value {
+    let req = &t.sent()[n];
+    serde_json::from_slice(req.body.as_deref().unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn responses_reasoning_and_tool_round_trip() {
+    for chunking in CHUNKINGS {
+        let (p, t) = provider("openai_responses_tools", Flavor::OpenAi, chunking);
+        let first = collect(
+            p.stream(request("gpt-6.1-sol", Some(Effort::XHigh)))
+                .await
+                .unwrap(),
+            p.id(),
+        )
+        .await
+        .unwrap();
+        let (_, thinking, calls) = parts(&first.message);
+        assert_eq!(
+            thinking,
+            ["**Reading the file**\n\nI should look at src/app.rs."]
+        );
+        assert_eq!(
+            calls,
+            [("call_A1".to_owned(), json!({ "path": "src/app.rs" }))]
+        );
+        assert_eq!(first.stop_reason, StopReason::ToolUse);
+        assert_eq!(
+            (first.usage.input_tokens, first.usage.cache_read_tokens),
+            (176, 1024)
+        );
+
+        let body = sent_body(&t, 0);
+        assert_eq!(t.sent()[0].url, "https://api.openai.com/v1/responses");
+        assert_eq!(body["store"], false);
+        assert_eq!(body["reasoning"]["effort"], "xhigh");
+        assert_eq!(body["instructions"], "You are AgentKnife.");
+
+        // Second turn: our own output items go back verbatim, then the tool output.
+        let mut req = request("gpt-6.1-sol", Some(Effort::XHigh));
+        req.messages.push(first.message.clone());
+        req.messages.push(tool_result("call_A1"));
+        let second = collect(p.stream(req).await.unwrap(), p.id()).await.unwrap();
+        assert_eq!(parts(&second.message).0, "It renders a counter.");
+        assert_eq!(second.stop_reason, StopReason::EndTurn);
+        let input = sent_body(&t, 1)["input"].clone();
+        assert_eq!(input[1]["type"], "reasoning");
+        assert_eq!(
+            input[1]["encrypted_content"],
+            "gAAAAB-encrypted-reasoning-A1"
+        );
+        assert_eq!(input[2]["type"], "function_call");
+        assert_eq!(input[2]["call_id"], "call_A1");
+        assert_eq!(
+            input[3],
+            json!({ "type": "function_call_output", "call_id": "call_A1", "output": "fn main() {}" })
+        );
+        assert_eq!(t.remaining(), 0, "{chunking:?}");
+    }
+}
+
+#[tokio::test]
+async fn responses_vision_sends_images_in_input_and_tool_output() {
+    let (p, t) = provider("openai_responses_vision", Flavor::OpenAi, None);
+    let img = || ContentPart::Image {
+        media_type: "image/png".into(),
+        data_base64: "iVBORw0KGgo=".into(),
+    };
+    let mut req = request("gpt-6-astra", None);
+    req.messages = vec![
+        Message::User {
+            content: vec![
+                ContentPart::Text {
+                    text: "What is this?".into(),
+                },
+                img(),
+            ],
+        },
+        Message::Assistant {
+            thinking: vec![],
+            text: String::new(),
+            tool_calls: vec![ak_types::chat::ToolCall {
+                id: "call_S".into(),
+                name: "screenshot".into(),
+                arguments: json!({}),
+                invalid_arguments: None,
+            }],
+            replay: None,
+        },
+        Message::ToolResult {
+            call_id: "call_S".into(),
+            content: vec![img()],
+            is_error: false,
+        },
+    ];
+    let done = collect(p.stream(req).await.unwrap(), p.id()).await.unwrap();
+    assert_eq!(parts(&done.message).0, "A blue button.");
+    let input = sent_body(&t, 0)["input"].clone();
+    assert_eq!(input[0]["content"][1]["type"], "input_image");
+    assert_eq!(
+        input[0]["content"][1]["image_url"],
+        "data:image/png;base64,iVBORw0KGgo="
+    );
+    assert_eq!(input[1]["type"], "function_call");
+    assert_eq!(input[2]["output"][0]["type"], "input_image");
+    assert_eq!(
+        p.capabilities("gpt-6-astra")
+            .await
+            .unwrap()
+            .max_output_tokens,
+        Some(128_000)
+    );
+}
+
+#[tokio::test]
+async fn responses_errors() {
+    let (p, _) = provider("openai_responses_unauthorized", Flavor::OpenAi, None);
+    let err = p.stream(request("gpt-6-luna", None)).await.err().unwrap();
+    assert_eq!(err, ProviderError::Auth);
+
+    let (p, _) = provider("openai_responses_failed", Flavor::OpenAi, Some(3));
+    let err = collect(p.stream(request("gpt-6-luna", None)).await.unwrap(), p.id())
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&err, ProviderError::Server { message, .. } if message.contains("server_error")),
+        "{err:?}"
+    );
+    assert!(err.is_retryable());
 }

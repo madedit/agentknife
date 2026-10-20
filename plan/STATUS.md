@@ -136,7 +136,7 @@
   - launch() refuses any page that is not one of the official ones.
   - Detection fix: linux-appindicator also accepts appindicator3-0.1 (Fedora, Arch, openSUSE).
   - Not verified on real machines: the winget installs (this PC already has everything), macOS, the Linux commands (openSUSE libappindicator3-devel and the Gentoo list are not from the Tauri page).
-- P1-PROV-004 — (hash in next commit) — credential storage:
+- P1-PROV-004 — f30541b — credential storage:
   - ak_providers::credentials:
     - CredentialStore trait, with Keychain (keyring 4, OS store, service "AgentKnife") and MemoryStore.
     - account(): the provider id, or provider@base_url for a custom endpoint.
@@ -145,3 +145,19 @@
   - ReqwestTransport logs each request at debug level; HttpRequest's Debug redacts the key headers.
   - Test: real ReqwestTransport against a local server that echoes the key; the key never appears in serialized AiConnection/AiOverride, config Debug, error Display/Debug or captured tracing output (all levels).
   - The ignored test real_keychain_round_trip passed against Windows Credential Manager; no entry was left. macOS Keychain and Linux Secret Service are not verified.
+- P1-PROV-005 — (hash in next commit) — OpenAI Responses API adapter:
+  - WireApi on OpenAiCompatConfig. The OpenAi flavor defaults to POST /responses; other flavors keep Chat Completions and can opt in.
+  - Request:
+    - instructions, input items, function tools (strict: false), reasoning {summary: auto, effort stepped down per the model table}, store: false, include reasoning.encrypted_content, max_output_tokens clamped.
+    - Images go in user input and directly in function_call_output.
+    - Own replays (the output array) are echoed verbatim; other origins are rebuilt as messages and function_call items.
+  - Stream:
+    - Reasoning summaries (with paragraph breaks) and reasoning_text become thinking. output_item.added starts tool calls; argument deltas follow, and .done fills any gap.
+    - Refusal, plus incomplete with max_output_tokens or content_filter, map to stop reasons. response.failed: a policy code becomes a Refusal, anything else an error. The error event is mapped too.
+    - Usage excludes cached input. The replay is built from the output_item.done items.
+  - Capability table: gpt-6-astra, gpt-6.1-sol, gpt-6-luna (1.05M context, 128k output, vision; effort low–max), read 2026-10-20 from developers.openai.com plus openai-python HEAD.
+  - Fixtures:
+    - Synthetic (openai_responses_*): reasoning + tool round trip, vision, 401, mid-stream failure.
+    - Recorded from the local vLLM-style server (openai-compatible_responses_*): text, tool round trip with replayed encrypted reasoning, vision.
+  - Live: agent_tools_live with AK_PROTOCOL=responses behaves the same as Chat Completions on the local server.
+  - Not verified against api.openai.com (no key). Synthetic fixtures follow the docs; replaying item ids with store:false is per the SDK types and unconfirmed in the docs.

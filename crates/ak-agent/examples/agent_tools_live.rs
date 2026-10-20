@@ -4,7 +4,8 @@
 //!
 //! ```text
 //! AK_BASE_URL=http://127.0.0.1:8080/v1 AK_MODEL=… cargo run -p ak-agent --example agent_tools_live
-//! # AK_PROTOCOL=anthropic with AK_BASE_URL=http://127.0.0.1:8080 uses the Anthropic adapter.
+//! # AK_PROTOCOL=anthropic with AK_BASE_URL=http://127.0.0.1:8080 uses the Anthropic adapter;
+//! # AK_PROTOCOL=responses uses the OpenAI Responses API.
 //! ```
 
 use std::error::Error;
@@ -15,7 +16,7 @@ use ak_agent::plan::PlanReviewer;
 use ak_agent::tools::{Asker, Question, ToolEnv, project_tools};
 use ak_agent::{Agent, AgentConfig};
 use ak_providers::anthropic::{Anthropic, AnthropicConfig};
-use ak_providers::openai::{OpenAiCompat, OpenAiCompatConfig};
+use ak_providers::openai::{OpenAiCompat, OpenAiCompatConfig, WireApi};
 use ak_providers::{Provider, ReqwestTransport};
 use ak_types::agent::AgentEvent;
 use ak_types::agent::{PlanDecision, PlanProposal};
@@ -97,10 +98,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         c.base_url = base;
         Arc::new(Anthropic::new(c, transport))
     } else {
-        Arc::new(OpenAiCompat::new(
-            OpenAiCompatConfig::new(base, key.map(Into::into)),
-            transport,
-        ))
+        let mut c = OpenAiCompatConfig::new(base, key.map(Into::into));
+        if std::env::var("AK_PROTOCOL").as_deref() == Ok("responses") {
+            c.api = WireApi::Responses;
+        }
+        Arc::new(OpenAiCompat::new(c, transport))
     };
 
     let project = std::env::temp_dir().join(format!("agentknife-live-{}", std::process::id()));
