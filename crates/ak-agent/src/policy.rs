@@ -88,7 +88,8 @@ impl PermissionGate for ProjectPolicy {
                 let cmd = args["command"].as_str().unwrap_or_default();
                 change(classify_command(cmd, root), cmd)
             }
-            "ask_user" => Decision::Allow,
+            // Reads AgentKnife's built-in docs; touches nothing.
+            "ask_user" | crate::tools::READ_KNOWLEDGE => Decision::Allow,
             // A tool this policy does not know: ask rather than guess.
             other => ask(ConfirmKind::Unrecognized, other),
         }
@@ -724,6 +725,11 @@ mod tests {
         let policy = ProjectPolicy::new(PermissionMode::AskEveryChange);
         let check = |tool: &str, args: Value| kind(&policy.check(tool, &args, &ctx));
         assert_eq!(check("read_file", json!({ "path": "a" })), "allow");
+        // Reading the built-in docs never needs asking, even in the strictest mode.
+        assert_eq!(
+            check("read_knowledge", json!({ "topic": "ak-ui" })),
+            "allow"
+        );
         assert_eq!(check("write_file", json!({ "path": "a" })), "ask:Change");
         assert_eq!(
             check("run_command", json!({ "command": "cargo build" })),

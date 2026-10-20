@@ -257,11 +257,7 @@ fn walk(el: &Element, depth: usize, out: &mut Vec<DomItem>, omitted: &mut usize)
             continue;
         }
         let ak_id = child.get_attribute("data-ak-id");
-        let include = ak_id.is_some()
-            || INTERACTIVE.contains(&tag.as_str())
-            || TEXT_BLOCKS.contains(&tag.as_str())
-            || child.has_attribute("role");
-        if !include {
+        if !reported(&child) {
             walk(&child, depth, out, omitted);
             continue;
         }
@@ -273,14 +269,17 @@ fn walk(el: &Element, depth: usize, out: &mut Vec<DomItem>, omitted: &mut usize)
         let at = out.len();
         out.push(item(&child, tag, ak_id, depth));
         walk(&child, depth + 1, out, omitted);
-        // Leaves get their full text; containers only their own text nodes.
+        // Leaves get their full text; containers the text that no reported child
+        // shows (e.g. a row's label in a plain <span> next to its buttons).
         let leaf = out.len() == at + 1;
         let text = if leaf {
             child
                 .dyn_ref::<HtmlElement>()
                 .and_then(|h| short_text(&h.inner_text(), TEXT_MAX))
         } else {
-            own_text(&child)
+            let mut text = String::new();
+            loose_text(&child, &mut text);
+            short_text(&text, TEXT_MAX)
         };
         if let Some(slot) = out.get_mut(at) {
             slot.text = text.or_else(|| child.get_attribute("alt"));
@@ -288,18 +287,34 @@ fn walk(el: &Element, depth: usize, out: &mut Vec<DomItem>, omitted: &mut usize)
     }
 }
 
-fn own_text(el: &Element) -> Option<String> {
+/// Elements that get their own line in the summary.
+fn reported(el: &Element) -> bool {
+    let tag = tag(el);
+    el.has_attribute("data-ak-id")
+        || INTERACTIVE.contains(&tag.as_str())
+        || TEXT_BLOCKS.contains(&tag.as_str())
+        || el.has_attribute("role")
+}
+
+/// Text inside `el`, skipping reported (or hidden) descendants: they have their
+/// own lines.
+fn loose_text(el: &Element, out: &mut String) {
     let nodes = el.child_nodes();
-    let mut text = String::new();
     for i in 0..nodes.length() {
-        if let Some(n) = nodes.item(i)
-            && n.node_type() == web_sys::Node::TEXT_NODE
+        let Some(n) = nodes.item(i) else {
+            continue;
+        };
+        if n.node_type() == web_sys::Node::TEXT_NODE {
+            out.push_str(&n.text_content().unwrap_or_default());
+            out.push(' ');
+        } else if let Some(child) = n.dyn_ref::<Element>()
+            && !reported(child)
+            && !hidden(child)
+            && !SKIP.contains(&tag(child).as_str())
         {
-            text.push_str(&n.text_content().unwrap_or_default());
-            text.push(' ');
+            loose_text(child, out);
         }
     }
-    short_text(&text, TEXT_MAX)
 }
 
 fn item(el: &Element, tag: String, ak_id: Option<String>, depth: usize) -> DomItem {

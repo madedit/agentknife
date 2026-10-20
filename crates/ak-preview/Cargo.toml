@@ -8,6 +8,10 @@ publish.workspace = true
 [dependencies]
 ak-types.workspace = true
 
+[build-dependencies]
+# Reads knowledge/<stack>/pack.toml.
+toml.workspace = true
+
 [dev-dependencies]
 # Keeps the preview settings in step with what ak-bridge expects.
 ak-bridge = { path = "../ak-bridge" }

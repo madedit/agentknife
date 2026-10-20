@@ -1,0 +1,142 @@
+//! `cargo xtask check-knowledge`: compiles the knowledge pack's code the way the
+//! agent would use it — a project from the template with the complete example
+//! (`example-todo.md`) as its code and the other topics' snippets
+//! (`knowledge/<stack>/check/`) beside it — using AgentKnife's own toolchain.
+//! Slow (a full build); run it after changing the docs or a pinned version.
+
+use std::path::Path;
+use std::process::Command;
+
+use ak_doctor::{Pinned, Toolchain};
+
+use crate::Result;
+
+const STACK: &str = "tauri-leptos";
+
+fn copy_dir(from: &Path, to: &Path) -> Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let path = entry?.path();
+        let name = path.file_name().unwrap_or_default();
+        if name == "target" || name == "dist" || name == "template.toml" {
+            continue;
+        }
+        if path.is_dir() {
+            copy_dir(&path, &to.join(name))?;
+        } else {
+            std::fs::copy(&path, to.join(name))?;
+        }
+    }
+    Ok(())
+}
+
+/// The ```rust blocks of a Markdown file, in order.
+fn rust_blocks(markdown: &str) -> Vec<String> {
+    markdown
+        .split("```rust\n")
+        .skip(1)
+        .filter_map(|rest| rest.split_once("```").map(|(code, _)| code.to_owned()))
+        .collect()
+}
+
+fn add_deps(manifest: &Path, deps: &str) -> Result<()> {
+    let text = std::fs::read_to_string(manifest)?;
+    let text = text.replacen("[dependencies]\n", &format!("[dependencies]\n{deps}"), 1);
+    std::fs::write(manifest, text)?;
+    Ok(())
+}
+
+pub fn check_build(root: &Path) -> Result<()> {
+    let out = root.join("target").join("knowledge-check");
+    if out.exists() {
+        std::fs::remove_dir_all(&out)?;
+    }
+    copy_dir(&root.join("templates").join(STACK), &out)?;
+    std::fs::rename(out.join("gitignore"), out.join(".gitignore"))?;
+
+    let pack = root.join("knowledge").join(STACK);
+    let example = std::fs::read_to_string(pack.join("example-todo.md"))?;
+    let [backend, screens] = <[String; 2]>::try_from(rust_blocks(&example))
+        .map_err(|b| format!("example-todo.md: expected 2 rust blocks, found {}", b.len()))?;
+    std::fs::write(
+        out.join("src-tauri/src/main.rs"),
+        format!("{backend}\n#[allow(dead_code)]\nmod snippets;\n"),
+    )?;
+    std::fs::write(
+        out.join("src/main.rs"),
+        format!("{screens}\n#[allow(dead_code, unused)]\nmod snippets;\n"),
+    )?;
+    std::fs::copy(
+        pack.join("check/backend.rs"),
+        out.join("src-tauri/src/snippets.rs"),
+    )?;
+    std::fs::copy(pack.join("check/screens.rs"), out.join("src/snippets.rs"))?;
+    // What the docs tell the agent to add.
+    add_deps(
+        &out.join("src-tauri/Cargo.toml"),
+        "serde_json = \"1.0.154\"\n",
+    )?;
+    add_deps(
+        &out.join("Cargo.toml"),
+        "serde_json = \"1.0.154\"\nweb-sys = { version = \"0.3.106\", features = [\"Storage\", \"Window\"] }\n",
+    )?;
+
+    let pinned = Pinned::builtin()?;
+    let tc = Toolchain::new(Toolchain::default_root(), &pinned);
+    let cargo = tc.exe(&tc.cargo_bin(), "cargo");
+    if !cargo.exists() {
+        return Err(format!(
+            "{} is missing: install AgentKnife's toolchain first (doctor_install example)",
+            cargo.display()
+        )
+        .into());
+    }
+    let mut path = tc.path_prefix();
+    path.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+    let builds: [&[&str]; 2] = [
+        &[
+            "build",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--features",
+            "dev",
+        ],
+        &[
+            "build",
+            "--manifest-path",
+            "src-tauri/Cargo.toml",
+            "--features",
+            "dev",
+        ],
+    ];
+    for args in builds {
+        println!("==> cargo {}", args.join(" "));
+        let status = Command::new(&cargo)
+            .args(args)
+            .current_dir(&out)
+            .envs(tc.env())
+            .env("PATH", std::env::join_paths(&path)?)
+            .env_remove("NO_COLOR")
+            .env_remove("CARGO")
+            .env_remove("RUSTC")
+            .status()?;
+        if !status.success() {
+            return Err(format!("knowledge code does not build: cargo {}", args.join(" ")).into());
+        }
+    }
+    println!("knowledge code builds (project in {})", out.display());
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extracts_rust_blocks_only() {
+        let md = "# T\n```rust\nfn a() {}\n```\ntext\n```text\nno\n```\n```rust\nfn b() {}\n```\n";
+        assert_eq!(rust_blocks(md), ["fn a() {}\n", "fn b() {}\n"]);
+    }
+}

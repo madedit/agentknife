@@ -1,0 +1,85 @@
+# Docs the agent reads with `read_knowledge(topic)`. They describe exactly the
+# versions below; `cargo xtask ci` checks them against versions.toml.
+[pack]
+id = "tauri-leptos"
+version = "0.1.0"
+
+[versions]
+tauri = "2.12.4"
+tauri-cli = "2.12.3"
+leptos = "0.8.22"
+wasm-bindgen = "0.2.129"
+trunk = "0.21.14"
+tailwind-cli = "4.3.3"
+
+[[topic]]
+id = "overview"
+title = "Project layout and workflow"
+summary = "Where the screens, the backend and the styles live; how the preview runs; rules for every change."
+file = "overview.md"
+
+[[topic]]
+id = "leptos-components"
+title = "Leptos components and view!"
+summary = "Components, props, children, the view! macro, events, attributes, classes, Show/For, if/else views."
+file = "leptos-components.md"
+
+[[topic]]
+id = "leptos-reactivity"
+title = "Signals and async in Leptos"
+summary = "RwSignal, derived values, Memo, Effect, context, spawn_local, LocalResource, avoiding move/Send errors."
+file = "leptos-reactivity.md"
+
+[[topic]]
+id = "forms"
+title = "Inputs and forms"
+summary = "Binding text, numbers, checkboxes and selects to signals; submitting forms; validation messages."
+file = "forms.md"
+
+[[topic]]
+id = "tauri-commands"
+title = "Tauri backend commands"
+summary = "#[tauri::command], argument names, State, async commands, errors, files in the app data folder."
+file = "tauri-commands.md"
+
+[[topic]]
+id = "storage"
+title = "Saving data"
+summary = "Keeping the app's data between runs: a JSON file in the app data folder (recommended) or localStorage."
+file = "storage.md"
+
+[[topic]]
+id = "ak-bridge"
+title = "Calling the backend (ak_bridge::invoke)"
+summary = "invoke with typed arguments and results, error handling, start(), set_state_reader, set_hit_test."
+file = "ak-bridge.md"
+
+[[topic]]
+id = "ak-ui"
+title = "ak-ui components"
+summary = "Button, Input, Form, List, Dialog, Nav, Card, Toggle, Toast: props and examples."
+file = "ak-ui.md"
+
+[[topic]]
+id = "data-ak-id"
+title = "The data-ak-id convention"
+summary = "Which elements need ids, how to name them, ids for list rows and component parts."
+file = "data-ak-id.md"
+
+[[topic]]
+id = "tailwind"
+title = "Styling with Tailwind CSS 4"
+summary = "Utility classes, layout, colors, dark mode, responsive design, and why class names must be written out in full."
+file = "tailwind.md"
+
+[[topic]]
+id = "example-todo"
+title = "Complete example: a to-do app"
+summary = "A whole app: add, check and delete items, saved to a file by the backend. Copy and adapt."
+file = "example-todo.md"
+
+[[topic]]
+id = "troubleshooting"
+title = "Fixing common build errors"
+summary = "What the usual Rust, Leptos, Tauri and Trunk errors mean and how to fix them."
+file = "troubleshooting.md"

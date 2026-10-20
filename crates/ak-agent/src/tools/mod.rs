@@ -3,15 +3,19 @@
 mod ask;
 mod command;
 mod files;
+mod knowledge;
 pub mod path;
 mod search;
 
 use std::path::Path;
 use std::sync::Arc;
 
+use ak_types::stack::KnowledgePack;
+
 pub use ask::{AskUser, Asker, Question};
 pub use command::{RunCommand, ToolEnv};
 pub use files::{EditFile, ListFiles, ReadFile, WriteFile};
+pub use knowledge::{READ_KNOWLEDGE, ReadKnowledge};
 pub use search::SearchFiles;
 
 use crate::tool::{ToolContext, ToolOutput, ToolRegistry};
@@ -22,16 +26,25 @@ pub const MAX_OUTPUT_CHARS: usize = 30_000;
 /// Directories never listed or searched.
 pub(crate) const SKIP_DIRS: &[&str] = &[".git", "target", "node_modules", "dist"];
 
-/// Every project tool, ready for [`crate::Agent`].
-pub fn project_tools(env: ToolEnv, asker: Arc<dyn Asker>) -> ToolRegistry {
-    ToolRegistry::new()
+/// Every project tool, ready for [`crate::Agent`]. `knowledge` is the project
+/// stack's docs (`StackProfile::knowledge_pack`), served by `read_knowledge`.
+pub fn project_tools(
+    env: ToolEnv,
+    asker: Arc<dyn Asker>,
+    knowledge: Option<KnowledgePack>,
+) -> ToolRegistry {
+    let tools = ToolRegistry::new()
         .with(Arc::new(ReadFile))
         .with(Arc::new(WriteFile))
         .with(Arc::new(EditFile))
         .with(Arc::new(ListFiles))
         .with(Arc::new(SearchFiles))
         .with(Arc::new(RunCommand::new(env)))
-        .with(Arc::new(AskUser::new(asker)))
+        .with(Arc::new(AskUser::new(asker)));
+    match knowledge {
+        Some(pack) => tools.with(Arc::new(ReadKnowledge::new(pack))),
+        None => tools,
+    }
 }
 
 pub(crate) fn project_root(ctx: &ToolContext) -> Result<&Path, ToolOutput> {

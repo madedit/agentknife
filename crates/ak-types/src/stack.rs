@@ -148,11 +148,30 @@ impl Template {
 
 // ---- Knowledge ----
 
+/// Docs the agent reads on demand (`read_knowledge`), written for exactly the
+/// versions the stack pins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KnowledgePack {
-    /// Folder under `knowledge/` (P1-KNOW-001).
+    /// Folder under `knowledge/`.
     pub id: &'static str,
     pub version: &'static str,
+    pub topics: &'static [KnowledgeTopic],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KnowledgeTopic {
+    pub id: &'static str,
+    pub title: &'static str,
+    /// One line: when to read it.
+    pub summary: &'static str,
+    /// Markdown.
+    pub body: &'static str,
+}
+
+impl KnowledgePack {
+    pub fn topic(&self, id: &str) -> Option<&'static KnowledgeTopic> {
+        self.topics.iter().find(|t| t.id == id)
+    }
 }
 
 // ---- Commands ----

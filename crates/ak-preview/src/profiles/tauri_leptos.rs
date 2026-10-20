@@ -11,6 +11,10 @@ use ak_types::stack::{
 /// `templates/tauri-leptos`, embedded by build.rs.
 static FILES: &[TemplateFile] = include!(concat!(env!("OUT_DIR"), "/tauri_leptos_files.rs"));
 
+// `knowledge/tauri-leptos` (KNOWLEDGE_ID, KNOWLEDGE_VERSION, KNOWLEDGE_TOPICS),
+// embedded by build.rs.
+include!(concat!(env!("OUT_DIR"), "/tauri_leptos_knowledge.rs"));
+
 /// Literal defaults in the template (same as its template.toml [replace]).
 const REPLACE: &[(TemplateValue, &str)] = &[
     (TemplateValue::ProductName, "My App"),
@@ -100,8 +104,9 @@ impl StackProfile for TauriLeptos {
 
     fn knowledge_pack(&self) -> KnowledgePack {
         KnowledgePack {
-            id: "tauri-leptos",
-            version: "0.1.0",
+            id: KNOWLEDGE_ID,
+            version: KNOWLEDGE_VERSION,
+            topics: KNOWLEDGE_TOPICS,
         }
     }
 
@@ -245,6 +250,31 @@ mod tests {
             assert!(!text.contains("com.agentknife.myapp"), "{path}");
             assert!(!text.contains("My App"), "{path} still says My App");
         }
+    }
+
+    #[test]
+    fn knowledge_is_embedded() {
+        let pack = TauriLeptos.knowledge_pack();
+        assert_eq!(pack.id, TauriLeptos.id());
+        assert!(pack.topics.len() >= 10);
+        for id in [
+            "overview",
+            "ak-ui",
+            "ak-bridge",
+            "data-ak-id",
+            "example-todo",
+        ] {
+            let topic = pack.topic(id).unwrap_or_else(|| panic!("{id} missing"));
+            assert!(topic.body.starts_with("# "), "{id}");
+            assert!(!topic.summary.is_empty());
+        }
+        // The worked example follows the data-ak-id convention.
+        assert!(
+            pack.topic("example-todo")
+                .unwrap()
+                .body
+                .contains("data-ak-id")
+        );
     }
 
     #[test]

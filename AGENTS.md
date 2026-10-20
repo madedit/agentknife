@@ -176,6 +176,17 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Tailwind classes are complete literals, so Tailwind can find them. Generated apps add `@source` for the ak-ui sources.
   - Tests render with `to_html()` (leptos `ssr` as a dev-dependency only).
   - Any new component must be shown in ak-ui-gallery.
+- **Knowledge pack** (`knowledge/<stack>/`): what the agent reads with `read_knowledge(topic)` before writing app code.
+  - Structure:
+    - `pack.toml` holds [pack] id/version, [versions] (the versions the docs describe) and the [[topic]] list (id, title, one-line summary, file).
+    - There is one Markdown file per topic.
+    - `check/` holds snippets of the smaller examples.
+  - The stack's profile embeds it (ak-preview build.rs). ak-agent gets it only as `KnowledgePack` (`project_tools(env, asker, Some(pack))`).
+  - `read_knowledge` is read-only, so the policy always allows it.
+  - Docs are for the pinned versions only. When a pinned version changes, update the docs, `pack.toml` [versions], and `versions.toml` [knowledge] pack.
+  - `cargo xtask ci` (versions) checks that pack version, [versions], topic files, unlisted .md files and ``topic `id` `` cross-references all agree.
+  - Code in the docs must compile. After editing docs, run `cargo xtask check-knowledge`: it builds a template project whose code is `example-todo.md`'s blocks plus `check/` snippets, using the isolated toolchain. Keep `check/` in step with the snippets in the topics.
+  - Write for a model that does not know these versions: complete, copyable examples; the data-ak-id convention in every example; user-facing text in the user's language.
 - **`tauri-leptos` template** (`templates/tauri-leptos`):
   - Layout:
     - the root package `app-ui` is the Leptos CSR frontend (index.html, Trunk.toml, style/input.css, src/);
@@ -292,6 +303,7 @@ Prerequisites for developing AgentKnife:
 | Test one crate | `cargo test -p <crate>` |
 | Full pre-commit gate | `cargo xtask ci` |
 | Refresh the vendored CodeMirror | `cargo xtask vendor-codemirror` |
+| Check that the knowledge pack's code compiles (slow; needs the isolated toolchain) | `cargo xtask check-knowledge` |
 | Refresh the template's vendored ak-bridge / ak-ui after changing them | `cargo xtask vendor-kit` |
 | Re-pin download checksums after a tool version change | `cargo xtask pin-downloads` |
 | See every ak-ui component (toolchain on PATH, see "Running trunk") | `cd crates/ak-ui-gallery && trunk serve` (http://127.0.0.1:47130) |

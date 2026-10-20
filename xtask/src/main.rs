@@ -7,6 +7,7 @@ mod ci;
 mod downloads;
 mod i18n;
 mod kit;
+mod knowledge;
 mod layering;
 mod nonode;
 mod stack;
@@ -26,9 +27,10 @@ fn main() -> ExitCode {
         Some("vendor-codemirror") => vendor::vendor_codemirror(&workspace_root()),
         Some("pin-downloads") => downloads::pin(&workspace_root()),
         Some("vendor-kit") => kit::vendor(&workspace_root()),
+        Some("check-knowledge") => knowledge::check_build(&workspace_root()),
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-toolchain|ci|vendor-codemirror|pin-downloads|vendor-kit>"
+                "usage: cargo xtask <gen-toolchain|ci|vendor-codemirror|pin-downloads|vendor-kit|check-knowledge>"
             );
             return ExitCode::FAILURE;
         }

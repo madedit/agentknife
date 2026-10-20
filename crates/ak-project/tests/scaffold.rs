@@ -55,6 +55,7 @@ impl StackProfile for Fake {
         KnowledgePack {
             id: "fake",
             version: "0",
+            topics: &[],
         }
     }
     fn doctor_requirements(&self) -> &'static [&'static str] {

@@ -55,8 +55,58 @@ fn main() {
         );
     }
     code.push(']');
-    let out =
-        PathBuf::from(std::env::var("OUT_DIR").unwrap_or_default()).join("tauri_leptos_files.rs");
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap_or_default());
+    let out = out_dir.join("tauri_leptos_files.rs");
+    if let Err(e) = std::fs::write(&out, code) {
+        panic!("writing {}: {e}", out.display());
+    }
+    knowledge(&manifest.join("../../knowledge/tauri-leptos"), &out_dir);
+}
+
+/// `knowledge/tauri-leptos`: pack.toml's id, version and topics, with each
+/// topic's Markdown embedded.
+fn knowledge(dir: &Path, out_dir: &Path) {
+    println!("cargo:rerun-if-changed={}", dir.display());
+    let text = std::fs::read_to_string(dir.join("pack.toml"))
+        .unwrap_or_else(|e| panic!("{}/pack.toml: {e}", dir.display()));
+    let pack: toml::Table =
+        toml::from_str(&text).unwrap_or_else(|e| panic!("{}/pack.toml: {e}", dir.display()));
+    let field = |t: &toml::Value, key: &str| -> String {
+        t.get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_else(|| panic!("pack.toml: missing {key}"))
+            .to_owned()
+    };
+    let meta = pack
+        .get("pack")
+        .unwrap_or_else(|| panic!("pack.toml: missing [pack]"));
+    let mut code = format!(
+        "pub(crate) const KNOWLEDGE_ID: &str = {:?};\npub(crate) const KNOWLEDGE_VERSION: &str = {:?};\n\
+         pub(crate) static KNOWLEDGE_TOPICS: &[ak_types::stack::KnowledgeTopic] = &[\n",
+        field(meta, "id"),
+        field(meta, "version")
+    );
+    for topic in pack
+        .get("topic")
+        .and_then(|t| t.as_array())
+        .into_iter()
+        .flatten()
+    {
+        let file = dir.join(field(topic, "file"));
+        let abs = file
+            .canonicalize()
+            .unwrap_or_else(|e| panic!("{}: {e}", file.display()));
+        let _ = writeln!(
+            code,
+            "    ak_types::stack::KnowledgeTopic {{ id: {:?}, title: {:?}, summary: {:?}, body: include_str!({:?}) }},",
+            field(topic, "id"),
+            field(topic, "title"),
+            field(topic, "summary"),
+            abs.to_string_lossy()
+        );
+    }
+    code.push_str("];\n");
+    let out = out_dir.join("tauri_leptos_knowledge.rs");
     if let Err(e) = std::fs::write(&out, code) {
         panic!("writing {}: {e}", out.display());
     }

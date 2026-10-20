@@ -90,19 +90,14 @@ pub fn check(root: &Path) -> Result<()> {
         }
     }
 
-    // Knowledge pack metadata: knowledge/pack.toml [pack] version.
-    let pack = root.join("knowledge").join("pack.toml");
-    if pack.is_file() {
-        let t: toml::Table = toml::from_str(&std::fs::read_to_string(&pack)?)?;
-        let v = t
-            .get("pack")
-            .and_then(|p| p.get("version"))
-            .and_then(|v| v.as_str());
-        if v != Some(versions.knowledge.pack.as_str()) {
-            errors.push(format!(
-                "knowledge/pack.toml version {v:?} != versions.toml {}",
-                versions.knowledge.pack
-            ));
+    // Knowledge packs: knowledge/<stack>/pack.toml.
+    let knowledge = root.join("knowledge");
+    if knowledge.is_dir() {
+        for entry in std::fs::read_dir(&knowledge)? {
+            let dir = entry?.path();
+            if dir.join("pack.toml").is_file() {
+                errors.extend(knowledge_drift(&dir, &versions)?);
+            }
         }
     }
 
@@ -181,6 +176,87 @@ fn template_drift(dir: &Path, versions: &Versions) -> Result<Vec<String>> {
     Ok(errors)
 }
 
+/// One knowledge pack: its version, the versions its docs describe, and that
+/// every topic file exists, is listed, and every ``topic `id` `` mention resolves.
+fn knowledge_drift(dir: &Path, versions: &Versions) -> Result<Vec<String>> {
+    let mut errors = Vec::new();
+    let label = dir.join("pack.toml").display().to_string();
+    let t: toml::Table = toml::from_str(&std::fs::read_to_string(dir.join("pack.toml"))?)?;
+    let v = t
+        .get("pack")
+        .and_then(|p| p.get("version"))
+        .and_then(|v| v.as_str());
+    if v != Some(versions.knowledge.pack.as_str()) {
+        errors.push(format!(
+            "{label}: version {v:?} != versions.toml [knowledge] pack {}",
+            versions.knowledge.pack
+        ));
+    }
+    if let Some(described) = t.get("versions").and_then(|v| v.as_table()) {
+        for (name, value) in described {
+            let pinned = versions
+                .crates
+                .get(name)
+                .or_else(|| versions.tools.get(name));
+            if pinned.map(String::as_str) != value.as_str() {
+                errors.push(format!(
+                    "{label}: describes {name} {value}, but versions.toml pins {pinned:?}"
+                ));
+            }
+        }
+    }
+    let topics = t
+        .get("topic")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let ids: Vec<&str> = topics
+        .iter()
+        .filter_map(|t| t.get("id").and_then(|v| v.as_str()))
+        .collect();
+    let mut files = Vec::new();
+    for topic in &topics {
+        let id = topic.get("id").and_then(|v| v.as_str()).unwrap_or("?");
+        for key in ["title", "summary", "file"] {
+            if topic
+                .get(key)
+                .and_then(|v| v.as_str())
+                .is_none_or(str::is_empty)
+            {
+                errors.push(format!("{label}: topic {id} has no {key}"));
+            }
+        }
+        let Some(file) = topic.get("file").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        files.push(file.to_owned());
+        let Ok(text) = std::fs::read_to_string(dir.join(file)) else {
+            errors.push(format!("{label}: topic {id}: {file} does not exist"));
+            continue;
+        };
+        // "topic `x`" in the text must name a real topic.
+        for part in text.split("topic `").skip(1) {
+            let mentioned = part.split('`').next().unwrap_or_default();
+            if !ids.contains(&mentioned) {
+                errors.push(format!("{file}: mentions unknown topic `{mentioned}`"));
+            }
+        }
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for id in &ids {
+        if !seen.insert(*id) {
+            errors.push(format!("{label}: topic {id} is listed twice"));
+        }
+    }
+    for entry in std::fs::read_dir(dir)? {
+        let name = entry?.file_name().to_string_lossy().into_owned();
+        if name.ends_with(".md") && !files.contains(&name) {
+            errors.push(format!("{label}: {name} is not listed as a topic"));
+        }
+    }
+    Ok(errors)
+}
+
 fn manifest_drift(
     label: &str,
     deps: Option<&toml::Value>,
@@ -220,6 +296,32 @@ mod tests {
              [knowledge]\npack = \"0.1.0\"\n",
         )
         .unwrap()
+    }
+
+    #[test]
+    fn knowledge_pack_drift_is_caught() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("pack.toml"),
+            "[pack]\nid = \"s\"\nversion = \"0.2.0\"\n\
+             [versions]\ntauri = \"1.9.9\"\n\
+             [[topic]]\nid = \"a\"\ntitle = \"A\"\nsummary = \"s\"\nfile = \"a.md\"\n\
+             [[topic]]\nid = \"b\"\ntitle = \"B\"\nsummary = \"s\"\nfile = \"missing.md\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("a.md"),
+            "# A\nSee topic `b` and topic `nope`.",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("stray.md"), "# not listed").unwrap();
+        let errors = knowledge_drift(dir.path(), &versions()).unwrap().join("\n");
+        assert!(errors.contains("version Some(\"0.2.0\")"), "{errors}");
+        assert!(errors.contains("describes tauri \"1.9.9\""), "{errors}");
+        assert!(errors.contains("missing.md does not exist"), "{errors}");
+        assert!(errors.contains("unknown topic `nope`"), "{errors}");
+        assert!(!errors.contains("unknown topic `b`"), "{errors}");
+        assert!(errors.contains("stray.md is not listed"), "{errors}");
     }
 
     fn deps(src: &str) -> toml::Value {

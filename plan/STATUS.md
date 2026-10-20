@@ -243,7 +243,7 @@
     - Control-channel type, click, Enter and dom_summary worked; the token was stripped from the reported URL.
   - For P1-BUNDLE-001: NSIS came from %LOCALAPPDATA%\tauri\NSIS, which already existed (2026-10-19). On a clean machine tauri-bundler downloads NSIS there on the first bundle; decide whether the doctor provisions it or AgentKnife asks first.
   - For P1-TPL-002 / project creation: substitute template.toml [replace] values, rename gitignore to .gitignore, and run vendor-kit's output when AgentKnife updates.
-- P1-TPL-002 — (hash in next commit) — StackProfile trait:
+- P1-TPL-002 — 2a1dac8 — StackProfile trait:
   - ak_types::stack defines the StackProfile trait (id, template, knowledge_pack, doctor_requirements, preview, bundle) and its data:
     - Template: files, replace and renames. `instantiate` fills values (escaped for JSON/TOML/Rust or HTML/SVG) in text files only.
     - ProjectValues::for_name: product name, and a reverse-DNS identifier (an app+unique fallback for non-ASCII names).
@@ -262,3 +262,15 @@
     - dev appears only in the preview.
     - ak-project scaffold with a fake stack.
     - End to end: registry.create + scaffold with the real stack ("待辦清單 Todo" -> com.agentknife.todo), with binary icons byte-identical.
+- P1-KNOW-001 — (hash in next commit) — knowledge pack:
+  - knowledge/tauri-leptos: pack.toml (pack 0.1.0; describes tauri 2.12.4, tauri-cli 2.12.3, leptos 0.8.22, wasm-bindgen 0.2.129, trunk 0.21.14, tailwind-cli 4.3.3), plus 12 topics: overview, leptos-components, leptos-reactivity, forms, tauri-commands, storage, ak-bridge, ak-ui, data-ak-id, tailwind, example-todo, troubleshooting.
+  - Embedding: ak_types::stack::KnowledgePack gains `topics` (KnowledgeTopic id/title/summary/body); ak-preview build.rs embeds pack.toml and the topics.
+  - Tool: `read_knowledge(topic)` (ReadKnowledge; enum of topic ids, the index in its description, unknown -> error with the index). `project_tools` takes `Option<KnowledgePack>`; the policy always allows it. Product prompt v2: read 1–2 relevant topics before writing app code.
+  - Checks:
+    - The versions check covers pack version, [versions], topic files and stray .md files, and ``topic `x` `` references (unit-tested with a broken pack).
+    - `cargo xtask check-knowledge` builds a template project with example-todo's code and the check/ snippets, using the isolated toolchain.
+  - Verified:
+    - check-knowledge builds the screens (wasm) and the backend.
+    - The to-do example ran in the preview on the real runtime: add/check/delete/filter via the control channel; it survived a reload (todos.json in app data, then deleted).
+    - Live agent (local model) calls read_knowledge on its own with relevant topics. Found and fixed: the policy asked for confirmation on every read_knowledge; the docs used use_toaster() inside async blocks.
+  - Fixed in ak-bridge (control channel): dom_summary dropped text in non-reported children (a row's label in a <span>); containers now include text outside reported children.

@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         config.project_dir = Some(project.clone());
         let agent = Agent::new(
             provider,
-            project_tools(ToolEnv::default(), Arc::new(NoAnswer)),
+            project_tools(ToolEnv::default(), Arc::new(NoAnswer), None),
             config,
         );
 

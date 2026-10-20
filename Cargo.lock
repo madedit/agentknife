@@ -32,6 +32,7 @@ dependencies = [
 name = "ak-agent"
 version = "0.1.0"
 dependencies = [
+ "ak-preview",
  "ak-providers",
  "ak-types",
  "chrono",

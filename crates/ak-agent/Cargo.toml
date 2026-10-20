@@ -19,6 +19,8 @@ tracing.workspace = true
 chrono.workspace = true
 
 [dev-dependencies]
+# Live examples use the real stack (its knowledge pack).
+ak-preview = { path = "../ak-preview" }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 

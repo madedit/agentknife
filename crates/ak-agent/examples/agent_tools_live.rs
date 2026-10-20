@@ -128,7 +128,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Default gate = the project policy; confirmations print the user-facing reason.
     let agent = Agent::new(
         provider,
-        project_tools(ToolEnv::default(), Arc::new(FirstOption)),
+        project_tools(
+            ToolEnv::default(),
+            Arc::new(FirstOption),
+            Some(ak_preview::profiles::default_profile().knowledge_pack()),
+        ),
         config,
     )
     .with_confirmer(Arc::new(PrintAndAllow(I18n::new(Locale::ZhTw)?)))
