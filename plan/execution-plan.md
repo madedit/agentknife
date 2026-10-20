@@ -125,6 +125,10 @@ APP and E2E integrate all tracks.
   - It emits a typed event stream: text, thinking, step-started/finished with an AI-generated label, usage, and needs-confirmation.
   - Calls can be cancelled.
   - A scripted fake-LLM provider exists and is used by the tests.
+  - The provider-neutral chat schema lives in `ak-types`, with `schema_version`.
+  - Provider adapters convert to and from it, and thinking is never sent back to a model.
+  - Test: a history recorded with the Anthropic adapter continues correctly with the OpenAI-compatible adapter.
+  - At turn start the loop writes `.agentknife/turn.lock` (request, touched files, current step), and removes it after the turn's checkpoint.
 
 ### P1-AGENT-002 — Project tools
 - Crate(s): ak-agent
@@ -158,12 +162,14 @@ APP and E2E integrate all tracks.
 ### P1-AGENT-005 — Context management
 - Crate(s): ak-agent, ak-project
 - Owner: unassigned
-- Depends on: P1-AGENT-001, P1-PROJ-002
+- Depends on: P1-AGENT-001, P1-PROJ-002, P1-PROJ-003
 - Acceptance:
   - At session start the agent loads `.agentknife/PROJECT.md`, `plan/STATUS.md`, and `plan/tasks.md`.
   - Older turns are compacted when the context hits a threshold.
   - The agent updates PROJECT.md and STATUS.md through tools.
   - A test shows a long scripted session staying under the context limit.
+  - Resume after interruption: given a `turn.lock`, the agent continues the interrupted turn.
+  - A fake-LLM test kills a turn midway, then resumes it.
 
 ### P1-AGENT-006 — Usage & cost tracking
 - Crate(s): ak-agent
@@ -235,7 +241,8 @@ APP and E2E integrate all tracks.
 - Depends on: P1-PROJ-001
 - Acceptance:
   - PROJECT.md, plan/STATUS.md, and plan/tasks.md (in the AGENTS.md §8 formats) are created from the template.
-  - Chat history is saved and reloaded across restarts.
+  - Chat history is saved and reloaded across restarts, in the neutral `ak-types` schema.
+  - A schema-version migration path is covered by a test fixture.
 
 ### P1-PROJ-003 — Embedded git checkpoints
 - Crate(s): ak-project
@@ -245,6 +252,8 @@ APP and E2E integrate all tracks.
   - Uses `gix`, with no system git required.
   - Supports turn, task, bundle, and user-marked checkpoints, and restore to any of them.
   - The timeline API returns plain-language entries.
+  - Interrupted-turn detection works: a leftover `turn.lock` or un-checkpointed changes are reported.
+  - "Go back" restores files and records the partial work as an "abandoned" entry that can still be restored.
   - Tests run in temp repos.
 
 ### P1-PROJ-004 — Checkpoint GC
@@ -404,6 +413,7 @@ APP and E2E integrate all tracks.
   - Plan card with a "Start" button.
   - Confirmation dialogs, the auto-fix fallback options, and a usage indicator.
   - Selected-element chip attached to the input.
+  - On project open, the "continue or go back" prompt appears for an interrupted turn.
 
 ### P1-SHELL-004 — Preview pane
 - Crate(s): ak-shell

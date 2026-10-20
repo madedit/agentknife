@@ -127,6 +127,17 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - The AI connection is global, with an optional per-project override.
   - Each project's `.agentknife/` folder contains `PROJECT.md` (requirements and decisions in plain language), `plan/STATUS.md`, `plan/tasks.md` (same formats as §8), and the chat history.
   - The agent reads these at session start. Long chats are compacted.
+- **Chat history format:** it is stored in AgentKnife's own provider-neutral schema, defined in `ak-types`, never in a provider's raw wire format.
+  - Message kinds: user, assistant text, thinking, tool call, tool result, checkpoint marker.
+  - The format carries `schema_version`, with migrations for older versions.
+  - Provider adapters convert to and from the neutral schema.
+  - Thinking is display-only and never sent back to a model, because providers reject each other's thinking and signatures.
+  - Switching providers mid-project must keep working.
+- **Interrupted turns:** at turn start, the agent writes `.agentknife/turn.lock`, holding the request, the files touched so far, and the current step. The lock is deleted only after the turn's checkpoint is created.
+  - On project open, a leftover lock or un-checkpointed changes trigger a plain-language prompt: "Last time I stopped halfway (doing: …). **Continue**, or **go back to the last checkpoint**?"
+  - **Continue:** the agent resumes from the lock and the current files.
+  - **Go back:** files are restored, and the partial work is saved as an "abandoned" timeline entry so it can still be recovered.
+  - The same path covers app crashes, force-quit, network loss, and provider errors.
 - **Checkpoints:** the git commits are hidden from the user. The UI shows a plain-language timeline and never uses words like commit or branch. Checkpoints come in two kinds:
   - *turn checkpoints*, after every agent turn
   - *task checkpoints*, when a task completes, with the task id in the message
@@ -189,13 +200,21 @@ When building the workspace skeleton, implement exactly these entry points. If a
 
 ## 8. Workflow for agents
 
-1. At session start, read `AGENTS.md`, `plan/STATUS.md`, and `plan/execution-plan.md`.
+1. At session start, read `AGENTS.md`, `plan/STATUS.md`, and `plan/execution-plan.md`, then run `git status`. If there are uncommitted changes:
+   - If they match a `Doing` entry, read its `Notes:` and continue that task.
+   - Otherwise, **stop and ask the owner**. Never discard work you cannot attribute.
 2. Work in small tasks, each with an id from `plan/execution-plan.md`.
-3. Before every commit, run `cargo xtask ci` and fix everything it reports.
-4. Commit each finished task with its id in the message, then update `plan/STATUS.md`.
-5. **Parallel agents** each use their own `CARGO_TARGET_DIR` and only edit crates whose tasks they own (the owner is listed in `execution-plan.md`).
-6. **Shared files** may be edited only by the coordinator (the main agent or the owner): root `Cargo.toml`, `versions.toml`, `xtask/`, `AGENTS.md`, `.github/`, and `plan/execution-plan.md`. If another agent needs a change there, it adds a `Blocked` entry in `STATUS.md`. Every agent may edit its own lines in `STATUS.md`.
-7. Stop and ask the owner before changing: the tech stack, licensing, publishing or releases, new remotes, secrets, telemetry, or anything in §2.
+3. **Before writing any code** for a task, add its `Doing` line to `plan/STATUS.md` (format below).
+4. Add `Notes:` whenever you learn something non-obvious: a pitfall, a rejected approach, or where you are. Do it at the moment you learn it, not at the end. The notes are the handover if the session dies.
+5. Design changes go in the **same commit** as the code. That means AGENTS.md, SPEC, and `versions.toml`.
+6. Before every commit, run `cargo xtask ci` and fix everything it reports.
+7. When a task finishes:
+   - Move its line from `Doing` to `Done` with the commit hash.
+   - Move any `Notes:` worth keeping into AGENTS.md or code comments.
+   - Commit with the task id in the message.
+8. **Parallel agents** each use their own `CARGO_TARGET_DIR` and only edit crates whose tasks they own (the owner is listed in `execution-plan.md`).
+9. **Shared files** may be edited only by the coordinator (the main agent or the owner): root `Cargo.toml`, `versions.toml`, `xtask/`, `AGENTS.md`, `.github/`, and `plan/execution-plan.md`. If another agent needs a change there, it adds a `Blocked` entry in `STATUS.md`. Every agent may edit its own lines in `STATUS.md`.
+10. Stop and ask the owner before changing: the tech stack, licensing, publishing or releases, new remotes, secrets, telemetry, or anything in §2.
 
 ### Plan file formats
 
@@ -215,7 +234,8 @@ The id format is `P<phase>-<AREA>-<NNN>`.
 
 ```
 ## Doing
-- P1-AGENT-003 — <agent> — <one-line note>
+- P1-AGENT-003 — <agent> — started YYYY-MM-DD
+  Notes: <pitfalls found, rejected approaches, current step>
 ## Blocked
 - P1-PREV-002 — needs: <who/what> — <reason>
 ## Done
