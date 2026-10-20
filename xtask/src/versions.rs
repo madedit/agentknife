@@ -13,6 +13,15 @@ pub struct Versions {
     /// Crates pinned with `=` in the workspace and in templates.
     pub crates: BTreeMap<String, String>,
     pub knowledge: KnowledgeVersions,
+    #[serde(default)]
+    pub vendor: VendorVersions,
+}
+
+#[derive(Deserialize, Default)]
+pub struct VendorVersions {
+    /// npm package -> exact version, vendored by `cargo xtask vendor-codemirror`.
+    #[serde(default)]
+    pub codemirror: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]

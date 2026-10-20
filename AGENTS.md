@@ -52,10 +52,17 @@ To upgrade, edit `versions.toml` and update everything that follows from it **in
 
 ### CodeMirror without Node
 
-- `cargo xtask vendor-codemirror` downloads the pre-bundled ESM build from esm.sh (`?bundle`, at the versions in `versions.toml`) into `crates/ak-shell/vendor/codemirror/`.
-- It writes a `SHA256SUMS` file next to it. The bundle and the sums are **committed**.
-- CI never downloads anything. It only verifies the hashes.
-- To upgrade CodeMirror, change `versions.toml` and re-run the xtask.
+- `cargo xtask vendor-codemirror` fetches one esm.sh bundle per module listed in `xtask/src/vendor.rs` into `crates/ak-shell/vendor/codemirror/`. Versions come from `versions.toml` `[vendor.codemirror]`.
+- Every other vendored module is passed as `external`. Shared packages (`@codemirror/state`, `@lezer/common`, …) therefore exist **once**. CM6 breaks with duplicate instances, so never bundle them separately.
+- esm.sh helper modules (`/node/*.mjs` polyfills) are vendored byte-for-byte under `_esm/`.
+- `importmap.json` maps every specifier to its file. `ak-shell` must load it as `<script type="importmap">`.
+- The xtask also writes `manifest.toml` (vendored versions) and `SHA256SUMS`. Everything is **committed**, and `.gitattributes` marks the directory `-text`.
+- CI never downloads anything. It checks four things:
+  - the hashes
+  - manifest against `versions.toml`
+  - every import resolves through the import map
+  - no stray imports
+- To upgrade or add a language: edit `versions.toml` (and the module list in `vendor.rs`), then re-run the xtask.
 
 Out of scope until Phase 3: wasmtime plugins and an egui profile. Keep the abstractions open, but do not implement them.
 

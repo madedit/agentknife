@@ -18,8 +18,9 @@ fn main() -> ExitCode {
     let result = match cmd.as_deref() {
         Some("gen-toolchain") => gen_toolchain(),
         Some("ci") => ci::run(&workspace_root()),
+        Some("vendor-codemirror") => vendor::vendor_codemirror(&workspace_root()),
         _ => {
-            eprintln!("usage: cargo xtask <gen-toolchain|ci>");
+            eprintln!("usage: cargo xtask <gen-toolchain|ci|vendor-codemirror>");
             return ExitCode::FAILURE;
         }
     };

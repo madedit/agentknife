@@ -1,0 +1,25 @@
+{
+  "imports": {
+    "/node/async_hooks.mjs": "./_esm/node/async_hooks.mjs",
+    "/node/events.mjs": "./_esm/node/events.mjs",
+    "/node/process.mjs": "./_esm/node/process.mjs",
+    "/node/tty.mjs": "./_esm/node/tty.mjs",
+    "@codemirror/autocomplete": "./@codemirror/autocomplete.mjs",
+    "@codemirror/commands": "./@codemirror/commands.mjs",
+    "@codemirror/lang-css": "./@codemirror/lang-css.mjs",
+    "@codemirror/lang-html": "./@codemirror/lang-html.mjs",
+    "@codemirror/lang-markdown": "./@codemirror/lang-markdown.mjs",
+    "@codemirror/lang-rust": "./@codemirror/lang-rust.mjs",
+    "@codemirror/language": "./@codemirror/language.mjs",
+    "@codemirror/legacy-modes/mode/toml": "./@codemirror/legacy-modes/mode/toml.mjs",
+    "@codemirror/lint": "./@codemirror/lint.mjs",
+    "@codemirror/search": "./@codemirror/search.mjs",
+    "@codemirror/state": "./@codemirror/state.mjs",
+    "@codemirror/theme-one-dark": "./@codemirror/theme-one-dark.mjs",
+    "@codemirror/view": "./@codemirror/view.mjs",
+    "@lezer/common": "./@lezer/common.mjs",
+    "@lezer/highlight": "./@lezer/highlight.mjs",
+    "@lezer/lr": "./@lezer/lr.mjs",
+    "codemirror": "./codemirror.mjs"
+  }
+}
