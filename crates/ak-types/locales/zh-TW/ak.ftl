@@ -29,3 +29,13 @@ confirm-change = 你設定了「每次修改都要確認」。要允許這一步
 denied-path-escape = 已阻擋：這在你的專案資料夾以外：{ $detail }
 denied-protected-path = 已阻擋：這是 AgentKnife 自己的歷史紀錄，不能直接修改：{ $detail }
 denied-dangerous = 已阻擋：這可能會損壞你的電腦：{ $detail }
+
+## 時間軸項目（檢查點）
+
+timeline-initial = 起點
+timeline-turn = 修改
+timeline-task = 完成一個任務
+timeline-bundle = 產生了安裝檔
+timeline-marked = 標記的版本
+timeline-abandoned = 暫存起來（可以找回來）
+timeline-restore = 回到之前的版本

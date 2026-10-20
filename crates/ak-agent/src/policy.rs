@@ -95,10 +95,21 @@ impl PermissionGate for ProjectPolicy {
     }
 }
 
+/// AgentKnife's own state: the user's `.git` and the `.agentknife/` internals (the
+/// agent may still edit `.agentknife/PROJECT.md` and `plan/`).
+const PROTECTED: &[&str] = &[
+    ".git",
+    ".agentknife/checkpoints.git",
+    ".agentknife/timeline.json",
+    ".agentknife/chat",
+    ".agentknife/turn.lock",
+    ".agentknife/project.json",
+];
+
 fn file_decision(root: &Path, rel: &str, writes: bool) -> Decision {
     match resolve(root, rel) {
         Err(_) => deny(ConfirmKind::PathEscape, rel),
-        Ok(path) if writes && path.starts_with(root.join(".git")) => {
+        Ok(path) if writes && PROTECTED.iter().any(|p| path.starts_with(root.join(p))) => {
             deny(ConfirmKind::ProtectedPath, rel)
         }
         Ok(_) => Decision::Allow,
@@ -484,6 +495,31 @@ mod tests {
                 "deny:ProtectedPath",
             ),
             ("read_file", json!({ "path": ".git/HEAD" }), "allow"),
+            (
+                "edit_file",
+                json!({ "path": ".agentknife/timeline.json" }),
+                "deny:ProtectedPath",
+            ),
+            (
+                "write_file",
+                json!({ "path": ".agentknife/chat/conversation.json" }),
+                "deny:ProtectedPath",
+            ),
+            (
+                "write_file",
+                json!({ "path": ".agentknife/checkpoints.git/HEAD" }),
+                "deny:ProtectedPath",
+            ),
+            (
+                "edit_file",
+                json!({ "path": ".agentknife/PROJECT.md" }),
+                "allow",
+            ),
+            (
+                "write_file",
+                json!({ "path": ".agentknife/plan/STATUS.md" }),
+                "allow",
+            ),
             ("ask_user", json!({}), "allow"),
             ("brand_new_tool", json!({}), "ask:Unrecognized"),
             // Routine commands

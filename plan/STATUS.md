@@ -40,7 +40,7 @@
   - Structured ConfirmReason {kind, detail} in ak-types, localized via 9 new fluent messages (en + zh-TW).
   - 50-case decision table (mutation-checked) and a default-policy end-to-end test.
   - Live: the model's own `del notes\old.txt` was caught, the zh-TW reason shown, and the file deleted after approval.
-- P1-PROJ-001 + P1-PROJ-002 — (hash in next commit) — ak-project:
+- P1-PROJ-001 + P1-PROJ-002 — 2a06367 — ak-project:
   - Registry (`<data_dir>/AgentKnife/projects.json`):
     - create under `~/AgentKnife/Projects` or a chosen folder; safe, unique folder names (CJK kept, Windows-reserved names avoided).
     - open (adopts plain folders), rename (display name), forget (keeps files).
@@ -51,3 +51,13 @@
     - Atomic chat history save/load. Damaged files are moved aside; files from a newer version are refused and left untouched.
     - Frozen v1 golden fixture test.
   - `new_id` / `unix_now` moved to ak-types::ids (native only).
+- P1-PROJ-003 — (hash in next commit) — ak_project::Timeline:
+  - Storage: a bare gix repo at .agentknife/checkpoints.git (user's .git untouched, no system git) plus an append-only timeline.json; a ref per entry.
+  - Kinds: initial/turn/task/bundle/marked/abandoned/restore, each with a localized label (fluent).
+  - checkpoint() only records real changes (marked/bundle always record) and lists the changed files.
+  - restore() and discard_interrupted() first keep unsaved work as an abandoned entry and end with a restore entry.
+  - interruption() reports a leftover turn.lock and unsaved changes separately (hand edits are not interruptions). TurnLockData moved to ak-types.
+  - Restores never touch ignored files, target/, the user's .git, or the chat.
+  - The policy now protects the .agentknife internals.
+  - A real `git fsck --strict` validates the repo (Chinese filenames included).
+  - The Checkpointer glue into ak_agent belongs in ak-app.

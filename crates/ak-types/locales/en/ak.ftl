@@ -29,3 +29,13 @@ confirm-change = You asked to approve every change. Allow this one? { $detail }
 denied-path-escape = Blocked: this is outside your project folder: { $detail }
 denied-protected-path = Blocked: this is AgentKnife's own history and must not be edited by hand: { $detail }
 denied-dangerous = Blocked: this could damage your computer: { $detail }
+
+## Timeline entries (checkpoints)
+
+timeline-initial = Starting point
+timeline-turn = Change
+timeline-task = Task finished
+timeline-bundle = Installer built
+timeline-marked = Marked version
+timeline-abandoned = Set aside (can be brought back)
+timeline-restore = Went back to an earlier version

@@ -63,6 +63,22 @@ pub enum AgentEvent {
     },
 }
 
+/// Contents of `.agentknife/turn.lock`, written while a turn runs. A leftover lock
+/// means the turn was interrupted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TurnLockData {
+    pub turn_id: String,
+    pub started_at_unix: u64,
+    /// The user's request, for "Last time I stopped halfway (doing: …)".
+    pub request: String,
+    pub touched_files: Vec<String>,
+    /// Model calls made so far in this turn.
+    pub step: u32,
+}
+
+/// Project-relative path of the turn lock.
+pub const TURN_LOCK_FILE: &str = ".agentknife/turn.lock";
+
 /// Why a step needs the user's OK (or was refused). The UI shows it through fluent
 /// (`confirm-<kind>` with `$detail`), so it reads in the user's language.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -4,20 +4,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
-
-pub const LOCK_FILE: &str = ".agentknife/turn.lock";
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TurnLockData {
-    pub turn_id: String,
-    pub started_at_unix: u64,
-    /// The user's request, for the "Last time I stopped halfway (doing: …)" prompt.
-    pub request: String,
-    pub touched_files: Vec<String>,
-    /// Model calls made so far in this turn.
-    pub step: u32,
-}
+pub use ak_types::agent::{TURN_LOCK_FILE as LOCK_FILE, TurnLockData};
 
 pub struct TurnLock {
     path: PathBuf,

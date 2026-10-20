@@ -6,7 +6,9 @@ mod error;
 mod fsutil;
 mod project;
 mod registry;
+mod timeline;
 
 pub use error::ProjectError;
 pub use project::{AGENTKNIFE_DIR, LoadedHistory, Project, ProjectMeta};
 pub use registry::{ProjectEntry, RecentProject, Registry};
+pub use timeline::{CheckpointKind, Interruption, Timeline, TimelineEntry};

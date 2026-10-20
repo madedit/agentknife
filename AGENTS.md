@@ -155,6 +155,11 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - **Continue:** the agent resumes from the lock and the current files.
   - **Go back:** files are restored, and the partial work is saved as an "abandoned" timeline entry so it can still be recovered.
   - The same path covers app crashes, force-quit, network loss, and provider errors.
+- **Checkpoint storage** (`ak_project::Timeline`):
+  - A bare gix repository at `.agentknife/checkpoints.git`, with the project root as worktree. The user's own `.git` is never touched, and no system git is needed.
+  - `.agentknife/timeline.json` is the append-only index; every entry has a ref `refs/checkpoints/<id>`.
+  - Restore saves unsaved work as an `abandoned` entry first and appends a `restore` entry, so nothing is ever lost.
+  - Snapshots respect .gitignore and never include `.git`, `target`, the chat, or `.agentknife` internals, so restoring never rewinds the chat.
 - **Checkpoints:** the git commits are hidden from the user. The UI shows a plain-language timeline and never uses words like commit or branch. Checkpoints come in two kinds:
   - *turn checkpoints*, after every agent turn
   - *task checkpoints*, when a task completes, with the task id in the message

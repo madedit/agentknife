@@ -33,7 +33,7 @@ fluent-bundle = "0.16.0"
 fluent-syntax = "0.12.0"
 sys-locale = "0.3.2"
 unic-langid = "0.9.6"
-gix = "0.89.0"
+gix = { version = "0.89.0", default-features = false, features = ["sha1"] }
 keyring = "4.2.0"
 toml = "1.1.8"
 sha2 = "0.11.1"

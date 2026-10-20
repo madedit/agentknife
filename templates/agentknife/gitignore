@@ -1,4 +1,7 @@
-# Not part of checkpoints: the chat is append-only and must never be rewound.
+# AgentKnife's own state. Not part of checkpoints (the chat is append-only and must
+# never be rewound), and kept out of your own git repository too.
 chat/
 turn.lock
+timeline.json
+checkpoints.git/
 *.tmp
