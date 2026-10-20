@@ -58,3 +58,34 @@ pub fn browser_locale() -> Locale {
     #[cfg(not(target_arch = "wasm32"))]
     Locale::resolve::<&str>(None, &[])
 }
+
+/// [`t`] for an id built at run time (`connect-preset-{id}`).
+pub fn tr(id: String) -> impl Fn() -> String + Clone + Send + Sync + 'static {
+    let Tr(i18n) = expect_context::<Tr>();
+    move || i18n.with(|i| i.t(&id))
+}
+
+/// [`t`] with fluent arguments.
+pub fn t_with<const N: usize>(
+    id: &'static str,
+    args: [(&'static str, String); N],
+) -> impl Fn() -> String + Clone + Send + Sync + 'static {
+    let Tr(i18n) = expect_context::<Tr>();
+    move || {
+        let a = ak_types::i18n::args(args.clone());
+        i18n.with(|i| i.t_args(id, &a))
+    }
+}
+
+/// [`t_with`] with a number (fluent picks the plural form).
+pub fn t_count(
+    id: &'static str,
+    name: &'static str,
+    n: u64,
+) -> impl Fn() -> String + Clone + Send + Sync + 'static {
+    let Tr(i18n) = expect_context::<Tr>();
+    move || {
+        let a = ak_types::i18n::args([(name, n)]);
+        i18n.with(|i| i.t_args(id, &a))
+    }
+}

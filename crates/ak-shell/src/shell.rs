@@ -1,5 +1,5 @@
-//! The main window: a top bar and three panes (files + timeline | preview and
-//! code | chat). Simple mode hides the files pane and the code tab.
+//! A project's workspace: three panes (files + timeline | preview and code |
+//! chat). Simple mode hides the files pane and the code tab.
 
 use leptos::prelude::*;
 
@@ -9,18 +9,11 @@ use crate::panes::{ChatPane, CodePane, FilesPane, PreviewPane, TimelinePane};
 use crate::splitter::{Grows, Splitter};
 
 #[component]
-pub fn Shell(
-    /// Start from this layout instead of the saved one (tests).
-    #[prop(optional)]
-    initial: Option<Layout>,
-) -> impl IntoView {
-    let layout = RwSignal::new(initial.unwrap_or_else(layout::load));
+pub fn Workspace(layout: RwSignal<Layout>) -> impl IntoView {
     let full = move || layout.with(|l| l.mode == Mode::Full);
 
     view! {
-        <div class="flex h-screen flex-col bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-            <TopBar layout />
-            <div class="flex min-h-0 flex-1">
+        <div data-screen="workspace" class="flex min-h-0 flex-1">
                 <Show when=full>
                     <aside
                         data-pane="files"
@@ -55,61 +48,14 @@ pub fn Shell(
                 >
                     <ChatPane />
                 </aside>
-            </div>
         </div>
     }
 }
 
 /// Changes the layout and saves it.
-fn change(layout: RwSignal<Layout>, f: impl FnOnce(&mut Layout)) {
+pub fn change(layout: RwSignal<Layout>, f: impl FnOnce(&mut Layout)) {
     layout.update(f);
     layout.with_untracked(layout::save);
-}
-
-#[component]
-fn TopBar(layout: RwSignal<Layout>) -> impl IntoView {
-    let mode_button = move |mode: Mode, text: &'static str, hint: &'static str| {
-        let on = move || layout.with(|l| l.mode == mode);
-        view! {
-            <button
-                type="button"
-                data-mode=match mode {
-                    Mode::Simple => "simple",
-                    Mode::Full => "full",
-                }
-                aria-pressed=move || on().to_string()
-                title=t(hint)
-                class=move || {
-                    if on() {
-                        "rounded-md bg-white px-3 py-1 text-sm font-medium text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
-                    } else {
-                        "rounded-md px-3 py-1 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-                    }
-                }
-                on:click=move |_| change(layout, |l| l.mode = mode)
-            >
-                {t(text)}
-            </button>
-        }
-    };
-    view! {
-        <header class="flex h-11 shrink-0 items-center justify-between gap-4 border-b border-gray-200 px-4 dark:border-gray-800">
-            <div class="flex min-w-0 items-center gap-3">
-                <span class="font-semibold">{t("app-name")}</span>
-                <span class="truncate text-sm text-gray-500 dark:text-gray-400">
-                    {t("shell-no-project")}
-                </span>
-            </div>
-            <div
-                role="group"
-                aria-label=t("shell-mode")
-                class="flex shrink-0 gap-1 rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800"
-            >
-                {mode_button(Mode::Simple, "shell-mode-simple", "shell-mode-simple-hint")}
-                {mode_button(Mode::Full, "shell-mode-full", "shell-mode-full-hint")}
-            </div>
-        </header>
-    }
 }
 
 /// The preview, plus the code tab in full mode.

@@ -8,6 +8,7 @@ pub mod doctor;
 pub mod i18n;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ids;
+pub mod ipc;
 pub mod preview;
 pub mod settings;
 pub mod stack;

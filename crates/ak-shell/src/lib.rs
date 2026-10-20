@@ -4,17 +4,14 @@
 
 #![deny(unsafe_code)]
 
+pub mod app;
+pub mod backend;
+pub mod connect;
+pub mod home;
 pub mod i18n;
 pub mod layout;
 mod panes;
 pub mod shell;
 mod splitter;
 
-use leptos::prelude::*;
-
-/// The whole UI, in the browser's language.
-#[component]
-pub fn App() -> impl IntoView {
-    i18n::provide(i18n::browser_locale());
-    view! { <shell::Shell /> }
-}
+pub use app::App;

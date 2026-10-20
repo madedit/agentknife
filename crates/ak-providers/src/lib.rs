@@ -8,6 +8,7 @@
 
 pub mod anthropic;
 mod assemble;
+pub mod connect;
 pub mod credentials;
 mod error;
 pub mod fixture;
