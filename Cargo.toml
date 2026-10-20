@@ -30,6 +30,8 @@ unic-langid = "0.9.6"
 gix = "0.89.0"
 keyring = "4.2.0"
 toml = "1.1.8"
+sha2 = "0.11.1"
+tempfile = "3.27.0"
 
 [workspace.lints.clippy]
 # AGENTS.md §5: unwrap() is banned outside tests (see clippy.toml).
