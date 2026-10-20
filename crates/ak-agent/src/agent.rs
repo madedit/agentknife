@@ -2,8 +2,6 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use ak_providers::{
     ChatRequest, Effort, MessageAssembler, Provider, ProviderError, StopReason, StreamEvent, Usage,
@@ -16,6 +14,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
 
 use crate::lock::TurnLock;
+use crate::new_id;
 use crate::permission::{
     AllowAll, ConfirmRequest, Confirmer, Decision, DeclineAll, PermissionGate,
 };
@@ -206,6 +205,7 @@ impl Agent {
         let ctx = ToolContext {
             project_dir: self.config.project_dir.clone(),
             cancel: cancel.clone(),
+            events: Some(events.clone()),
         };
         for step in 0..self.config.max_steps {
             let request = ChatRequest {
@@ -296,16 +296,19 @@ impl Agent {
         events: &Events,
         cancel: &CancellationToken,
     ) -> Result<ak_providers::Assembled, TurnOutcome> {
+        // `biased`: when both are ready, cancellation wins (no random pick).
         let started = tokio::select! {
-            r = self.provider.stream(request) => r,
+            biased;
             _ = cancel.cancelled() => return Err(TurnOutcome::Cancelled),
+            r = self.provider.stream(request) => r,
         };
         let mut stream = started.map_err(failed)?;
         let mut assembler = MessageAssembler::new(self.provider.id());
         loop {
             let next = tokio::select! {
-                n = stream.next() => n,
+                biased;
                 _ = cancel.cancelled() => return Err(TurnOutcome::Cancelled),
+                n = stream.next() => n,
             };
             match next {
                 None => break,
@@ -365,8 +368,9 @@ impl Agent {
                         },
                     );
                     let yes = tokio::select! {
-                        yes = self.confirmer.confirm(request) => yes,
+                        biased;
                         _ = ctx.cancel.cancelled() => return None,
+                        yes = self.confirmer.confirm(request) => yes,
                     };
                     if yes {
                         Ok(())
@@ -378,10 +382,18 @@ impl Agent {
                 }
             };
             match allowed {
-                Ok(()) => tokio::select! {
-                    out = tool.call(args, ctx) => out,
-                    _ = ctx.cancel.cancelled() => return None,
-                },
+                Ok(()) => {
+                    let out = tokio::select! {
+                        biased;
+                        _ = ctx.cancel.cancelled() => return None,
+                        out = tool.call(args, ctx) => out,
+                    };
+                    // A tool that stopped because of the cancel is still a cancel.
+                    if ctx.cancel.is_cancelled() {
+                        return None;
+                    }
+                    out
+                }
                 Err(refusal) => refusal,
             }
         } else {
@@ -456,17 +468,4 @@ fn plain_text(m: &Message) -> String {
             .join("\n"),
         _ => String::new(),
     }
-}
-
-/// Unique enough for ids within one installation: time + process-wide counter.
-fn new_id(prefix: &str) -> String {
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or_default();
-    format!(
-        "{prefix}-{nanos:x}-{}",
-        COUNTER.fetch_add(1, Ordering::Relaxed)
-    )
 }

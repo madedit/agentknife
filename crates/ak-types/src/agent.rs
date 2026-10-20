@@ -43,6 +43,14 @@ pub enum AgentEvent {
         label: String,
         reason: String,
     },
+    /// The agent asks the user to choose (`ask_user` tool).
+    QuestionAsked {
+        request_id: String,
+        question: String,
+        options: Vec<String>,
+        /// The user may type their own answer instead of picking an option.
+        allow_other: bool,
+    },
     Usage {
         usage: TokenUsage,
     },

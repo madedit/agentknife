@@ -4,9 +4,11 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use ak_types::agent::AgentEvent;
 use ak_types::chat::{ContentPart, ToolSpec};
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
+use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
 
 /// Argument every tool call carries: a short plain-language description of the step,
@@ -17,6 +19,19 @@ pub struct ToolContext {
     pub project_dir: Option<PathBuf>,
     /// Cancelled when the user stops the turn; long-running tools should watch it.
     pub cancel: CancellationToken,
+    /// For tools that talk to the UI (e.g. `ask_user`).
+    pub events: Option<UnboundedSender<AgentEvent>>,
+}
+
+impl ToolContext {
+    /// A context for tests and scripts: a project, no UI.
+    pub fn for_project(dir: impl Into<PathBuf>) -> Self {
+        Self {
+            project_dir: Some(dir.into()),
+            cancel: CancellationToken::new(),
+            events: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

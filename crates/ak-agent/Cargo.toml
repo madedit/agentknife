@@ -9,9 +9,11 @@ publish.workspace = true
 ak-providers.workspace = true
 ak-types.workspace = true
 futures-util.workspace = true
+ignore.workspace = true
+regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tokio = { workspace = true, features = ["macros", "sync"] }
+tokio = { workspace = true, features = ["macros", "sync", "process", "time"] }
 tokio-util.workspace = true
 
 [dev-dependencies]

@@ -122,6 +122,10 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Every meaningful element in generated UI carries a stable `data-ak-id`. The agent must add these, and AgentKnife may auto-insert missing ones.
   - The inspector reports the id, DOM path, and screenshot rect via `postMessage`.
   - For `<canvas>` regions, send the screenshot rect and coordinates. Apps may implement `ak-bridge`'s `hit_test(x, y)` for exact mapping.
+- **Project tools** (`ak_agent::tools`): read/write/edit/list/search files, run_command, ask_user.
+  - Every path goes through `tools::path::resolve`, which rejects absolute paths, `..` escapes and symlinks leading outside the project. This applies regardless of the permission policy.
+  - `run_command` on Windows must use `raw_arg("/S /C \"…\"")`, because Rust's argument quoting breaks cmd.
+  - On timeout or cancel, `run_command` must kill the whole process tree, because killing only the shell leaves cargo/trunk running.
 - **Agent sees results:** a preview-screenshot tool when the model has vision, and a DOM summary otherwise. In dev builds, the `ak-bridge` control channel lets the agent click, type, and read state for self-verification.
 - **Projects:**
   - The project list is the home screen. Projects default to `~/AgentKnife/Projects/<name>`.
@@ -200,6 +204,7 @@ Prerequisites for developing AgentKnife:
 | Record real Anthropic fixtures (costs cents) | `ANTHROPIC_API_KEY=… cargo run -p ak-providers --example record_anthropic` |
 | Record real Chat Completions fixtures (free with local Ollama) | `AK_MODEL=qwen3:8b cargo run -p ak-providers --example record_openai_compat` |
 | Run one live agent turn (manual check) | `AK_BASE_URL=http://127.0.0.1:8080/v1 AK_MODEL=… cargo run -p ak-agent --example agent_live` |
+| Live check of the project tools (edits a scratch project) | same env vars, `--example agent_tools_live` |
 | Regenerate `rust-toolchain.toml` | `cargo xtask gen-toolchain` (never edit it by hand) |
 
 **Windows gotcha:** run cargo from PowerShell or cmd, not Git Bash. Git Bash's `/usr/bin/link` shadows MSVC `link.exe`, and every build fails with `link: extra operand`.
