@@ -90,7 +90,14 @@ pub struct ToolCall {
 }
 
 /// Current on-disk format of [`Conversation`].
-pub const CONVERSATION_SCHEMA_VERSION: u32 = 1;
+/// - 1: messages and checkpoints.
+/// - 2: adds `context` and `compaction` entries (v1 files load unchanged).
+pub const CONVERSATION_SCHEMA_VERSION: u32 = 2;
+
+/// Prefix of the text a [`Entry::Context`] is sent to the model with.
+pub const CONTEXT_PREFIX: &str = "[AgentKnife note — not written by the user]\n";
+/// Prefix of the summary that replaces compacted history in the model's view.
+pub const SUMMARY_PREFIX: &str = "[AgentKnife: summary of the earlier conversation]\n";
 
 /// A project's chat history as persisted in `.agentknife/`. Append-only: the only
 /// mutations are the `push_*` methods.
@@ -109,6 +116,19 @@ pub enum Entry {
     Checkpoint {
         id: String,
         label: String,
+    },
+    /// Something AgentKnife tells the model (project notes at session start, resume
+    /// instructions). Sent as user text with [`CONTEXT_PREFIX`]; the UI shows it as a
+    /// note, not as the user's words.
+    Context {
+        text: String,
+    },
+    /// From here on the model sees `summary` instead of the entries before
+    /// `keep_from`. The entries themselves stay (append-only): the user still sees
+    /// the whole chat.
+    Compaction {
+        summary: String,
+        keep_from: usize,
     },
 }
 
@@ -138,15 +158,68 @@ impl Conversation {
         &self.entries
     }
 
-    /// The messages to send to a model, in order.
+    /// The messages to send to a model, in order: after the latest compaction, its
+    /// summary followed by the entries it kept.
     pub fn messages(&self) -> Vec<Message> {
-        self.entries
+        self.view().into_iter().map(|(_, m)| m).collect()
+    }
+
+    /// [`Self::messages`] with the entry index each message came from (`None` for a
+    /// compaction summary).
+    pub fn view(&self) -> Vec<(Option<usize>, Message)> {
+        let last = self
+            .entries
             .iter()
-            .filter_map(|e| match e {
-                Entry::Message(m) => Some(m.clone()),
-                Entry::Checkpoint { .. } => None,
-            })
-            .collect()
+            .enumerate()
+            .rev()
+            .find_map(|(i, e)| match e {
+                Entry::Compaction { summary, keep_from } => Some((i, summary, *keep_from)),
+                _ => None,
+            });
+        let (start, mut out) = match last {
+            Some((_, summary, keep_from)) => (
+                keep_from,
+                vec![(
+                    None,
+                    Message::user_text(format!("{SUMMARY_PREFIX}{summary}")),
+                )],
+            ),
+            None => (0, Vec::new()),
+        };
+        for (i, e) in self.entries.iter().enumerate().skip(start) {
+            match e {
+                Entry::Message(m) => out.push((Some(i), m.clone())),
+                Entry::Context { text } => {
+                    out.push((
+                        Some(i),
+                        Message::user_text(format!("{CONTEXT_PREFIX}{text}")),
+                    ));
+                }
+                Entry::Checkpoint { .. } | Entry::Compaction { .. } => {}
+            }
+        }
+        out
+    }
+
+    pub fn push_context(&mut self, text: impl Into<String>) {
+        self.entries.push(Entry::Context { text: text.into() });
+    }
+
+    /// The latest context note, if any.
+    pub fn last_context(&self) -> Option<&str> {
+        self.entries.iter().rev().find_map(|e| match e {
+            Entry::Context { text } => Some(text.as_str()),
+            _ => None,
+        })
+    }
+
+    /// Records a compaction. `keep_from` must point at an entry that starts a user
+    /// turn, so the kept part is a well-formed conversation.
+    pub fn push_compaction(&mut self, summary: impl Into<String>, keep_from: usize) {
+        self.entries.push(Entry::Compaction {
+            summary: summary.into(),
+            keep_from: keep_from.min(self.entries.len()),
+        });
     }
 
     pub fn push_message(&mut self, message: Message) {
@@ -178,8 +251,12 @@ impl Conversation {
                 supported: CONVERSATION_SCHEMA_VERSION,
             });
         }
-        // Version 1 is the first format; future migrations transform `raw` here.
-        serde_json::from_value(raw).map_err(|e| ConversationError::Invalid(e.to_string()))
+        // v1 -> v2: only new entry kinds were added, so the data is unchanged. Future
+        // migrations transform `raw` here, oldest first.
+        let mut c: Conversation =
+            serde_json::from_value(raw).map_err(|e| ConversationError::Invalid(e.to_string()))?;
+        c.schema_version = CONVERSATION_SCHEMA_VERSION;
+        Ok(c)
     }
 }
 
@@ -239,6 +316,48 @@ mod tests {
         assert_eq!(back, c);
         assert_eq!(back.messages().len(), 2);
         assert_eq!(back.entries().len(), 3);
+    }
+
+    #[test]
+    fn compaction_view_and_context_entries() {
+        let mut c = Conversation::new();
+        c.push_context("PROJECT.md: a todo app");
+        c.push_message(Message::user_text("turn 1"));
+        c.push_message(Message::user_text("answer 1"));
+        c.push_checkpoint("cp", "x");
+        let keep = c.entries().len();
+        c.push_message(Message::user_text("turn 2"));
+        c.push_compaction("They want a todo app; turn 1 done.", keep);
+        c.push_message(Message::user_text("turn 3"));
+
+        let view = c.messages();
+        let texts: Vec<String> = view
+            .iter()
+            .map(|m| match m {
+                Message::User { content } => match &content[0] {
+                    ContentPart::Text { text } => text.clone(),
+                    _ => String::new(),
+                },
+                _ => String::new(),
+            })
+            .collect();
+        assert_eq!(texts.len(), 3);
+        assert!(texts[0].starts_with(SUMMARY_PREFIX) && texts[0].contains("todo app; turn 1 done"));
+        assert_eq!(texts[1], "turn 2");
+        assert_eq!(texts[2], "turn 3");
+        // Nothing was removed from the stored history.
+        assert_eq!(c.entries().len(), 7);
+        assert_eq!(c.last_context(), Some("PROJECT.md: a todo app"));
+        let back = Conversation::from_json(&c.to_json().unwrap()).unwrap();
+        assert_eq!(back, c);
+    }
+
+    #[test]
+    fn v1_files_are_upgraded_on_load() {
+        let v1 = r#"{"schema_version": 1, "entries": [{"entry": "message", "kind": "user", "content": [{"type": "text", "text": "hi"}]}]}"#;
+        let c = Conversation::from_json(v1).unwrap();
+        assert!(c.to_json().unwrap().contains("\"schema_version\": 2"));
+        assert_eq!(c.messages().len(), 1);
     }
 
     #[test]

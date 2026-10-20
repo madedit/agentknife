@@ -4,6 +4,8 @@
 - P1-CORE-003 — coordinator — workflow written (.github/workflows/ci.yml); not yet run: repo has no GitHub remote
 
 ## Blocked
+- P1-AGENT-005 (follow-up) — needs: P1-PROV-002 real-key check — Anthropic server-side compaction (beta compact-2026-01-12) is not used yet. All providers use AgentKnife's appended-summary compaction, which works but invalidates replayed thinking once per compaction (drop_block covers it).
+- P1-AGENT-006 (input) — needs: decision when doing AGENT-006 — the owner's Anthropic-COMPATIBLE local server reports `input_tokens` INCLUDING cache reads (in=712, cache_read=705), unlike the official API where they are separate. Summing them double-counts. Harmless for compaction (it triggers earlier), wrong for cost tracking. Needs per-endpoint usage semantics.
 - P1-PROJ-004 (follow-up) — needs: nothing urgent — the git objects of collected checkpoints stay on disk as unreachable loose objects (gix 0.89 has no prune/repack). Disk use grows slowly with project size times the number of changes. Revisit if a project folder gets large: repack with a pack writer, or start a fresh repo from the surviving entries.
 - P1-AGENT-002 (follow-up) — needs: decision, low priority — on Windows, output of cmd's *built-in* commands (echo, dir, type) containing non-ASCII text is garbled: cmd writes the ANSI code page to pipes, and chcp 65001 does not change that. External tools (cargo, trunk) output UTF-8 and are fine. A fix needs code-page decoding (encoding_rs + GetACP) or running commands through PowerShell.
 - P1-PROV-002 (follow-up) — needs: owner, a real Anthropic API key — run `cargo run -p ak-providers --example record_anthropic`. The adapter is verified live against an Anthropic-COMPATIBLE local server only (text, tool round trip, vision). Claude-only features are still verified only against synthetic fixtures: adaptive thinking + signature replay, the models API, refusal/fallback.
@@ -67,7 +69,7 @@
   - Initial, task, bundle, marked, abandoned and restore entries, and the newest entry, are never collected.
   - Idempotent; survives reopening; kept entries still restore. DEFAULT_KEEP_TURNS = 50.
   - Fixed in PROJ-003: task checkpoints now always record (they were skipped when nothing changed since the last turn, which is the normal case).
-- P1-AGENT-004 — (hash in next commit) — behaviour rules:
+- P1-AGENT-004 — 247e917 — behaviour rules:
   - Plan before big changes: loop-owned `propose_plan` → PlanProposed event → PlanReviewer (Start / Revise / Cancel). PlanMode Auto / AlwaysAsk / NeverAsk.
   - Auto-fix limit: after max_fix_attempts (default 3) the turn ends as TurnOutcome::Stuck {attempts, last_error}.
   - Static system prompt (`ak_agent::prompt`, built once) whose first section is the reply-language rule, with the UI language as fallback. This resolves the AGENTS conflict with the append-only rule.
@@ -77,3 +79,14 @@
     - no plan for small edits; a 5-step zh-TW plan for "make a full todo list", built after Start.
     - auto-fix stopped as Stuck after 3 attempts, with the compiler error.
     - language: 0/12 mismatches across zh → en → zh switches, after strengthening the rule (the first wording replied in Chinese to an English message).
+- P1-AGENT-005 — (hash in next commit) — context management and interruption recovery:
+  - Conversation schema v2 (v1 still loads; v1 + v2 golden fixtures) with append-only `context` and `compaction` entries; the model view starts at the latest summary.
+  - open_session loads PROJECT.md/STATUS/tasks (deduplicated); a prompt rule keeps them updated; "[AgentKnife" notes are ignored for the reply language.
+  - Compaction: estimate (system + tools + messages) vs the reported context size (kept across turns); the cut keeps the last two turns; summary failures are logged and skipped.
+  - ConversationStore saves after every append.
+  - resume_turn: repairs dangling tool calls, appends a resume note, finishes under the same lock, checkpoints, releases.
+  - Tests:
+    - long scripted session stays under the window, with prefix-stable requests between compactions;
+    - simulated crash (future dropped mid-tool) then resume; mutation-checked.
+  - Live: 5 rolling zh-TW summaries, and the name and colour from turn 1 were remembered after compaction.
+  - Fixed during the live check: the reported context size was reset every turn, and the estimate ignored the system prompt and tools.

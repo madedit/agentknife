@@ -53,3 +53,31 @@ fn v1_history_loads_and_round_trips() {
     project.save_conversation(&c).unwrap();
     assert_eq!(project.load_conversation().unwrap().conversation, c);
 }
+
+#[test]
+fn v2_history_loads_with_context_and_compaction() {
+    let dir = tempfile::tempdir().unwrap();
+    let project = Project::init(dir.path(), "todo", Locale::ZhTw).unwrap();
+    let chat = project.agentknife_dir().join("chat");
+    std::fs::create_dir_all(&chat).unwrap();
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/conversation_v2.json");
+    std::fs::copy(&fixture, chat.join("conversation.json")).unwrap();
+
+    let c = project.load_conversation().unwrap().conversation;
+    assert_eq!(c.entries().len(), 8, "nothing dropped from storage");
+    let view = c.messages();
+    // summary + kept turn ("按鈕改成紅色", its answer) + the new request
+    assert_eq!(view.len(), 4);
+    let first = match &view[0] {
+        Message::User { content } => match &content[0] {
+            ContentPart::Text { text } => text.clone(),
+            _ => String::new(),
+        },
+        _ => String::new(),
+    };
+    assert!(first.starts_with(ak_types::chat::SUMMARY_PREFIX));
+    assert!(first.contains("刪除按鈕並改成紅色"));
+    project.save_conversation(&c).unwrap();
+    assert_eq!(project.load_conversation().unwrap().conversation, c);
+}

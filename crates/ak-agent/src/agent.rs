@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use ak_providers::{
     ChatRequest, Effort, MessageAssembler, Provider, ProviderError, StopReason, StreamEvent, Usage,
@@ -14,6 +15,7 @@ use futures_util::future::BoxFuture;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
 
+use crate::context;
 use crate::lock::TurnLock;
 use crate::new_id;
 use crate::permission::{ConfirmRequest, Confirmer, Decision, DeclineAll, PermissionGate};
@@ -39,6 +41,11 @@ pub struct AgentConfig {
     /// Automatic fixes after a failed build/run before the turn stops as
     /// [`TurnOutcome::Stuck`].
     pub max_fix_attempts: u32,
+    /// The model's context size (from `Provider::capabilities`); `None` disables
+    /// compaction.
+    pub context_window: Option<u32>,
+    /// Compact when the context is this full (0–1).
+    pub compact_at: f32,
 }
 
 impl AgentConfig {
@@ -53,6 +60,8 @@ impl AgentConfig {
             ui_locale: Locale::FALLBACK,
             plan_mode: PlanMode::Auto,
             max_fix_attempts: 3,
+            context_window: None,
+            compact_at: 0.7,
         }
     }
 }
@@ -98,6 +107,21 @@ impl Checkpointer for NoCheckpoints {
     }
 }
 
+/// Saves the conversation after every change, so a crash loses at most the step in
+/// progress. ak-app implements it with `ak_project::Project::save_conversation`.
+pub trait ConversationStore: Send + Sync {
+    fn save(&self, conversation: &Conversation) -> Result<(), String>;
+}
+
+/// Keeps nothing (tests, scratch chats).
+pub struct NoStore;
+
+impl ConversationStore for NoStore {
+    fn save(&self, _: &Conversation) -> Result<(), String> {
+        Ok(())
+    }
+}
+
 pub struct Agent {
     provider: Arc<dyn Provider>,
     tools: ToolRegistry,
@@ -105,6 +129,9 @@ pub struct Agent {
     confirmer: Arc<dyn Confirmer>,
     checkpointer: Arc<dyn Checkpointer>,
     reviewer: Arc<dyn PlanReviewer>,
+    store: Arc<dyn ConversationStore>,
+    /// Context size the provider reported for the latest call (any turn).
+    last_context_tokens: AtomicU64,
     config: AgentConfig,
     /// Built once: never changes during a conversation.
     system: String,
@@ -122,6 +149,8 @@ impl Agent {
             confirmer: Arc::new(DeclineAll),
             checkpointer: Arc::new(NoCheckpoints),
             reviewer: Arc::new(CancelPlans),
+            store: Arc::new(NoStore),
+            last_context_tokens: AtomicU64::new(0),
             config,
             system,
         }
@@ -160,6 +189,31 @@ impl Agent {
         self
     }
 
+    pub fn with_store(mut self, store: Arc<dyn ConversationStore>) -> Self {
+        self.store = store;
+        self
+    }
+
+    /// Call when a project session starts: appends the project notes
+    /// (`PROJECT.md`, `plan/STATUS.md`, `plan/tasks.md`) as a context entry, unless
+    /// they are unchanged since the last one. Returns whether anything was added.
+    pub fn open_session(&self, conversation: &mut Conversation) -> Result<bool, String> {
+        let Some(notes) = self
+            .config
+            .project_dir
+            .as_deref()
+            .and_then(context::project_notes)
+        else {
+            return Ok(false);
+        };
+        if conversation.last_context() == Some(notes.as_str()) {
+            return Ok(false);
+        }
+        conversation.push_context(notes);
+        self.store.save(conversation)?;
+        Ok(true)
+    }
+
     /// Runs one user turn to completion. Appends to `conversation` only (never edits
     /// it) and streams progress to `events`.
     pub async fn run_turn(
@@ -192,9 +246,95 @@ impl Agent {
                 }
             }
         }
-        append(conversation, events, user);
+        if let Err(stop) = self.append(conversation, events, user) {
+            return finish(events, stop);
+        }
+        self.drive(
+            conversation,
+            events,
+            cancel,
+            turn_id,
+            request,
+            lock,
+            Vec::new(),
+        )
+        .await
+    }
 
-        let mut touched = Vec::new();
+    /// Continues a turn that was interrupted (crash, force-quit, failure), as recorded
+    /// in `turn.lock`. Unanswered tool calls get "interrupted" results first, so the
+    /// history is well-formed. `None` when there is nothing to resume.
+    pub async fn resume_turn(
+        &self,
+        conversation: &mut Conversation,
+        events: &Events,
+        cancel: &CancellationToken,
+    ) -> Option<TurnOutcome> {
+        let dir = self.config.project_dir.as_deref()?;
+        let lock = TurnLock::resume(dir).ok().flatten()?;
+        let data = lock.data().clone();
+        emit(
+            events,
+            AgentEvent::TurnStarted {
+                turn_id: data.turn_id.clone(),
+            },
+        );
+        for call_id in dangling_tool_calls(conversation) {
+            let repair = Message::ToolResult {
+                call_id,
+                content: vec![ContentPart::Text {
+                    text: "Interrupted before this step finished. Check the current state \
+                           before relying on it."
+                        .into(),
+                }],
+                is_error: true,
+            };
+            if let Err(stop) = self.append(conversation, events, repair) {
+                return Some(finish(events, stop));
+            }
+        }
+        let files = if data.touched_files.is_empty() {
+            "none recorded".to_owned()
+        } else {
+            data.touched_files.join(", ")
+        };
+        conversation.push_context(format!(
+            "The previous turn was interrupted (AgentKnife closed or failed) while working \
+             on the user's request: \u{ab}{}\u{bb}. Files changed so far: {files}. Look at \
+             their current state and finish that request; do not start over. Reply in the \
+             language of that request.",
+            data.request
+        ));
+        if let Err(e) = self.store.save(conversation) {
+            return Some(finish(events, save_failed(e)));
+        }
+        Some(
+            self.drive(
+                conversation,
+                events,
+                cancel,
+                data.turn_id,
+                data.request,
+                Some(lock),
+                data.touched_files,
+            )
+            .await,
+        )
+    }
+
+    /// Runs the steps of a started turn, then settles it: checkpoint, then release
+    /// the lock (only for turns that ended normally).
+    #[allow(clippy::too_many_arguments)]
+    async fn drive(
+        &self,
+        conversation: &mut Conversation,
+        events: &Events,
+        cancel: &CancellationToken,
+        turn_id: String,
+        request: String,
+        mut lock: Option<TurnLock>,
+        mut touched: Vec<String>,
+    ) -> TurnOutcome {
         let outcome = self
             .steps(
                 conversation,
@@ -213,7 +353,12 @@ impl Agent {
                 touched_files: touched,
             };
             match self.checkpointer.checkpoint(&summary).await {
-                Ok(Some((id, label))) => conversation.push_checkpoint(id, label),
+                Ok(Some((id, label))) => {
+                    conversation.push_checkpoint(id, label);
+                    if let Err(e) = self.store.save(conversation) {
+                        return finish(events, save_failed(e));
+                    }
+                }
                 Ok(None) => {}
                 Err(e) => {
                     // Keep the lock: without a checkpoint this turn is not settled.
@@ -257,6 +402,9 @@ impl Agent {
         };
         let mut state = TurnState::default();
         for step in 0..self.config.max_steps {
+            if let Err(stop) = self.maybe_compact(conversation, events, cancel).await {
+                return stop;
+            }
             let request = ChatRequest {
                 model: self.config.model.clone(),
                 system: Some(self.system.clone()),
@@ -279,11 +427,19 @@ impl Agent {
                 // Partial output of a declined answer is discarded, not kept.
                 return TurnOutcome::Refused { category };
             }
+            self.last_context_tokens.store(
+                assembled.usage.input_tokens
+                    + assembled.usage.cache_read_tokens
+                    + assembled.usage.cache_write_tokens,
+                Ordering::Relaxed,
+            );
             let calls = match &assembled.message {
                 Message::Assistant { tool_calls, .. } => tool_calls.clone(),
                 _ => Vec::new(),
             };
-            append(conversation, events, assembled.message);
+            if let Err(stop) = self.append(conversation, events, assembled.message) {
+                return stop;
+            }
             if calls.is_empty() {
                 return match assembled.stop_reason {
                     StopReason::MaxTokens => TurnOutcome::MaxTokens,
@@ -319,7 +475,7 @@ impl Agent {
                     }
                 }
                 step_touched.extend(output.touched.iter().cloned());
-                append(
+                if let Err(stop) = self.append(
                     conversation,
                     events,
                     Message::ToolResult {
@@ -327,7 +483,9 @@ impl Agent {
                         content: output.content,
                         is_error: output.is_error,
                     },
-                );
+                ) {
+                    return stop;
+                }
             }
             for t in &step_touched {
                 if !touched.contains(t) {
@@ -353,6 +511,82 @@ impl Agent {
             }
         }
         TurnOutcome::StepLimit
+    }
+
+    fn append(
+        &self,
+        conversation: &mut Conversation,
+        events: &Events,
+        message: Message,
+    ) -> Result<(), TurnOutcome> {
+        conversation.push_message(message.clone());
+        emit(events, AgentEvent::MessageAppended { message });
+        self.store.save(conversation).map_err(save_failed)
+    }
+
+    /// Compacts the model's view when it nears the context window: a summary of
+    /// everything before the previous turn replaces it (append-only, see
+    /// `Conversation::push_compaction`). Summary failures are not fatal: the turn
+    /// goes on uncompacted.
+    async fn maybe_compact(
+        &self,
+        conversation: &mut Conversation,
+        events: &Events,
+        cancel: &CancellationToken,
+    ) -> Result<(), TurnOutcome> {
+        let Some(window) = self.config.context_window else {
+            return Ok(());
+        };
+        // Reported by the provider for the latest call, whatever turn it was in.
+        let last_input_tokens = self.last_context_tokens.load(Ordering::Relaxed);
+        let size = last_input_tokens.max(context::estimate_request(
+            &self.system,
+            &self.tool_specs(),
+            &conversation.messages(),
+        ));
+        if (size as f64) < f64::from(window) * f64::from(self.config.compact_at) {
+            return Ok(());
+        }
+        let Some(cut) = context::compaction_cut(conversation) else {
+            return Ok(());
+        };
+        let view = conversation.view();
+        let Some(keep_from) = view[cut].0 else {
+            return Ok(());
+        };
+        let mut messages: Vec<Message> = view[..cut].iter().map(|(_, m)| m.clone()).collect();
+        messages.push(Message::user_text(context::COMPACT_INSTRUCTION));
+        let request = ChatRequest {
+            model: self.config.model.clone(),
+            system: Some(self.system.clone()),
+            messages,
+            tools: self.tool_specs(),
+            max_tokens: self.config.max_tokens.min(8_192),
+            effort: self.config.effort,
+        };
+        let summarize = async {
+            let stream = self.provider.stream(request).await?;
+            ak_providers::collect(stream, self.provider.id()).await
+        };
+        let assembled = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => return Err(TurnOutcome::Cancelled),
+            a = summarize => a,
+        };
+        let summary = match assembled.map(|a| a.message) {
+            Ok(Message::Assistant { text, .. }) if !text.trim().is_empty() => text,
+            Ok(_) => {
+                tracing::warn!("compaction skipped: the summary was empty");
+                return Ok(());
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "compaction skipped: the summary call failed");
+                return Ok(());
+            }
+        };
+        conversation.push_compaction(summary, keep_from);
+        emit(events, AgentEvent::ContextCompacted);
+        self.store.save(conversation).map_err(save_failed)
     }
 
     /// The `propose_plan` tool: show the plan, wait for the user's decision.
@@ -566,9 +800,37 @@ fn forward(events: &Events, ev: &StreamEvent) {
     emit(events, out);
 }
 
-fn append(conversation: &mut Conversation, events: &Events, message: Message) {
-    conversation.push_message(message.clone());
-    emit(events, AgentEvent::MessageAppended { message });
+fn save_failed(e: String) -> TurnOutcome {
+    TurnOutcome::Failed {
+        message: format!("could not save the conversation: {e}"),
+        retryable: true,
+    }
+}
+
+/// Tool calls in the last assistant message that have no result yet.
+fn dangling_tool_calls(conversation: &Conversation) -> Vec<String> {
+    let messages = conversation.messages();
+    let Some(pos) = messages
+        .iter()
+        .rposition(|m| matches!(m, Message::Assistant { .. }))
+    else {
+        return Vec::new();
+    };
+    let Message::Assistant { tool_calls, .. } = &messages[pos] else {
+        return Vec::new();
+    };
+    let answered: Vec<&str> = messages[pos + 1..]
+        .iter()
+        .filter_map(|m| match m {
+            Message::ToolResult { call_id, .. } => Some(call_id.as_str()),
+            _ => None,
+        })
+        .collect();
+    tool_calls
+        .iter()
+        .filter(|c| !answered.contains(&c.id.as_str()))
+        .map(|c| c.id.clone())
+        .collect()
 }
 
 fn emit(events: &Events, event: AgentEvent) {

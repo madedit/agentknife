@@ -143,6 +143,11 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - The AI connection is global, with an optional per-project override.
   - Each project's `.agentknife/` folder contains `PROJECT.md` (requirements and decisions in plain language), `plan/STATUS.md`, `plan/tasks.md` (same formats as §8), and the chat history.
   - The agent reads these at session start. Long chats are compacted.
+    - `Agent::open_session` appends the notes as a `context` entry (deduplicated).
+    - Compaction: near `compact_at` × the context window, the agent appends a `compaction` entry. Its summary replaces everything before the previous turn in the *model's view*; the stored chat keeps every entry.
+    - The size estimate counts the system prompt and the tool schemas too.
+    - `Agent::resume_turn` continues an interrupted turn from `turn.lock`. Unanswered tool calls get "interrupted" results first, so the history stays well-formed.
+    - Hosts must attach a `ConversationStore`: the agent saves after every append, so a crash loses at most the step in progress.
 - **Chat history format:** it is stored in AgentKnife's own provider-neutral schema, defined in `ak-types`, never in a provider's raw wire format.
   - Message kinds: user, assistant text, thinking, tool call, tool result, checkpoint marker.
   - The format carries `schema_version`, with migrations for older versions.

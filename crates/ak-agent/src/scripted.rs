@@ -8,6 +8,7 @@ use ak_providers::{
     Capabilities, ChatRequest, EventStream, ModelInfo, Provider, ProviderError, StopReason,
     StreamEvent, Usage,
 };
+use ak_types::chat::{ContentPart, Message};
 use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
 use futures_util::stream;
@@ -66,6 +67,8 @@ pub fn args(v: Value) -> String {
 pub struct ScriptedProvider {
     scripts: Mutex<VecDeque<Script>>,
     requests: Mutex<Vec<ChatRequest>>,
+    /// Answers compaction requests without consuming a script.
+    auto_summary: Option<String>,
 }
 
 impl ScriptedProvider {
@@ -73,7 +76,21 @@ impl ScriptedProvider {
         Self {
             scripts: Mutex::new(scripts.into()),
             requests: Mutex::new(Vec::new()),
+            auto_summary: None,
         }
+    }
+
+    /// Replies `summary` to every compaction request (their timing depends on
+    /// context size, so they cannot be scripted in order).
+    pub fn with_auto_summary(mut self, summary: impl Into<String>) -> Self {
+        self.auto_summary = Some(summary.into());
+        self
+    }
+
+    /// Whether a request is the agent's compaction call.
+    pub fn is_compaction(request: &ChatRequest) -> bool {
+        matches!(request.messages.last(), Some(Message::User { content })
+            if matches!(content.first(), Some(ContentPart::Text { text }) if text.starts_with("[AgentKnife: compaction]")))
     }
 
     /// Every request the agent sent, in order.
@@ -113,10 +130,14 @@ impl Provider for ScriptedProvider {
     }
 
     fn stream(&self, request: ChatRequest) -> BoxFuture<'_, Result<EventStream, ProviderError>> {
+        let compaction = Self::is_compaction(&request);
         if let Ok(mut r) = self.requests.lock() {
             r.push(request);
         }
-        let next = self.scripts.lock().ok().and_then(|mut s| s.pop_front());
+        let next = match (&self.auto_summary, compaction) {
+            (Some(summary), true) => Some(text(summary)),
+            _ => self.scripts.lock().ok().and_then(|mut s| s.pop_front()),
+        };
         Box::pin(async move {
             match next {
                 Some(Script::Reply(events)) => Ok(stream::iter(events.into_iter().map(Ok)).boxed()),

@@ -59,7 +59,9 @@ pub enum AgentEvent {
     Usage {
         usage: TokenUsage,
     },
-    /// A message was added to the conversation (persist it).
+    /// Older messages were summarized to make room (the chat itself is unchanged).
+    ContextCompacted,
+    /// A message was added to the conversation.
     MessageAppended {
         message: Message,
     },

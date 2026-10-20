@@ -27,6 +27,14 @@ impl TurnLock {
         Ok(lock)
     }
 
+    /// Takes over the lock of an interrupted turn, to finish it (`None` if none).
+    pub fn resume(project_dir: &Path) -> io::Result<Option<Self>> {
+        Ok(Self::read(project_dir).map(|data| Self {
+            path: project_dir.join(LOCK_FILE),
+            data,
+        }))
+    }
+
     /// Reads a lock left behind by an interrupted turn.
     pub fn read(project_dir: &Path) -> Option<TurnLockData> {
         let text = std::fs::read_to_string(project_dir.join(LOCK_FILE)).ok()?;

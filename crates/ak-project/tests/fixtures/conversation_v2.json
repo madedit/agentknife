@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "entries": [
+    { "entry": "context", "text": "PROJECT.md:\n# 待辦清單\n一個簡單的待辦清單 App。" },
+    { "entry": "message", "kind": "user", "content": [{ "type": "text", "text": "加上刪除按鈕" }] },
+    { "entry": "message", "kind": "assistant", "text": "好了，每一項旁邊都有刪除按鈕。" },
+    { "entry": "checkpoint", "id": "cp-1", "label": "加上刪除按鈕" },
+    { "entry": "message", "kind": "user", "content": [{ "type": "text", "text": "按鈕改成紅色" }] },
+    { "entry": "message", "kind": "assistant", "text": "已改成紅色。" },
+    { "entry": "compaction", "summary": "使用者在做待辦清單；已加入刪除按鈕並改成紅色。", "keep_from": 4 },
+    { "entry": "message", "kind": "user", "content": [{ "type": "text", "text": "再加一個統計區塊" }] }
+  ]
+}

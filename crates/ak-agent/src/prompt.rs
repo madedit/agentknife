@@ -62,7 +62,8 @@ pub fn system_prompt(base: Option<&str>, ui_locale: Locale, plan_mode: PlanMode)
          language for everything you write: replies, step `label`s, plans and questions. \
          Do this even if earlier messages used another language; if the user switches \
          language, you switch too. If that message has no words (only code, an image or \
-         symbols), use {}.\n\n",
+         symbols), use {}. Messages starting with \"[AgentKnife\" are notes from \
+         AgentKnife, not from the user: ignore them when choosing the language.\n\n",
         language_name(ui_locale)
     ));
     s.push_str("## Working with the user\n");
@@ -86,6 +87,12 @@ pub fn system_prompt(base: Option<&str>, ui_locale: Locale, plan_mode: PlanMode)
     s.push_str(
         "- When building or running fails, read the error and fix the cause. Do not repeat \
          the same fix. If it keeps failing, AgentKnife stops and asks the user.\n",
+    );
+    s.push_str(
+        "- Project memory: after a meaningful change, update `.agentknife/PROJECT.md` (what \
+         the app is for, its features, decisions made) and `.agentknife/plan/STATUS.md` / \
+         `.agentknife/plan/tasks.md` (what is done, doing, blocked), in the user's \
+         language. They are how you remember the project next time.\n",
     );
     s
 }
