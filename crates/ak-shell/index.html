@@ -4,6 +4,36 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AgentKnife</title>
+    <!-- codemirror importmap: written by `cargo xtask vendor-codemirror` -->
+    <script type="importmap">
+      {
+        "imports": {
+          "/node/async_hooks.mjs": "./codemirror/_esm/node/async_hooks.mjs",
+          "/node/events.mjs": "./codemirror/_esm/node/events.mjs",
+          "/node/process.mjs": "./codemirror/_esm/node/process.mjs",
+          "/node/tty.mjs": "./codemirror/_esm/node/tty.mjs",
+          "@codemirror/autocomplete": "./codemirror/@codemirror/autocomplete.mjs",
+          "@codemirror/commands": "./codemirror/@codemirror/commands.mjs",
+          "@codemirror/lang-css": "./codemirror/@codemirror/lang-css.mjs",
+          "@codemirror/lang-html": "./codemirror/@codemirror/lang-html.mjs",
+          "@codemirror/lang-markdown": "./codemirror/@codemirror/lang-markdown.mjs",
+          "@codemirror/lang-rust": "./codemirror/@codemirror/lang-rust.mjs",
+          "@codemirror/language": "./codemirror/@codemirror/language.mjs",
+          "@codemirror/legacy-modes/mode/toml": "./codemirror/@codemirror/legacy-modes/mode/toml.mjs",
+          "@codemirror/lint": "./codemirror/@codemirror/lint.mjs",
+          "@codemirror/search": "./codemirror/@codemirror/search.mjs",
+          "@codemirror/state": "./codemirror/@codemirror/state.mjs",
+          "@codemirror/theme-one-dark": "./codemirror/@codemirror/theme-one-dark.mjs",
+          "@codemirror/view": "./codemirror/@codemirror/view.mjs",
+          "@lezer/common": "./codemirror/@lezer/common.mjs",
+          "@lezer/highlight": "./codemirror/@lezer/highlight.mjs",
+          "@lezer/lr": "./codemirror/@lezer/lr.mjs",
+          "codemirror": "./codemirror/codemirror.mjs"
+        }
+      }
+    </script>
+    <!-- /codemirror importmap -->
+    <link data-trunk rel="copy-dir" href="vendor/codemirror" />
     <link data-trunk rel="rust" data-bin="ak-shell" data-cargo-features="csr" data-wasm-opt="0" />
     <link data-trunk rel="tailwind-css" href="style/input.css" />
   </head>

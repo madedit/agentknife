@@ -11,10 +11,14 @@ pub mod backend;
 pub mod chat;
 pub mod connect;
 mod demo;
+pub mod files;
 pub mod home;
 pub mod i18n;
 pub mod layout;
-mod panes;
+// CodeMirror glue: the one module allowed unsafe (wasm-bindgen imports).
+#[cfg(target_arch = "wasm32")]
+#[allow(unsafe_code)]
+mod interop;
 pub mod preview;
 pub mod shell;
 mod splitter;

@@ -20,6 +20,12 @@ const SUMS_FILE: &str = "SHA256SUMS";
 const MANIFEST_FILE: &str = "manifest.toml";
 const IMPORTMAP_FILE: &str = "importmap.json";
 const ESM_HOST: &str = "https://esm.sh";
+/// The shell's page: browsers have no external import maps, so the map is inline.
+const SHELL_INDEX: &str = "crates/ak-shell/index.html";
+const MAP_BEGIN: &str = "<!-- codemirror importmap: written by `cargo xtask vendor-codemirror` -->";
+const MAP_END: &str = "<!-- /codemirror importmap -->";
+/// Where Trunk serves the vendored folder (`copy-dir` keeps its name).
+const SERVED_DIR: &str = "./codemirror/";
 const ESM_TARGET: &str = "es2022";
 
 /// Module specifiers to vendor. A specifier's package is listed in versions.toml.
@@ -153,7 +159,46 @@ pub fn vendor_codemirror(root: &Path) -> Result<()> {
     }
     std::fs::write(dir.join(SUMS_FILE), sums)?;
     println!("wrote {CODEMIRROR_DIR}/{{{SUMS_FILE},{MANIFEST_FILE},{IMPORTMAP_FILE}}}");
+    write_index(root)
+}
+
+/// `cargo xtask vendor-codemirror index`: only rewrites the shell page's map.
+pub fn write_index(root: &Path) -> Result<()> {
+    let map = std::fs::read_to_string(root.join(CODEMIRROR_DIR).join(IMPORTMAP_FILE))?;
+    let index_path = root.join(SHELL_INDEX);
+    let index = std::fs::read_to_string(&index_path)?;
+    std::fs::write(&index_path, with_inline_map(&index, &map)?)?;
+    println!("wrote the import map into {SHELL_INDEX}");
     Ok(())
+}
+
+/// The `<script type="importmap">` for the page: importmap.json with every file
+/// under [`SERVED_DIR`].
+fn inline_map(importmap_json: &str) -> Result<String> {
+    let map: serde_json::Value = serde_json::from_str(importmap_json)?;
+    let mut imports = serde_json::Map::new();
+    for (k, v) in map["imports"].as_object().into_iter().flatten() {
+        let file = v.as_str().unwrap_or_default().trim_start_matches("./");
+        imports.insert(k.clone(), format!("{SERVED_DIR}{file}").into());
+    }
+    let json = serde_json::to_string_pretty(&serde_json::json!({ "imports": imports }))?;
+    let body = json.replace('\n', "\n      ");
+    Ok(format!(
+        "{MAP_BEGIN}\n    <script type=\"importmap\">\n      {body}\n    </script>\n    {MAP_END}"
+    ))
+}
+
+/// `index` with its marked block replaced by the current map.
+fn with_inline_map(index: &str, importmap_json: &str) -> Result<String> {
+    let (Some(start), Some(end)) = (index.find(MAP_BEGIN), index.find(MAP_END)) else {
+        return Err(format!("{SHELL_INDEX}: missing the import map markers").into());
+    };
+    Ok(format!(
+        "{}{}{}",
+        &index[..start],
+        inline_map(importmap_json)?,
+        &index[end + MAP_END.len()..]
+    ))
 }
 
 fn helper_file(path: &str) -> String {
@@ -234,6 +279,17 @@ pub fn check(root: &Path) -> Result<()> {
         Err(_) => errors.push(format!("{CODEMIRROR_DIR}: missing {MANIFEST_FILE}")),
     }
     errors.extend(unresolved_imports(&dir)?);
+    let map = std::fs::read_to_string(dir.join(IMPORTMAP_FILE)).unwrap_or_default();
+    match std::fs::read_to_string(root.join(SHELL_INDEX)) {
+        Ok(index) => match with_inline_map(&index, &map) {
+            Ok(expected) if expected == index => {}
+            Ok(_) => errors.push(format!(
+                "{SHELL_INDEX}: the import map is stale; run `cargo xtask vendor-codemirror index`"
+            )),
+            Err(e) => errors.push(e.to_string()),
+        },
+        Err(_) => errors.push(format!("{SHELL_INDEX}: missing")),
+    }
     if errors.is_empty() {
         Ok(())
     } else {

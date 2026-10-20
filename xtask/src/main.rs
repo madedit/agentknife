@@ -24,7 +24,10 @@ fn main() -> ExitCode {
     let result = match cmd.as_deref() {
         Some("gen-toolchain") => gen_toolchain(),
         Some("ci") => ci::run(&workspace_root()),
-        Some("vendor-codemirror") => vendor::vendor_codemirror(&workspace_root()),
+        Some("vendor-codemirror") => match std::env::args().nth(2).as_deref() {
+            Some("index") => vendor::write_index(&workspace_root()),
+            _ => vendor::vendor_codemirror(&workspace_root()),
+        },
         Some("pin-downloads") => downloads::pin(&workspace_root()),
         Some("vendor-kit") => kit::vendor(&workspace_root()),
         Some("check-knowledge") => knowledge::check_build(&workspace_root()),

@@ -314,3 +314,25 @@ preview-error-ai-working = AI 正在處理。
 preview-fix = 請 AI 修正
 # 以使用者的身分傳給 AI
 preview-fix-message = 預覽顯示錯誤：App 無法建置了，請幫我修正。
+
+## 檔案、版本紀錄和程式碼
+files-unsaved = 尚未儲存
+files-save = 儲存
+files-save-hint = 儲存檔案（Ctrl+S）；預覽會跟著更新
+files-error = 沒有成功。
+files-changed-outside = AI 修改了這個檔案。重新載入會丟掉你還沒儲存的修改。
+files-reload = 重新載入
+files-keep-mine = 保留我的
+files-binary = 這個檔案不是文字（例如圖片），沒辦法在這裡編輯。
+timeline-mark = 標記這一版
+timeline-mark-name = 這一版的名稱
+timeline-mark-save = 儲存
+timeline-current = 目前在這一版
+timeline-restore-button = 回到這一版
+timeline-restore-confirm = 要回到這一版嗎？目前的內容會先暫存起來，之後還找得回來。
+timeline-restore-yes = 回到這一版
+time-just-now = 剛剛
+# $n（數字）
+time-minutes-ago = { $n } 分鐘前
+time-hours-ago = { $n } 小時前
+time-days-ago = { $n } 天前

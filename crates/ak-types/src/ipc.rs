@@ -50,11 +50,73 @@ pub mod cmd {
     /// `()` → `()`: starts the open project's app in its own window (not the
     /// preview), for a last check.
     pub const RUN_APP: &str = "run_app";
+    /// `()` → `Vec<FileEntry>`: the open project's files (not build output or
+    /// AgentKnife's own folder), sorted by path.
+    pub const LIST_FILES: &str = "list_files";
+    /// `String` (project-relative path) → [`FileText`](super::FileText)
+    pub const READ_FILE: &str = "read_file";
+    /// [`SaveFile`](super::SaveFile) → `()`: writes the file and tells the
+    /// preview (it rebuilds).
+    pub const WRITE_FILE: &str = "write_file";
+    /// `()` → `Vec<TimelineRow>`, newest first.
+    pub const TIMELINE: &str = "timeline";
+    /// `String` (entry id) → `()`: the project goes back to that version; the
+    /// current work is set aside as an "abandoned" entry first.
+    pub const RESTORE: &str = "restore";
+    /// [`MarkVersion`](super::MarkVersion) → `()`
+    pub const MARK_VERSION: &str = "mark_version";
 }
 
 /// Tauri event carrying the open project's
 /// [`PreviewStatus`](crate::preview::PreviewStatus) whenever it changes.
 pub const PREVIEW_EVENT: &str = "preview-status";
+
+/// A file or folder of the open project.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileEntry {
+    /// Project-relative, `/` separators.
+    pub path: String,
+    pub dir: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileText {
+    pub path: String,
+    /// Empty when `binary`.
+    pub text: String,
+    /// Not text (an image, …): shown, not edited.
+    #[serde(default)]
+    pub binary: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SaveFile {
+    pub path: String,
+    pub text: String,
+}
+
+/// A timeline entry for the UI (`ak_project::TimelineEntry` without the git ids).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimelineRow {
+    pub id: String,
+    /// Fluent `timeline-<kind>` (`turn`, `task`, `bundle`, `marked`, …).
+    pub kind: String,
+    /// Plain language, usually the user's request.
+    pub label: String,
+    /// Unix seconds.
+    pub created_at: u64,
+    #[serde(default)]
+    pub changed_files: Vec<String>,
+    /// The project is at this version now (the newest entry).
+    #[serde(default)]
+    pub current: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MarkVersion {
+    /// The user's name for it ("Before the redesign").
+    pub label: String,
+}
 
 /// Tauri event carrying each [`AgentEvent`](crate::agent::AgentEvent) of the
 /// open project's running turn.

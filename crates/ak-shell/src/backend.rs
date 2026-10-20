@@ -6,8 +6,9 @@ use std::sync::{Arc, Mutex};
 
 use ak_types::agent::{AgentEvent, PlanDecision};
 use ak_types::ipc::{
-    AGENT_EVENT, Answer, ConnectError, ConnectRequest, HomeState, InterruptionChoice, ModelCheck,
-    ModelChoice, NewProject, OpenedProject, PREVIEW_EVENT, SendMessage, StuckChoice, cmd,
+    AGENT_EVENT, Answer, ConnectError, ConnectRequest, FileEntry, FileText, HomeState,
+    InterruptionChoice, MarkVersion, ModelCheck, ModelChoice, NewProject, OpenedProject,
+    PREVIEW_EVENT, SaveFile, SendMessage, StuckChoice, TimelineRow, cmd,
 };
 use ak_types::preview::PreviewStatus;
 use serde::Serialize;
@@ -106,6 +107,37 @@ impl Backend {
 
     pub async fn run_app(&self) -> Result<(), CallError> {
         self.call(cmd::RUN_APP, None::<()>).await
+    }
+
+    pub async fn list_files(&self) -> Result<Vec<FileEntry>, CallError> {
+        self.call(cmd::LIST_FILES, None::<()>).await
+    }
+
+    pub async fn read_file(&self, path: &str) -> Result<FileText, CallError> {
+        self.call(cmd::READ_FILE, Some(path)).await
+    }
+
+    pub async fn write_file(&self, path: &str, text: &str) -> Result<(), CallError> {
+        let request = SaveFile {
+            path: path.to_owned(),
+            text: text.to_owned(),
+        };
+        self.call(cmd::WRITE_FILE, Some(request)).await
+    }
+
+    pub async fn timeline(&self) -> Result<Vec<TimelineRow>, CallError> {
+        self.call(cmd::TIMELINE, None::<()>).await
+    }
+
+    pub async fn restore(&self, id: &str) -> Result<(), CallError> {
+        self.call(cmd::RESTORE, Some(id)).await
+    }
+
+    pub async fn mark_version(&self, label: &str) -> Result<(), CallError> {
+        let request = MarkVersion {
+            label: label.to_owned(),
+        };
+        self.call(cmd::MARK_VERSION, Some(request)).await
     }
 
     pub async fn home_state(&self) -> Result<HomeState, CallError> {

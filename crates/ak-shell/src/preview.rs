@@ -324,9 +324,12 @@ mod browser {
         stage_size: RwSignal<(f64, f64)>,
         url: impl Fn() -> Option<String> + Copy + Send + Sync + 'static,
     ) {
+        // The pane goes away when the code tab shows, but window listeners and the
+        // size observer outlive it: everything below uses `try_` and stops quietly
+        // once the pane's signals are gone (and the listeners are removed then).
         let post = move |cmd: InspectorCommand| {
-            let (Some(iframe), Some(origin)) =
-                (frame.get_untracked(), url().and_then(|u| origin_of(&u)))
+            let (Some(Some(iframe)), Some(origin)) =
+                (frame.try_get_untracked(), url().and_then(|u| origin_of(&u)))
             else {
                 return;
             };
@@ -344,8 +347,8 @@ mod browser {
             });
         });
         // Answers from the page: only from our frame, and from its origin.
-        let _ = window_event_listener(leptos::ev::message, move |e| {
-            let Some(iframe) = frame.get_untracked() else {
+        let messages = window_event_listener(leptos::ev::message, move |e| {
+            let Some(Some(iframe)) = frame.try_get_untracked() else {
                 return;
             };
             let ours = match (e.source(), iframe.content_window()) {
@@ -372,26 +375,33 @@ mod browser {
             }
         });
         // Escape with the focus outside the frame also ends it.
-        let _ = window_event_listener(leptos::ev::keydown, move |e| {
+        let keys = window_event_listener(leptos::ev::keydown, move |e| {
             if e.key() == "Escape" && preview.picking.get_untracked() {
                 preview.picking.set(false);
             }
+        });
+        on_cleanup(move || {
+            messages.remove();
+            keys.remove();
+            // Leaving the preview ends point-and-select.
+            preview.picking.set(false);
         });
         // The stage's size, for scaling device frames (it changes with the panes).
         Effect::new(move |_| {
             let Some(el) = stage.get() else { return };
             let measure = Closure::<dyn Fn()>::new(move || {
-                if let Some(el) = stage.get_untracked() {
-                    let el: &web_sys::Element = el.unchecked_ref();
-                    stage_size.set((
-                        f64::from(el.client_width()),
-                        f64::from(el.client_height()) - 24.0,
-                    ));
-                }
+                let Some(Some(el)) = stage.try_get_untracked() else {
+                    return;
+                };
+                let el: &web_sys::Element = el.unchecked_ref();
+                let _ = stage_size.try_set((
+                    f64::from(el.client_width()),
+                    f64::from(el.client_height()) - 24.0,
+                ));
             });
             if let Ok(observer) = web_sys::ResizeObserver::new(measure.as_ref().unchecked_ref()) {
                 observer.observe(el.unchecked_ref());
-                // Observes for the window's lifetime.
+                // Lives with the element: a removed element no longer resizes.
                 std::mem::forget(observer);
             }
             measure.forget();

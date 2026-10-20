@@ -314,3 +314,28 @@ preview-error-ai-working = The AI is working on it.
 preview-fix = Ask the AI to fix it
 # Sent to the AI as the user's message
 preview-fix-message = The preview shows an error: the app no longer builds. Please fix it.
+
+## Files, version history and code
+files-unsaved = Not saved
+files-save = Save
+files-save-hint = Save the file (Ctrl+S); the preview updates
+files-error = That did not work.
+files-changed-outside = The AI changed this file. Reloading throws away your unsaved changes.
+files-reload = Reload
+files-keep-mine = Keep mine
+files-binary = This file is not text (for example a picture), so it cannot be edited here.
+timeline-mark = Mark this version
+timeline-mark-name = Name for this version
+timeline-mark-save = Save
+timeline-current = You are here
+timeline-restore-button = Go back to this version
+timeline-restore-confirm = Go back to this version? What you have now is kept as “set aside”, so you can bring it back later.
+timeline-restore-yes = Go back
+time-just-now = Just now
+# $n (Number)
+time-minutes-ago = { $n } min ago
+time-hours-ago = { $n } h ago
+time-days-ago = { $n ->
+    [one] Yesterday
+   *[other] { $n } days ago
+}

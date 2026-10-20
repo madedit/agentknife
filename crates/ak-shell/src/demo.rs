@@ -14,9 +14,11 @@ use ak_types::agent::{
     UsageSummary,
 };
 use ak_types::chat::{Entry, Message};
+use std::collections::BTreeMap;
+
 use ak_types::ipc::{
-    ConnectError, ConnectRequest, HomeState, ModelCheck, ModelChoice, OpenedProject, ProjectRow,
-    SendMessage, cmd,
+    ConnectError, ConnectRequest, FileEntry, FileText, HomeState, ModelCheck, ModelChoice,
+    OpenedProject, ProjectRow, SaveFile, SendMessage, TimelineRow, cmd,
 };
 use ak_types::preview::{PreviewStatus, ServerState};
 use ak_types::settings::AiConnection;
@@ -70,6 +72,43 @@ pub struct Demo {
     /// The scripted turn waits here for a card's answer.
     waiting: Option<oneshot::Sender<Value>>,
     running: bool,
+    /// The open project's files and history (one set for every demo project).
+    files: BTreeMap<String, String>,
+    timeline: Vec<TimelineRow>,
+}
+
+/// A small project like the template's.
+fn demo_files() -> BTreeMap<String, String> {
+    [
+        ("Cargo.toml", "[package]\nname = \"app-ui\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nleptos = { version = \"=0.8.22\", features = [\"csr\"] }\n"),
+        ("README.md", "# My App\n\nMade with AgentKnife.\n"),
+        ("index.html", "<!doctype html>\n<html>\n  <head><title>My App</title></head>\n  <body></body>\n</html>\n"),
+        ("src/main.rs", "use leptos::prelude::*;\n\nfn main() {\n    ak_bridge::start();\n    leptos::mount::mount_to_body(App);\n}\n\n#[component]\nfn App() -> impl IntoView {\n    view! {\n        <main data-ak-id=\"home-screen\">\n            <h1 data-ak-id=\"home-title\">\"My App\"</h1>\n        </main>\n    }\n}\n"),
+        ("src-tauri/src/main.rs", "fn main() {\n    tauri::Builder::default()\n        .plugin(ak_bridge::init())\n        .run(tauri::generate_context!())\n        .expect(\"the app failed to start\");\n}\n"),
+        ("src-tauri/icons/icon.png", ""),
+        ("style/input.css", "@import \"tailwindcss\";\n"),
+    ]
+    .into_iter()
+    .map(|(p, t)| (p.to_owned(), t.to_owned()))
+    .collect()
+}
+
+fn demo_timeline() -> Vec<TimelineRow> {
+    let now = now();
+    let row = |id: &str, kind: &str, label: &str, ago: u64| TimelineRow {
+        id: id.into(),
+        kind: kind.into(),
+        label: label.into(),
+        created_at: now.saturating_sub(ago),
+        changed_files: Vec::new(),
+        current: false,
+    };
+    vec![
+        row("t1", "initial", "My App", 3 * 86_400),
+        row("t2", "turn", "Make a to-do list", 2 * 86_400),
+        row("t3", "marked", "First working version", 86_400),
+        row("t4", "turn", "Make the buttons blue", 3_000),
+    ]
 }
 
 impl Default for Demo {
@@ -105,7 +144,20 @@ impl Demo {
             preview: PreviewStatus::default(),
             waiting: None,
             running: false,
+            files: demo_files(),
+            timeline: demo_timeline(),
         }
+    }
+
+    fn add_entry(&mut self, kind: &str, label: &str) {
+        self.timeline.push(TimelineRow {
+            id: format!("t{}", self.timeline.len() + 1),
+            kind: kind.into(),
+            label: label.into(),
+            created_at: now(),
+            changed_files: Vec::new(),
+            current: false,
+        });
     }
 
     fn opened(row: ProjectRow) -> OpenedProject {
@@ -186,6 +238,66 @@ impl Demo {
             cmd::OPEN_FOLDER => Ok(Value::Null),
             cmd::PREVIEW_STATUS => Ok(json!(d.preview)),
             cmd::RUN_APP => Ok(Value::Null),
+            cmd::LIST_FILES => {
+                let list: Vec<FileEntry> = d
+                    .files
+                    .keys()
+                    .map(|p| FileEntry {
+                        path: p.clone(),
+                        dir: false,
+                    })
+                    .collect();
+                Ok(json!(list))
+            }
+            cmd::READ_FILE => {
+                let path = req.as_str().unwrap_or_default();
+                let text = d
+                    .files
+                    .get(path)
+                    .ok_or_else(|| text(format!("no file {path}")))?;
+                Ok(json!(FileText {
+                    path: path.to_owned(),
+                    text: text.clone(),
+                    binary: path.ends_with(".png"),
+                }))
+            }
+            cmd::WRITE_FILE => {
+                let f: SaveFile = serde_json::from_value(req).map_err(|e| text(e.to_string()))?;
+                d.files.insert(f.path, f.text);
+                drop(d);
+                // Saving rebuilds the preview, as in the app.
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let demo = demo.clone();
+                    leptos::task::spawn_local(async move { rebuild(&demo, None).await });
+                }
+                Ok(Value::Null)
+            }
+            cmd::TIMELINE => {
+                let mut rows = d.timeline.clone();
+                if let Some(last) = rows.last_mut() {
+                    last.current = true;
+                }
+                rows.reverse();
+                Ok(json!(rows))
+            }
+            cmd::RESTORE => {
+                let id = req.as_str().unwrap_or_default();
+                let label = d
+                    .timeline
+                    .iter()
+                    .find(|r| r.id == id)
+                    .map(|r| r.label.clone())
+                    .ok_or_else(|| text(format!("no entry {id}")))?;
+                d.add_entry("abandoned", "Work before going back");
+                d.add_entry("restore", &label);
+                Ok(Value::Null)
+            }
+            cmd::MARK_VERSION => {
+                let label = req["label"].as_str().unwrap_or_default().to_owned();
+                d.add_entry("marked", &label);
+                Ok(Value::Null)
+            }
             cmd::LIST_MODELS | cmd::CHECK_MODEL => {
                 let r: ConnectRequest =
                     serde_json::from_value(req).map_err(|e| text(e.to_string()))?;
@@ -611,6 +723,14 @@ async fn turn(demo: Arc<Mutex<Demo>>, text: String) {
         .await;
         TurnOutcome::Completed
     };
+    if outcome == TurnOutcome::Completed
+        && let Ok(mut d) = demo.lock()
+    {
+        if let Some(main) = d.files.get_mut("src/main.rs") {
+            main.push_str("// changed by the AI\n");
+        }
+        d.add_entry("turn", &text);
+    }
     let outcome = if still_running(&demo) {
         outcome
     } else {

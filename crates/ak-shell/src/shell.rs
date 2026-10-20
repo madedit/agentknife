@@ -4,9 +4,9 @@
 use leptos::prelude::*;
 
 use crate::chat::ChatPane;
+use crate::files::{CodePane, FilesPane, TimelinePane};
 use crate::i18n::t;
 use crate::layout::{self, CHAT, CenterTab, LEFT, Layout, Mode};
-use crate::panes::{CodePane, FilesPane, TimelinePane};
 use crate::preview::PreviewPane;
 use crate::splitter::{Grows, Splitter};
 
@@ -22,7 +22,7 @@ pub fn Workspace(layout: RwSignal<Layout>) -> impl IntoView {
                         class="flex shrink-0 flex-col bg-gray-50 dark:bg-gray-900"
                         style:width=move || format!("min({}px, 30vw)", layout.with(|l| l.left))
                     >
-                        <FilesPane />
+                        <FilesPane layout />
                         <TimelinePane />
                     </aside>
                     <Splitter

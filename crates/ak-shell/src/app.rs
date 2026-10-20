@@ -11,6 +11,7 @@ use crate::backend::{Backend, CallError};
 use crate::chat::Chat;
 use crate::chat::log::ChatLog;
 use crate::connect::ConnectWizard;
+use crate::files::Files;
 use crate::home::HomeScreen;
 use crate::i18n::{self, t, t_with, tr};
 use crate::layout::{self, Layout, Mode};
@@ -38,7 +39,17 @@ pub fn App() -> impl IntoView {
     provide_context(backend.clone());
     let chat = Chat::new(ChatLog::default());
     provide_context(chat);
-    backend.listen(Arc::new(move |event| chat.log.update(|l| l.apply(event))));
+    let files = Files::new();
+    provide_context(files);
+    let b = backend.clone();
+    backend.listen(Arc::new(move |event| {
+        // A finished turn may have changed files and added a version.
+        let finished = matches!(event, ak_types::agent::AgentEvent::TurnFinished { .. });
+        chat.log.update(|l| l.apply(event));
+        if finished {
+            files.refresh(b.clone());
+        }
+    }));
     let preview = Preview::new();
     provide_context(preview);
     backend.listen_preview(Arc::new(move |status| preview.status.set(status)));
@@ -84,6 +95,11 @@ pub fn AppView(
         provide_context(c);
         c
     });
+    let files = use_context::<Files>().unwrap_or_else(|| {
+        let f = Files::new();
+        provide_context(f);
+        f
+    });
     let preview = use_context::<Preview>().unwrap_or_else(|| {
         let p = Preview::new();
         provide_context(p);
@@ -120,6 +136,8 @@ pub fn AppView(
                 .set(ChatLog::from_history(&o.history, o.interrupted));
             chat.selection.set(None);
             preview.picking.set(false);
+            files.reset();
+            files.refresh(backend.clone());
             let backend = backend.clone();
             leptos::task::spawn_local(async move {
                 if let Ok(status) = backend.preview_status().await {
