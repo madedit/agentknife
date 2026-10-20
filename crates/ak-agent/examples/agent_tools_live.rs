@@ -10,6 +10,7 @@
 use std::error::Error;
 use std::sync::Arc;
 
+use ak_agent::permission::{ConfirmRequest, Confirmer};
 use ak_agent::tools::{Asker, Question, ToolEnv, project_tools};
 use ak_agent::{Agent, AgentConfig};
 use ak_providers::anthropic::{Anthropic, AnthropicConfig};
@@ -17,8 +18,24 @@ use ak_providers::openai::{OpenAiCompat, OpenAiCompatConfig};
 use ak_providers::{Provider, ReqwestTransport};
 use ak_types::agent::AgentEvent;
 use ak_types::chat::{Conversation, Message};
+use ak_types::i18n::{self, I18n, Locale};
 use futures_util::future::BoxFuture;
 use tokio_util::sync::CancellationToken;
+
+/// Prints the confirmation the user would see (zh-TW, via fluent) and allows it.
+struct PrintAndAllow(I18n);
+
+impl Confirmer for PrintAndAllow {
+    fn confirm(&self, r: ConfirmRequest) -> BoxFuture<'_, bool> {
+        let args = i18n::args([("detail", r.reason.detail.as_str())]);
+        println!(
+            "\n[confirm] {} — {} -> allow",
+            r.label,
+            self.0.t_args(r.reason.kind.message_id(), &args)
+        );
+        Box::pin(async { true })
+    }
+}
 
 /// Answers every question with the first (recommended) option.
 struct FirstOption;
@@ -84,11 +101,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
          smallest change that does what the user asked, then say briefly what you changed."
             .into(),
     );
+    std::fs::create_dir_all(project.join("notes"))?;
+    std::fs::write(project.join("notes/old.txt"), "outdated notes")?;
+    // Default gate = the project policy; confirmations print the user-facing reason.
     let agent = Agent::new(
         provider,
         project_tools(ToolEnv::default(), Arc::new(FirstOption)),
         config,
-    );
+    )
+    .with_confirmer(Arc::new(PrintAndAllow(I18n::new(Locale::ZhTw)?)));
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     let printer = tokio::spawn(async move {
         while let Some(e) = rx.recv().await {
@@ -104,14 +125,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
     let mut conv = Conversation::new();
-    agent
-        .run_turn(
-            &mut conv,
-            Message::user_text("請把「Add」按鈕改成藍色"),
-            &tx,
-            &CancellationToken::new(),
-        )
-        .await;
+    for request in [
+        "請把「Add」按鈕改成藍色",
+        "notes/old.txt 用不到了，請把它刪掉",
+    ] {
+        println!("\n===== {request}");
+        agent
+            .run_turn(
+                &mut conv,
+                Message::user_text(request),
+                &tx,
+                &CancellationToken::new(),
+            )
+            .await;
+    }
     drop(tx);
     printer.await?;
     let after = std::fs::read_to_string(project.join("src/app.rs"))?;
@@ -119,6 +146,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for line in after.lines().filter(|l| l.contains("button")) {
         println!("{line}");
     }
+    println!(
+        "notes/old.txt still exists: {}",
+        project.join("notes/old.txt").exists()
+    );
     let lock_left = project.join(".agentknife/turn.lock").exists();
     println!("turn.lock left behind: {lock_left}");
     std::fs::remove_dir_all(&project)?;

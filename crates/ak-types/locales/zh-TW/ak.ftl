@@ -17,3 +17,15 @@ common-retry = 再試一次
 # $tool（字串）正在安裝的工具；$step / $total（數字）進度
 doctor-installing = 正在安裝 { $tool }（{ $step }/{ $total }）…
 doctor-ready = 需要的工具都裝好了。
+
+## Agent 步驟確認（$detail：原始指令或路徑）
+
+confirm-download = 這一步會從網路下載或安裝軟體：{ $detail }
+confirm-delete = 這一步會刪除檔案或丟棄修改：{ $detail }
+confirm-outside-project = 這一步會動到專案資料夾以外的檔案：{ $detail }
+confirm-elevated = 這一步需要系統管理員權限：{ $detail }
+confirm-unrecognized = AgentKnife 無法判斷這一步會做什麼：{ $detail }
+confirm-change = 你設定了「每次修改都要確認」。要允許這一步嗎？{ $detail }
+denied-path-escape = 已阻擋：這在你的專案資料夾以外：{ $detail }
+denied-protected-path = 已阻擋：這是 AgentKnife 自己的歷史紀錄，不能直接修改：{ $detail }
+denied-dangerous = 已阻擋：這可能會損壞你的電腦：{ $detail }

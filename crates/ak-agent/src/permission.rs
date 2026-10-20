@@ -1,6 +1,7 @@
-//! Hooks for permission checks and user confirmation. The policy itself (what is
-//! automatic, what needs asking) is P1-AGENT-003.
+//! Permission checks and user confirmation hooks. The default policy is
+//! [`crate::policy::ProjectPolicy`].
 
+use ak_types::agent::ConfirmReason;
 use futures_util::future::BoxFuture;
 use serde_json::Value;
 
@@ -9,12 +10,13 @@ use crate::tool::ToolContext;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
     Allow,
-    /// Ask the user; `reason` is plain language ("This downloads 300 MB").
+    /// Ask the user first.
     Ask {
-        reason: String,
+        reason: ConfirmReason,
     },
+    /// Refuse; the model is told why and can choose another way.
     Deny {
-        reason: String,
+        reason: ConfirmReason,
     },
 }
 
@@ -22,7 +24,7 @@ pub trait PermissionGate: Send + Sync {
     fn check(&self, tool: &str, args: &Value, ctx: &ToolContext) -> Decision;
 }
 
-/// Allows every call. Only for tests and until P1-AGENT-003.
+/// Allows every call. Only for tests.
 pub struct AllowAll;
 
 impl PermissionGate for AllowAll {
@@ -36,7 +38,7 @@ pub struct ConfirmRequest {
     pub request_id: String,
     pub tool: String,
     pub label: String,
-    pub reason: String,
+    pub reason: ConfirmReason,
 }
 
 /// Asks the user and resolves with their answer. The UI implements it.

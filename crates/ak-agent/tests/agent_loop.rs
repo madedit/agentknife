@@ -6,12 +6,12 @@
 use std::sync::{Arc, Mutex};
 
 use ak_agent::lock::TurnLock;
-use ak_agent::permission::{ConfirmRequest, Confirmer, Decision, PermissionGate};
+use ak_agent::permission::{AllowAll, ConfirmRequest, Confirmer, Decision, PermissionGate};
 use ak_agent::scripted::{Script, ScriptedProvider, args, text, tool_calls};
 use ak_agent::tool::{Tool, ToolContext, ToolOutput, ToolRegistry};
 use ak_agent::{Agent, AgentConfig, Checkpointer, TurnSummary};
 use ak_providers::{ProviderError, StopReason, StreamEvent};
-use ak_types::agent::{AgentEvent, TurnOutcome};
+use ak_types::agent::{AgentEvent, ConfirmKind, ConfirmReason, TurnOutcome};
 use ak_types::chat::{ContentPart, Conversation, Entry, Message, ToolSpec};
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
@@ -81,10 +81,16 @@ impl PermissionGate for AskForWrites {
     fn check(&self, tool: &str, _: &Value, _: &ToolContext) -> Decision {
         match tool {
             "write_file" => Decision::Ask {
-                reason: "This changes a file".into(),
+                reason: ConfirmReason {
+                    kind: ConfirmKind::Change,
+                    detail: "index.html".into(),
+                },
             },
             "delete_everything" => Decision::Deny {
-                reason: "never".into(),
+                reason: ConfirmReason {
+                    kind: ConfirmKind::Dangerous,
+                    detail: "/".into(),
+                },
             },
             _ => Decision::Allow,
         }
@@ -132,7 +138,7 @@ async fn run(
 }
 
 fn agent(provider: Arc<ScriptedProvider>, tools: ToolRegistry) -> Agent {
-    Agent::new(provider, tools, AgentConfig::new("scripted"))
+    Agent::new(provider, tools, AgentConfig::new("scripted")).with_gate(Arc::new(AllowAll))
 }
 
 fn read_call(id: &str, label: &str) -> (String, String) {
@@ -280,7 +286,7 @@ async fn permission_ask_confirm_and_deny() {
         let mut conv = Conversation::new();
         let (_, events) = run(&a, &mut conv, "save it", &CancellationToken::new()).await;
         assert!(events.iter().any(|e| matches!(e,
-            AgentEvent::NeedsConfirmation { label, reason, .. } if label == "Saving the page" && reason == "This changes a file")));
+            AgentEvent::NeedsConfirmation { label, reason, .. } if label == "Saving the page" && reason.kind == ConfirmKind::Change && reason.detail == "index.html")));
         assert_eq!(answer.1.lock().unwrap().len(), 1);
         assert_eq!(write.calls.lock().unwrap().len(), usize::from(yes));
         assert!(
@@ -298,7 +304,7 @@ async fn cancel_during_stream_appends_nothing_and_keeps_the_lock() {
     ])]));
     let mut config = AgentConfig::new("scripted");
     config.project_dir = Some(dir.path().to_owned());
-    let a = Agent::new(p, ToolRegistry::new(), config);
+    let a = Agent::new(p, ToolRegistry::new(), config).with_gate(Arc::new(AllowAll));
     let mut conv = Conversation::new();
     let cancel = CancellationToken::new();
     let c2 = cancel.clone();
@@ -428,6 +434,7 @@ async fn completed_turn_checkpoints_then_releases_lock() {
     let mut config = AgentConfig::new("scripted");
     config.project_dir = Some(dir.path().to_owned());
     let a = Agent::new(p, ToolRegistry::new().with(read.clone()), config)
+        .with_gate(Arc::new(AllowAll))
         .with_checkpointer(checkpoints.clone());
     let mut conv = Conversation::new();
     let (outcome, _) = run(&a, &mut conv, "read it", &CancellationToken::new()).await;
@@ -445,6 +452,69 @@ async fn completed_turn_checkpoints_then_releases_lock() {
     assert_eq!(cps[0].request, "read it");
     assert_eq!(cps[0].touched_files, ["src/app.rs"]);
     assert!(matches!(conv.entries().last(), Some(Entry::Checkpoint { id, .. }) if id == "cp-1"));
+}
+
+/// The default gate is the project policy: escapes are refused before the tool runs,
+/// risky commands wait for the user, routine work proceeds.
+#[tokio::test]
+async fn default_policy_end_to_end() {
+    let dir = tempfile::tempdir().unwrap();
+    let escape = args(json!({ "label": "Saving outside", "path": "../evil.txt" }));
+    let build = args(json!({ "label": "Building", "command": "cargo build" }));
+    let delete = args(json!({ "label": "Cleaning up", "command": "rm -rf dist" }));
+    let p = Arc::new(ScriptedProvider::new(vec![
+        tool_calls(&[
+            ("c1", "write_file", &escape),
+            ("c2", "run_command", &build),
+            ("c3", "run_command", &delete),
+        ]),
+        text("done"),
+    ]));
+    let write = FakeTool::new("write_file");
+    let run_cmd = FakeTool::new("run_command");
+    let answer = Arc::new(Answer(false, Mutex::new(Vec::new())));
+    let mut config = AgentConfig::new("scripted");
+    config.project_dir = Some(dir.path().to_owned());
+    let a = Agent::new(
+        p.clone(),
+        ToolRegistry::new()
+            .with(write.clone())
+            .with(run_cmd.clone()),
+        config,
+    )
+    .with_confirmer(answer.clone());
+    let mut conv = Conversation::new();
+    let (outcome, events) = run(&a, &mut conv, "go", &CancellationToken::new()).await;
+    assert_eq!(outcome, TurnOutcome::Completed);
+    assert!(write.calls.lock().unwrap().is_empty(), "escape refused");
+    assert_eq!(
+        run_cmd.calls.lock().unwrap().len(),
+        1,
+        "build ran, delete declined"
+    );
+    let asked: Vec<ConfirmKind> = events
+        .iter()
+        .filter_map(|e| match e {
+            AgentEvent::NeedsConfirmation { reason, .. } => Some(reason.kind),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked, [ConfirmKind::Delete]);
+    let refusal = match &p.requests()[1].messages[2] {
+        Message::ToolResult {
+            content,
+            is_error: true,
+            ..
+        } => match &content[0] {
+            ContentPart::Text { text } => text.clone(),
+            _ => String::new(),
+        },
+        other => panic!("{other:?}"),
+    };
+    assert!(
+        refusal.contains("Not allowed because the path is outside the project"),
+        "{refusal}"
+    );
 }
 
 #[tokio::test]

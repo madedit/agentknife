@@ -5,6 +5,7 @@
 mod agent;
 pub mod lock;
 pub mod permission;
+pub mod policy;
 pub mod scripted;
 pub mod tool;
 pub mod tools;

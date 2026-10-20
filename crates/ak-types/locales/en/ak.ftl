@@ -17,3 +17,15 @@ common-retry = Try again
 # $tool (String) tool being installed; $step / $total (Number) progress
 doctor-installing = Installing { $tool } ({ $step }/{ $total })…
 doctor-ready = Everything you need is installed.
+
+## Agent step confirmations ($detail: the command or path, shown verbatim)
+
+confirm-download = This step downloads or installs software from the internet: { $detail }
+confirm-delete = This step deletes files or throws away changes: { $detail }
+confirm-outside-project = This step touches files outside your project folder: { $detail }
+confirm-elevated = This step asks for administrator rights: { $detail }
+confirm-unrecognized = AgentKnife cannot tell what this step will do: { $detail }
+confirm-change = You asked to approve every change. Allow this one? { $detail }
+denied-path-escape = Blocked: this is outside your project folder: { $detail }
+denied-protected-path = Blocked: this is AgentKnife's own history and must not be edited by hand: { $detail }
+denied-dangerous = Blocked: this could damage your computer: { $detail }

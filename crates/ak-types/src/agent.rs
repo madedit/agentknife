@@ -41,7 +41,7 @@ pub enum AgentEvent {
         request_id: String,
         tool: String,
         label: String,
-        reason: String,
+        reason: ConfirmReason,
     },
     /// The agent asks the user to choose (`ask_user` tool).
     QuestionAsked {
@@ -61,6 +61,70 @@ pub enum AgentEvent {
     TurnFinished {
         outcome: TurnOutcome,
     },
+}
+
+/// Why a step needs the user's OK (or was refused). The UI shows it through fluent
+/// (`confirm-<kind>` with `$detail`), so it reads in the user's language.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfirmReason {
+    pub kind: ConfirmKind,
+    /// What triggered it: the command or path, shown verbatim.
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfirmKind {
+    /// Downloads or installs software.
+    Download,
+    /// Deletes files or discards changes.
+    Delete,
+    /// Reads or changes something outside the project folder.
+    OutsideProject,
+    /// Asks for administrator rights.
+    Elevated,
+    /// A command whose effect cannot be checked (e.g. encoded PowerShell).
+    Unrecognized,
+    /// Any change, because the user chose to approve every change.
+    Change,
+    /// Refused: the path leaves the project.
+    PathEscape,
+    /// Refused: AgentKnife's own history (`.git`) must not be edited directly.
+    ProtectedPath,
+    /// Refused: could damage the computer (formatting disks, shutting down…).
+    Dangerous,
+}
+
+impl ConfirmKind {
+    /// Fluent message id for the UI.
+    pub fn message_id(self) -> &'static str {
+        match self {
+            ConfirmKind::Download => "confirm-download",
+            ConfirmKind::Delete => "confirm-delete",
+            ConfirmKind::OutsideProject => "confirm-outside-project",
+            ConfirmKind::Elevated => "confirm-elevated",
+            ConfirmKind::Unrecognized => "confirm-unrecognized",
+            ConfirmKind::Change => "confirm-change",
+            ConfirmKind::PathEscape => "denied-path-escape",
+            ConfirmKind::ProtectedPath => "denied-protected-path",
+            ConfirmKind::Dangerous => "denied-dangerous",
+        }
+    }
+
+    /// English explanation for the model (not shown to the user).
+    pub fn for_model(self) -> &'static str {
+        match self {
+            ConfirmKind::Download => "it downloads or installs software",
+            ConfirmKind::Delete => "it deletes files or discards changes",
+            ConfirmKind::OutsideProject => "it touches files outside the project folder",
+            ConfirmKind::Elevated => "it asks for administrator rights",
+            ConfirmKind::Unrecognized => "its effect cannot be checked",
+            ConfirmKind::Change => "the user approves every change",
+            ConfirmKind::PathEscape => "the path is outside the project",
+            ConfirmKind::ProtectedPath => "`.git` is managed by AgentKnife and must not be edited",
+            ConfirmKind::Dangerous => "it could damage the computer",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,6 +168,26 @@ mod tests {
         let json = serde_json::to_string(&e).unwrap();
         assert!(json.contains(r#""event":"step_started""#));
         assert_eq!(serde_json::from_str::<AgentEvent>(&json).unwrap(), e);
+        let i18n = crate::i18n::I18n::new(crate::i18n::Locale::ZhTw).unwrap();
+        for kind in [
+            ConfirmKind::Download,
+            ConfirmKind::Delete,
+            ConfirmKind::OutsideProject,
+            ConfirmKind::Elevated,
+            ConfirmKind::Unrecognized,
+            ConfirmKind::Change,
+            ConfirmKind::PathEscape,
+            ConfirmKind::ProtectedPath,
+            ConfirmKind::Dangerous,
+        ] {
+            let args = crate::i18n::args([("detail", "x")]);
+            let shown = i18n.t_args(kind.message_id(), &args);
+            assert_ne!(
+                shown,
+                kind.message_id(),
+                "missing fluent message for {kind:?}"
+            );
+        }
         assert!(!TurnOutcome::Cancelled.ended_normally());
         assert!(TurnOutcome::StepLimit.ended_normally());
     }

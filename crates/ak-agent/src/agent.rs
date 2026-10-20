@@ -15,9 +15,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::lock::TurnLock;
 use crate::new_id;
-use crate::permission::{
-    AllowAll, ConfirmRequest, Confirmer, Decision, DeclineAll, PermissionGate,
-};
+use crate::permission::{ConfirmRequest, Confirmer, Decision, DeclineAll, PermissionGate};
+use crate::policy::{PermissionMode, ProjectPolicy};
 use crate::tool::{ToolContext, ToolOutput, ToolRegistry, split_label};
 
 #[derive(Debug, Clone)]
@@ -90,7 +89,7 @@ impl Agent {
         Self {
             provider,
             tools,
-            gate: Arc::new(AllowAll),
+            gate: Arc::new(ProjectPolicy::new(PermissionMode::Standard)),
             confirmer: Arc::new(DeclineAll),
             checkpointer: Arc::new(NoCheckpoints),
             config,
@@ -348,9 +347,12 @@ impl Agent {
         } else if let Some(tool) = self.tools.get(&call.name) {
             let allowed = match self.gate.check(&call.name, &args, ctx) {
                 Decision::Allow => Ok(()),
-                Decision::Deny { reason } => {
-                    Err(ToolOutput::error(format!("Not allowed: {reason}")))
-                }
+                Decision::Deny { reason } => Err(ToolOutput::error(format!(
+                    "Not allowed because {} ({}). Find another way that stays inside \
+                         the project, or explain to the user why it is needed.",
+                    reason.kind.for_model(),
+                    reason.detail
+                ))),
                 Decision::Ask { reason } => {
                     let request = ConfirmRequest {
                         request_id: format!("{step_id}-confirm"),

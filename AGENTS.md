@@ -106,6 +106,10 @@ plan/            STATUS.md and execution-plan.md (format in §8).
 - **Agent:** AgentKnife has its own agent loop. Providers sit behind one trait. On connect, check that the model supports tool calling, and warn in plain language if it does not (typical for small local models). API keys go only in the keychain, never in files or logs.
 - **AI reply language:** the agent replies in the language of the user's most recent message. If that cannot be determined, it uses the UI language. The system prompt states the target language explicitly on every turn.
 - **Permissions:** reads, writes, builds, and runs inside the project folder are automatic. Downloads or installs, access outside the project, and deletions need a plain-language confirmation.
+  - Implemented by `ak_agent::policy::ProjectPolicy`, the agent's default gate. Use `AllowAll` only in tests.
+  - Path escapes, writes into `.git/`, and destructive commands (format, `rm -rf /`, shutdown…) are refused outright.
+  - Confirmation reasons are a structured `ConfirmReason { kind, detail }`, rendered by the UI through fluent (`ConfirmKind::message_id`). Never send English sentences to the UI.
+  - When adding a tool, teach the policy about it; unknown tools ask.
 - **Plan-before-big-change:** small edits are applied directly. Large features first get a 3–5 bullet plan with a time and cost estimate, and wait for the user to click "Start". This is configurable.
 - **Auto-fix:** on a build or run error, the agent retries up to 3 times (configurable). After that it stops and offers: try another approach, roll back to a checkpoint, or show technical details.
 - **Progress display:** every step shows a plain-language label. Labels for deterministic steps (doctor, bundle, checkpoint) come from fluent, and labels for agent tool calls are AI-generated (see §5).
