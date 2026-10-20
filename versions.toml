@@ -1,22 +1,24 @@
 # Single source of truth for pinned versions (AGENTS.md §2).
-# Empty values must be filled with the latest stable release at bootstrap (task P1-CORE-001).
-# `cargo xtask ci` verifies Cargo.toml, templates/, knowledge/ and vendored hashes against this file.
+# `cargo xtask ci` verifies Cargo.toml, rust-toolchain.toml, templates/, knowledge/
+# and vendored hashes against this file. Upgrade everything derived from it in one change.
 
 [rust]
-toolchain = ""
+toolchain = "1.99.1"
 
 [crates]
-tauri = ""
-tauri-cli = ""
-leptos = ""
-wasm-bindgen = ""
+tauri = "2.12.4"
+tauri-build = "2.7.3"
+tauri-cli = "2.12.3"
+leptos = "0.8.22"
+# wasm-bindgen crate and wasm-bindgen-cli must match exactly.
+wasm-bindgen = "0.2.129"
 
 [tools]
-trunk = ""
-tailwind-cli = ""
+trunk = "0.21.14"
+tailwind-cli = "4.3.3"
 
 [vendor]
-codemirror = ""
+codemirror = "6.0.2"
 
 [knowledge]
-pack = ""
+pack = "0.1.0"

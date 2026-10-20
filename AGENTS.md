@@ -165,6 +165,10 @@ Prerequisites for developing AgentKnife:
 | Full pre-commit gate | `cargo xtask ci` |
 | Refresh the vendored CodeMirror | `cargo xtask vendor-codemirror` |
 
+| Regenerate `rust-toolchain.toml` | `cargo xtask gen-toolchain` (never edit it by hand) |
+
+**Windows gotcha:** run cargo from PowerShell or cmd, not Git Bash. Git Bash's `/usr/bin/link` shadows MSVC `link.exe`, and every build fails with `link: extra operand`.
+
 When building the workspace skeleton, implement exactly these entry points. If a command changes, update this table in the same change.
 
 ## 7. Testing
