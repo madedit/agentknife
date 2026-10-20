@@ -21,6 +21,8 @@ pub struct ToolContext {
     pub cancel: CancellationToken,
     /// For tools that talk to the UI (e.g. `ask_user`).
     pub events: Option<UnboundedSender<AgentEvent>>,
+    /// Folders the read tools may also read, by absolute path (library sources).
+    pub reference_dirs: Vec<PathBuf>,
 }
 
 impl ToolContext {
@@ -30,6 +32,7 @@ impl ToolContext {
             project_dir: Some(dir.into()),
             cancel: CancellationToken::new(),
             events: None,
+            reference_dirs: Vec::new(),
         }
     }
 }

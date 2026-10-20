@@ -55,6 +55,9 @@ pub struct AgentConfig {
     pub cost_basis: CostBasis,
     /// Daily spending limit in US dollars, across all projects.
     pub daily_cap_usd: Option<f64>,
+    /// Read-only folders outside the project the read tools may use (library
+    /// sources in AgentKnife's toolchain).
+    pub reference_dirs: Vec<PathBuf>,
 }
 
 impl AgentConfig {
@@ -73,6 +76,7 @@ impl AgentConfig {
             compact_at: 0.7,
             cost_basis: CostBasis::Unknown,
             daily_cap_usd: None,
+            reference_dirs: Vec::new(),
         }
     }
 }
@@ -496,6 +500,7 @@ impl Agent {
             project_dir: self.config.project_dir.clone(),
             cancel: cancel.clone(),
             events: Some(events.clone()),
+            reference_dirs: self.config.reference_dirs.clone(),
         };
         let mut state = TurnState::default();
         for step in 0..self.config.max_steps {

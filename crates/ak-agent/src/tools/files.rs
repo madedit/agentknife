@@ -4,7 +4,7 @@ use ak_types::chat::ToolSpec;
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
 
-use super::path::{display, resolve};
+use super::path::{display, resolve, resolve_read};
 use super::{MAX_OUTPUT_CHARS, SKIP_DIRS, cap, project_root, str_arg};
 use crate::tool::{Tool, ToolContext, ToolOutput};
 
@@ -27,13 +27,14 @@ impl Tool for ReadFile {
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "read_file".into(),
-            description: "Read a text file in the project. Long files are returned in pages of \
-                          lines; use `offset` to continue."
+            description: "Read a text file in the project, or a library's source in \
+                          AgentKnife's toolchain folder (an absolute path; read-only). Long \
+                          files are returned in pages of lines; use `offset` to continue."
                 .into(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "Project-relative path, e.g. src/app.rs" },
+                    "path": { "type": "string", "description": "Project-relative path, e.g. src/app.rs (or an absolute path to a library source)" },
                     "offset": { "type": "integer", "description": "First line to return (1-based). Default 1." },
                     "limit": { "type": "integer", "description": "Maximum number of lines. Default 2000." },
                 },
@@ -46,7 +47,8 @@ impl Tool for ReadFile {
         Box::pin(async move {
             let run = || -> Result<ToolOutput, ToolOutput> {
                 let root = project_root(ctx)?;
-                let path = resolve(root, str_arg(&args, "path")?).map_err(ToolOutput::error)?;
+                let path = resolve_read(root, &ctx.reference_dirs, str_arg(&args, "path")?)
+                    .map_err(ToolOutput::error)?;
                 let text = read_text(&path)?;
                 let lines: Vec<&str> = text.lines().collect();
                 let offset = args["offset"].as_u64().map_or(1, |n| n.max(1) as usize);
@@ -228,8 +230,12 @@ impl Tool for ListFiles {
         Box::pin(async move {
             let run = || -> Result<ToolOutput, ToolOutput> {
                 let root = project_root(ctx)?;
-                let dir = resolve(root, args["path"].as_str().unwrap_or("."))
-                    .map_err(ToolOutput::error)?;
+                let dir = resolve_read(
+                    root,
+                    &ctx.reference_dirs,
+                    args["path"].as_str().unwrap_or("."),
+                )
+                .map_err(ToolOutput::error)?;
                 if !dir.is_dir() {
                     return Err(ToolOutput::error("That is not a folder."));
                 }

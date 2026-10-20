@@ -1,5 +1,6 @@
 //! Project-relative paths. Every tool resolves paths here, so nothing outside the
-//! project can be read or written, whatever the permission policy says.
+//! project can be written, whatever the permission policy says. Reading also
+//! reaches the reference folders (library sources in AgentKnife's toolchain).
 
 use std::path::{Component, Path, PathBuf};
 
@@ -45,9 +46,33 @@ pub fn resolve(root: &Path, rel: &str) -> Result<PathBuf, String> {
     Ok(full)
 }
 
-/// Project-relative display form with `/` separators.
+/// For reading: an absolute path inside one of `references` (read-only library
+/// sources), else [`resolve`] inside the project.
+pub fn resolve_read(root: &Path, references: &[PathBuf], rel: &str) -> Result<PathBuf, String> {
+    let p = Path::new(rel.trim());
+    if p.is_absolute() {
+        let real = p
+            .canonicalize()
+            .map_err(|e| format!("Cannot access that path: {e}"))?;
+        let inside = references
+            .iter()
+            .filter_map(|r| r.canonicalize().ok())
+            .any(|r| real.starts_with(r));
+        return if inside {
+            Ok(p.to_path_buf())
+        } else {
+            Err(OUTSIDE.into())
+        };
+    }
+    resolve(root, rel)
+}
+
+/// Project-relative display form with `/` separators (absolute for files outside
+/// the project, i.e. in a reference folder).
 pub fn display(root: &Path, path: &Path) -> String {
-    let rel = path.strip_prefix(root).unwrap_or(path);
+    let Ok(rel) = path.strip_prefix(root) else {
+        return path.display().to_string();
+    };
     let s: Vec<String> = rel
         .components()
         .map(|c| c.as_os_str().to_string_lossy().into_owned())
@@ -62,6 +87,22 @@ pub fn display(root: &Path, path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reference_folders_are_readable_by_absolute_path() {
+        let project = tempfile::tempdir().unwrap();
+        let lib = tempfile::tempdir().unwrap();
+        std::fs::write(lib.path().join("lib.rs"), "pub fn x() {}").unwrap();
+        let refs = vec![lib.path().to_path_buf()];
+        let abs = lib.path().join("lib.rs");
+        let abs = abs.to_str().unwrap();
+        assert!(resolve_read(project.path(), &refs, abs).is_ok());
+        // Not a reference folder: refused, as before.
+        assert!(resolve_read(project.path(), &[], abs).is_err());
+        // Writing tools keep using `resolve`, which never allows it.
+        assert!(resolve(project.path(), abs).is_err());
+        assert_eq!(display(project.path(), Path::new(abs)), abs);
+    }
 
     #[test]
     fn inside_paths_resolve() {

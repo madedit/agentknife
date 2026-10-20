@@ -154,6 +154,9 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
         &effective.model,
     );
 
+    // Library sources the AI may read without asking (no keys or user data there).
+    config.reference_dirs = reference_dirs(&state.toolchain);
+    let config_refs = config.reference_dirs.clone();
     let bridge = Arc::new(UiBridge(state.pending.clone()));
     let env = ToolEnv {
         path_prefix: state.tools.path_prefix.clone(),
@@ -165,7 +168,9 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
         caps.vision,
     );
     Ok(Agent::new(provider, registry, config)
-        .with_gate(Arc::new(ProjectPolicy::new(mode)))
+        .with_gate(Arc::new(
+            ProjectPolicy::new(mode).with_reference_dirs(config_refs),
+        ))
         .with_confirmer(bridge.clone())
         .with_plan_reviewer(bridge)
         .with_preview(parts.preview.clone())
@@ -175,6 +180,16 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
         .with_checkpointer(Arc::new(Checkpoints(parts.root.clone())))
         .with_store(Arc::new(Store(parts.project.clone())))
         .with_usage_ledger(state.ledger.clone()))
+}
+
+/// The toolchain's library sources: crates (registry, git) and Rust's own.
+/// Not the whole toolchain folder: cargo's credentials file lives there.
+pub fn reference_dirs(tc: &ak_doctor::Toolchain) -> Vec<PathBuf> {
+    vec![
+        tc.cargo_home().join("registry"),
+        tc.cargo_home().join("git"),
+        tc.rustup_home().join("toolchains"),
+    ]
 }
 
 /// What a turn starts from.

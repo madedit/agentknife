@@ -5,7 +5,7 @@ use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
 
 use super::files::walker;
-use super::path::{display, resolve};
+use super::path::{display, resolve_read};
 use super::{project_root, str_arg};
 use crate::tool::{Tool, ToolContext, ToolOutput};
 
@@ -39,8 +39,12 @@ impl Tool for SearchFiles {
         Box::pin(async move {
             let run = || -> Result<ToolOutput, ToolOutput> {
                 let root = project_root(ctx)?;
-                let dir = resolve(root, args["path"].as_str().unwrap_or("."))
-                    .map_err(ToolOutput::error)?;
+                let dir = resolve_read(
+                    root,
+                    &ctx.reference_dirs,
+                    args["path"].as_str().unwrap_or("."),
+                )
+                .map_err(ToolOutput::error)?;
                 let re = regex::RegexBuilder::new(str_arg(&args, "pattern")?)
                     .case_insensitive(args["case_insensitive"].as_bool().unwrap_or(false))
                     .build()

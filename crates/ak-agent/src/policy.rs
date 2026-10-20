@@ -1,5 +1,7 @@
 //! The default permission policy (SPEC §5, AGENTS.md §4 "Permissions"):
 //! - work inside the project runs automatically;
+//! - reading the reference folders (library sources in AgentKnife's toolchain) too,
+//!   with the read tools or with commands that only read;
 //! - downloads/installs, anything outside the project, and deletions ask the user;
 //! - path escapes, edits to `.git`, and commands that could damage the computer are
 //!   refused.
@@ -16,7 +18,7 @@ use serde_json::Value;
 
 use crate::permission::{Decision, PermissionGate};
 use crate::tool::ToolContext;
-use crate::tools::path::resolve;
+use crate::tools::path::{resolve, resolve_read};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -30,11 +32,23 @@ pub enum PermissionMode {
 
 pub struct ProjectPolicy {
     mode: PermissionMode,
+    /// Read-only folders outside the project (library sources).
+    references: Vec<PathBuf>,
 }
 
 impl ProjectPolicy {
     pub fn new(mode: PermissionMode) -> Self {
-        Self { mode }
+        Self {
+            mode,
+            references: Vec::new(),
+        }
+    }
+
+    /// Lets the read tools and read-only commands use these folders without
+    /// asking. They hold public library code: no user data, no keys.
+    pub fn with_reference_dirs(mut self, dirs: Vec<PathBuf>) -> Self {
+        self.references = dirs;
+        self
     }
 }
 
@@ -82,11 +96,16 @@ impl PermissionGate for ProjectPolicy {
             (d, _) => d,
         };
         match tool {
-            "read_file" | "list_files" | "search_files" => file_decision(root, path_arg, false),
+            "read_file" | "list_files" | "search_files" => {
+                match resolve_read(root, &self.references, path_arg) {
+                    Ok(_) => Decision::Allow,
+                    Err(_) => deny(ConfirmKind::PathEscape, path_arg),
+                }
+            }
             "write_file" | "edit_file" => change(file_decision(root, path_arg, true), path_arg),
             "run_command" => {
                 let cmd = args["command"].as_str().unwrap_or_default();
-                change(classify_command(cmd, root), cmd)
+                change(classify_with(cmd, root, &self.references), cmd)
             }
             // Reads AgentKnife's built-in docs; touches nothing.
             "ask_user" | crate::tools::READ_KNOWLEDGE => Decision::Allow,
@@ -121,10 +140,50 @@ fn file_decision(root: &Path, rel: &str, writes: bool) -> Decision {
 
 /// Classifies a shell command line. The strictest segment decides.
 pub fn classify_command(command: &str, root: &Path) -> Decision {
+    classify_with(command, root, &[])
+}
+
+/// [`classify_command`] where commands that only read may use `references`.
+pub fn classify_with(command: &str, root: &Path, references: &[PathBuf]) -> Decision {
     split_segments(command)
         .iter()
-        .map(|seg| classify_segment(seg, root, 0))
+        .map(|seg| classify_segment(seg, root, references, 0))
         .fold(Decision::Allow, stricter)
+}
+
+/// Commands that only read or list (no writing, no deleting, no running other
+/// programs). `find` is not here: POSIX `find` can `-delete` and `-exec`.
+const READERS: &[&str] = &[
+    "type",
+    "cat",
+    "more",
+    "less",
+    "head",
+    "tail",
+    "findstr",
+    "grep",
+    "egrep",
+    "fgrep",
+    "rg",
+    "dir",
+    "ls",
+    "tree",
+    "wc",
+    "get-content",
+    "gc",
+    "select-string",
+    "sls",
+    "get-childitem",
+    "gci",
+    "get-item",
+    "gi",
+    "test-path",
+    "resolve-path",
+];
+
+/// `>file`, `2>>file`: the command writes there.
+fn is_redirect(t: &str) -> bool {
+    t.trim_start_matches(['0', '1', '2', '*']).starts_with('>')
 }
 
 const DANGEROUS: &[&str] = &[
@@ -174,7 +233,7 @@ const DOWNLOADERS: &[&str] = &[
 const ELEVATORS: &[&str] = &["sudo", "doas", "runas", "su", "gsudo"];
 const SHELLS: &[&str] = &["cmd", "sh", "bash", "zsh", "powershell", "pwsh"];
 
-fn classify_segment(tokens: &[String], root: &Path, depth: u8) -> Decision {
+fn classify_segment(tokens: &[String], root: &Path, refs: &[PathBuf], depth: u8) -> Decision {
     let mut tokens: &[String] = tokens;
     // Skip `KEY=value` environment prefixes.
     while tokens.first().is_some_and(|t| is_env_assignment(t)) {
@@ -189,12 +248,20 @@ fn classify_segment(tokens: &[String], root: &Path, depth: u8) -> Decision {
     let sub = lower.first().map(String::as_str).unwrap_or("");
     let full = tokens.join(" ");
 
-    let mut decision = paths_outside(tokens, root)
-        .map_or(Decision::Allow, |p| ask(ConfirmKind::OutsideProject, p));
+    // Reading library sources needs no OK; anything else outside the project does.
+    let reads_references = READERS.contains(&word.as_str())
+        && !tokens.iter().any(|t| is_redirect(t))
+        && outside_paths(tokens, root)
+            .iter()
+            .all(|(_, p)| refs.iter().any(|r| within(r, Path::new(p))));
+    let mut decision = match paths_outside(tokens, root) {
+        Some(p) if !reads_references => ask(ConfirmKind::OutsideProject, p),
+        _ => Decision::Allow,
+    };
 
     if ELEVATORS.contains(&word.as_str()) {
         let inner = if depth < 3 {
-            classify_segment(rest, root, depth + 1)
+            classify_segment(rest, root, refs, depth + 1)
         } else {
             Decision::Allow
         };
@@ -216,7 +283,7 @@ fn classify_segment(tokens: &[String], root: &Path, depth: u8) -> Decision {
             let inner = rest[i + 1..].join(" ");
             let nested = split_segments(&inner)
                 .iter()
-                .map(|s| classify_segment(s, root, depth + 1))
+                .map(|s| classify_segment(s, root, refs, depth + 1))
                 .fold(Decision::Allow, stricter);
             return stricter(nested, decision);
         }
@@ -285,14 +352,25 @@ fn is_filesystem_root(t: &str) -> bool {
 
 /// The first argument that points outside the project, if any.
 fn paths_outside(tokens: &[String], root: &Path) -> Option<String> {
-    tokens.iter().find_map(|tok| {
-        // `--out=../x`, `>../log.txt`, `2>>C:\x` -> the path part
-        let t = tok
-            .trim_start_matches(['0', '1', '2'])
-            .trim_start_matches('>');
-        let t = t.rsplit_once('=').map_or(t, |(_, v)| v);
-        is_outside(t, root).then(|| tok.clone())
-    })
+    outside_paths(tokens, root)
+        .into_iter()
+        .next()
+        .map(|(tok, _)| tok)
+}
+
+/// Every argument that points outside the project: (the token, its path part).
+fn outside_paths(tokens: &[String], root: &Path) -> Vec<(String, String)> {
+    tokens
+        .iter()
+        .filter_map(|tok| {
+            // `--out=../x`, `>../log.txt`, `2>>C:\x` -> the path part
+            let t = tok
+                .trim_start_matches(['0', '1', '2'])
+                .trim_start_matches('>');
+            let t = t.rsplit_once('=').map_or(t, |(_, v)| v);
+            is_outside(t, root).then(|| (tok.clone(), t.to_owned()))
+        })
+        .collect()
 }
 
 fn is_outside(t: &str, root: &Path) -> bool {
@@ -457,6 +535,56 @@ mod tests {
             split_segments("type \"my folder\\a.txt\""),
             vec![vec!["type", "my folder\\a.txt"]]
         );
+    }
+
+    #[test]
+    fn library_sources_can_be_read_without_asking() {
+        let project = tempfile::tempdir().unwrap();
+        let lib = tempfile::tempdir().unwrap();
+        let src = lib.path().join("tauri-utils").join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("lib.rs"), "pub fn x() {}").unwrap();
+        let file = src.join("lib.rs").to_string_lossy().into_owned();
+        let folder = src.to_string_lossy().into_owned();
+        let ctx = ToolContext::for_project(project.path());
+        let refs = vec![lib.path().to_path_buf()];
+        let policy = ProjectPolicy::new(PermissionMode::Standard).with_reference_dirs(refs.clone());
+        let plain = ProjectPolicy::new(PermissionMode::Standard);
+        let cmd = |p: &ProjectPolicy, c: &str| {
+            kind(&p.check("run_command", &json!({ "command": c }), &ctx))
+        };
+        let tool = |p: &ProjectPolicy, t: &str, path: &str| {
+            kind(&p.check(t, &json!({ "path": path, "pattern": "x" }), &ctx))
+        };
+
+        // Reading: no question with the reference folder, the old question without.
+        for c in [
+            format!("type \"{file}\""),
+            format!("findstr /n resolve \"{file}\""),
+            format!("rg -n \"fn x\" \"{folder}\""),
+            format!("Get-Content \"{file}\" | Select-String x"),
+        ] {
+            assert_eq!(cmd(&policy, &c), "allow", "{c}");
+            assert_eq!(cmd(&plain, &c), "ask:OutsideProject", "{c}");
+        }
+        for t in ["read_file", "list_files", "search_files"] {
+            let path = if t == "read_file" { &file } else { &folder };
+            assert_eq!(tool(&policy, t, path), "allow", "{t}");
+            assert_eq!(tool(&plain, t, path), "deny:PathEscape", "{t}");
+        }
+        // Writing, deleting or redirecting there still asks; other folders too.
+        for c in [
+            format!("copy src\\a.rs \"{folder}\""),
+            format!("del \"{file}\""),
+            format!("type a.txt > \"{file}\""),
+            "type C:\\Windows\\win.ini".to_owned(),
+        ] {
+            assert_ne!(cmd(&policy, &c), "allow", "{c}");
+        }
+        assert_eq!(tool(&policy, "write_file", &file), "deny:PathEscape");
+        // In "ask before every change" mode, commands still ask (as before).
+        let strict = ProjectPolicy::new(PermissionMode::AskEveryChange).with_reference_dirs(refs);
+        assert_eq!(cmd(&strict, &format!("type \"{file}\"")), "ask:Change");
     }
 
     /// (tool, args, expected) for every rule.
