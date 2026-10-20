@@ -10,7 +10,7 @@ use ak_providers::{
 use ak_types::agent::{
     AgentEvent, ConfirmKind, ConfirmReason, PlanDecision, PlanProposal, TokenUsage, TurnOutcome,
 };
-use ak_types::chat::{ContentPart, Conversation, Message, ToolCall};
+use ak_types::chat::{ContentPart, Conversation, Entry, Message, ToolCall};
 use ak_types::i18n::Locale;
 use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
@@ -23,7 +23,7 @@ use crate::new_id;
 use crate::permission::{ConfirmRequest, Confirmer, Decision, DeclineAll, PermissionGate};
 use crate::plan::{CancelPlans, PlanReviewer};
 use crate::policy::{PermissionMode, ProjectPolicy};
-use crate::prompt::{PLAN_TOOL, PlanMode, plan_tool_spec, system_prompt};
+use crate::prompt::{PLAN_TOOL, PlanMode, greeting_note, plan_tool_spec, system_prompt};
 use crate::tool::{ToolContext, ToolOutput, ToolRegistry, split_label};
 use crate::usage::{CapStatus, CostBasis, Totals, UsageLedger};
 
@@ -231,6 +231,48 @@ impl Agent {
         conversation.push_context(notes);
         self.store.save(conversation)?;
         Ok(true)
+    }
+
+    /// The first message after the user connects an AI: a greeting in the UI
+    /// language that explains AgentKnife and proposes checking the development tools.
+    /// `None` (nothing done) once the conversation has any message.
+    pub async fn greet(
+        &self,
+        conversation: &mut Conversation,
+        events: &Events,
+        cancel: &CancellationToken,
+    ) -> Option<TurnOutcome> {
+        let started = conversation
+            .entries()
+            .iter()
+            .any(|e| matches!(e, Entry::Message(_) | Entry::Compaction { .. }));
+        if started {
+            return None;
+        }
+        conversation.push_context(greeting_note(self.config.ui_locale));
+        if let Err(e) = self.store.save(conversation) {
+            return Some(finish(events, save_failed(e)));
+        }
+        let turn_id = new_id("turn");
+        emit(
+            events,
+            AgentEvent::TurnStarted {
+                turn_id: turn_id.clone(),
+            },
+        );
+        // Nothing in the project changes: no lock, and the checkpointer finds no change.
+        Some(
+            self.drive(
+                conversation,
+                events,
+                cancel,
+                turn_id,
+                String::new(),
+                None,
+                Vec::new(),
+            )
+            .await,
+        )
     }
 
     /// Runs one user turn to completion. Appends to `conversation` only (never edits

@@ -90,9 +90,14 @@
     - simulated crash (future dropped mid-tool) then resume; mutation-checked.
   - Live: 5 rolling zh-TW summaries, and the name and colour from turn 1 were remembered after compaction.
   - Fixed during the live check: the reported context size was reset every turn, and the estimate ignored the system prompt and tools.
-- P1-AGENT-006 — (hash in next commit) — usage and cost:
+- P1-AGENT-006 — 5571acc — usage and cost:
   - `ak_agent::usage`: dated Anthropic price table (Haiku 5.5 tiered above 100K prompt tokens). `cost_basis` returns Priced / Free (local endpoints, Ollama, LM Studio) / Unknown, and never guesses.
   - UsageLedger: per-day totals in usage.json (local date, all projects, 400 days kept). Session totals in the Agent. UsageTotals event after every model call, compaction calls included.
   - Daily cap: BudgetWarning once at 80%; at 100%, a DailyCap confirmation once a day; declining ends the turn as OverBudget.
   - Resolved the usage-semantics item: only official endpoints are priced.
   - Tests: unit + 4 integration (mutation-checked); float tolerance on cap checks.
+- P1-AGENT-007 — (hash in next commit) — first greeting and versioned product prompt:
+  - `crates/ak-agent/prompts/system.md` (prompt-version 1), exposed as `prompt::product_prompt()` / `product_prompt_version()`.
+  - `Agent::greet` runs once, on a conversation without messages (session notes do not count); takes no lock; asks for the UI language explicitly.
+  - Test with the fake LLM.
+  - Live (zh-TW and en, real product prompt plus all 8 tools): greeting in the right language, 4 points, proposes the tool check and asks to start, 0 tool calls.

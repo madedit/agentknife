@@ -48,6 +48,45 @@ fn language_name(locale: Locale) -> &'static str {
     }
 }
 
+/// The product instructions, versioned in `prompts/system.md`.
+const PRODUCT_PROMPT: &str = include_str!("../prompts/system.md");
+const VERSION_TAG: &str = "<!-- prompt-version: ";
+
+/// The product instructions to pass as `AgentConfig::system` (without the version
+/// header).
+pub fn product_prompt() -> &'static str {
+    PRODUCT_PROMPT
+        .split_once('\n')
+        .filter(|(first, _)| first.starts_with(VERSION_TAG))
+        .map_or(PRODUCT_PROMPT, |(_, rest)| rest)
+        .trim()
+}
+
+/// `prompt-version` of `prompts/system.md`; bump it whenever the prompt changes, so
+/// behaviour changes can be traced to a prompt version.
+pub fn product_prompt_version() -> u32 {
+    PRODUCT_PROMPT
+        .strip_prefix(VERSION_TAG)
+        .and_then(|r| r.split_once(' '))
+        .and_then(|(v, _)| v.parse().ok())
+        .unwrap_or(0)
+}
+
+/// What the agent is asked to say when a user first connects an AI.
+pub fn greeting_note(ui_locale: Locale) -> String {
+    format!(
+        "The user just connected AgentKnife to an AI and has not written anything yet. \
+         Write in {lang}. Greet them warmly in one sentence. Then explain in 3 or 4 short \
+         points what AgentKnife can do for them: build a desktop app from a description, \
+         show it live in the preview while you work, let them point at things to change, \
+         and turn it into an installer at the end. Then suggest the first step: checking \
+         that the development tools are installed on this computer (AgentKnife does it \
+         for them and asks before installing anything). End by asking whether to start \
+         that check. Keep it short and friendly; do not call any tools.",
+        lang = language_name(ui_locale)
+    )
+}
+
 /// `base` (product instructions, P1-AGENT-007) followed by the behaviour rules.
 pub fn system_prompt(base: Option<&str>, ui_locale: Locale, plan_mode: PlanMode) -> String {
     let mut s = String::new();
@@ -100,6 +139,21 @@ pub fn system_prompt(base: Option<&str>, ui_locale: Locale, plan_mode: PlanMode)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn product_prompt_is_versioned_and_header_free() {
+        assert!(product_prompt_version() >= 1);
+        let p = product_prompt();
+        assert!(p.starts_with("You are AgentKnife"));
+        assert!(!p.contains("prompt-version"));
+        assert!(p.contains("data-ak-id") && p.contains("Node.js"));
+    }
+
+    #[test]
+    fn greeting_names_the_ui_language() {
+        assert!(greeting_note(Locale::ZhTw).contains("Write in Traditional Chinese"));
+        assert!(greeting_note(Locale::En).contains("development tools"));
+    }
 
     #[test]
     fn rules_follow_locale_and_plan_mode() {
