@@ -216,14 +216,46 @@ impl OpenAiCompat {
                 openrouter_caps(&list, model)
                     .ok_or_else(|| ProviderError::ModelNotFound(model.to_owned()))
             }
-            // OpenAI's /models has no capability data; generic servers are unknown.
-            // Assume tool calling and let the first request tell.
-            Flavor::OpenAi | Flavor::Generic => Ok(Capabilities {
+            // Some servers (llama.cpp-style) put context size and input modalities in
+            // their /models entries; tool support is never listed, so assume it.
+            Flavor::Generic => {
+                let list = self.cached_list(self.url("/models")).await.ok();
+                Ok(list
+                    .and_then(|l| generic_caps(&l, model))
+                    .unwrap_or(Capabilities {
+                        tool_calling: true,
+                        ..Capabilities::default()
+                    }))
+            }
+            // OpenAI's /models has no capability data (Responses adapter: P1-PROV-005).
+            Flavor::OpenAi => Ok(Capabilities {
                 tool_calling: true,
                 ..Capabilities::default()
             }),
         }
     }
+}
+
+/// Best effort for unknown servers: `meta.n_ctx` (llama.cpp), `context_length`, or
+/// `max_context_length`, plus `architecture.input_modalities`.
+fn generic_caps(list: &Value, model: &str) -> Option<Capabilities> {
+    let m = list["data"].as_array()?.iter().find(|m| m["id"] == model)?;
+    let context = [
+        &m["meta"]["n_ctx"],
+        &m["context_length"],
+        &m["max_context_length"],
+    ]
+    .into_iter()
+    .find_map(|v| v.as_u64().and_then(|n| u32::try_from(n).ok()));
+    Some(Capabilities {
+        tool_calling: true,
+        vision: m["architecture"]["input_modalities"]
+            .as_array()
+            .is_some_and(|a| a.iter().any(|v| v == "image")),
+        thinking: false,
+        context_window: context,
+        max_output_tokens: None,
+    })
 }
 
 fn ollama_caps(show: &Value) -> Capabilities {
@@ -434,6 +466,19 @@ mod tests {
         assert!(!c.tool_calling, "no `tools` capability => flagged");
         assert!(c.vision);
         assert_eq!(c.context_window, Some(8192));
+    }
+
+    #[test]
+    fn generic_capabilities_from_llama_cpp_style_list() {
+        let list = json!({ "data": [{
+            "id": "qwen3.8-flash-next-gptq-nvfp4",
+            "meta": { "n_ctx": 245760 },
+            "architecture": { "input_modalities": ["text", "image"] }
+        }]});
+        let c = generic_caps(&list, "qwen3.8-flash-next-gptq-nvfp4").unwrap();
+        assert!(c.tool_calling && c.vision);
+        assert_eq!(c.context_window, Some(245_760));
+        assert!(generic_caps(&list, "other").is_none());
     }
 
     #[test]

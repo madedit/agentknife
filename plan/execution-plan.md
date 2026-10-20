@@ -131,6 +131,19 @@ APP and E2E integrate all tracks.
   - Test: a history recorded with the Anthropic adapter continues correctly with the OpenAI-compatible adapter.
   - At turn start the loop writes `.agentknife/turn.lock` (request, touched files, current step), and removes it after the turn's checkpoint.
 
+### P1-PROV-005 — OpenAI Responses API adapter
+- Crate(s): ak-providers
+- Owner: unassigned
+- Depends on: P1-AGENT-001 (scheduled after it, by owner decision 2026-10-20)
+- Acceptance:
+  - `Flavor::OpenAi` uses `POST /v1/responses` instead of Chat Completions. OpenAI's current models (GPT-6 Astra, GPT-6.1 Sol) only support tool calling there.
+  - Streams text, reasoning summaries, function calls and usage into neutral `StreamEvent`s.
+  - Encrypted reasoning items are kept in `ProviderReplay` and echoed back.
+  - Images are allowed in function output.
+  - The capability table for OpenAI models is version-pinned in code and dated.
+  - Fixtures cover text, reasoning + tool round trip, vision and errors, re-checked against the official docs at implementation time.
+  - Until this lands, OpenAI models are reachable through OpenRouter.
+
 ### P1-AGENT-002 — Project tools
 - Crate(s): ak-agent
 - Owner: unassigned

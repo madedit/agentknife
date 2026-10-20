@@ -163,7 +163,13 @@ impl Anthropic {
         if let Some(m) = self.models.lock().ok().and_then(|m| m.get(model).cloned()) {
             return Ok(m);
         }
-        let meta = ModelMeta::from_json(&self.get_json(&format!("/v1/models/{model}")).await?);
+        let meta = match self.get_json(&format!("/v1/models/{model}")).await {
+            Ok(v) => ModelMeta::from_json(&v),
+            // Compatible servers and proxies often lack the models endpoint. Without
+            // it, send no model-specific options (thinking, effort, output clamp).
+            Err(ProviderError::ModelNotFound(_)) if !self.uses_claude_api() => ModelMeta::default(),
+            Err(e) => return Err(e),
+        };
         if let Ok(mut cache) = self.models.lock() {
             cache.insert(model.to_owned(), meta.clone());
         }

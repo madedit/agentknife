@@ -273,7 +273,15 @@ async fn recorded_fixtures_decode() {
             f.request.body = None; // Replay without knowing the original request.
         }
         let t = Arc::new(FixtureTransport::new(fx).rechunked(7));
-        let p = OpenAiCompat::new(OpenAiCompatConfig::for_flavor(flavor, None), t.clone());
+        let config = OpenAiCompatConfig {
+            base_url: flavor
+                .default_base_url()
+                .unwrap_or("http://recorded.invalid/v1")
+                .to_owned(),
+            api_key: None,
+            flavor,
+        };
+        let p = OpenAiCompat::new(config, t.clone());
         if probes > 0 {
             p.capabilities("recorded").await.ok();
         }

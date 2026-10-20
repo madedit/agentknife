@@ -352,7 +352,11 @@ async fn recorded_fixtures_decode() {
             f.request.body = None; // Replay without knowing the original request.
         }
         let t = Arc::new(FixtureTransport::new(fx).rechunked(7));
-        let p = Anthropic::new(AnthropicConfig::new("sk-ant-test"), t.clone());
+        // Recordings may come from a compatible server without a models endpoint;
+        // a non-Claude-API base URL enables the same fallback used there.
+        let mut config = AnthropicConfig::new("sk-ant-test");
+        config.base_url = "http://recorded.invalid".into();
+        let p = Anthropic::new(config, t.clone());
         for _ in 0..posts {
             let model = model.clone().unwrap();
             let s = p

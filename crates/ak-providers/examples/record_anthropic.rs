@@ -6,6 +6,8 @@
 //! ```text
 //! ANTHROPIC_API_KEY=... cargo run -p ak-providers --example record_anthropic
 //! # optional: AK_RECORD_MODEL=claude-sonnet-5-5
+//! # optional: AK_BASE_URL=http://127.0.0.1:8080 (an Anthropic-compatible server;
+//! #           then ANTHROPIC_API_KEY may be any placeholder)
 //! ```
 
 use std::error::Error;
@@ -117,7 +119,11 @@ where
     Fut: Future<Output = Result<()>>,
 {
     let recorder = Arc::new(RecordingTransport::new(ReqwestTransport::new()?));
-    let provider = Arc::new(Anthropic::new(AnthropicConfig::new(key), recorder.clone()));
+    let mut config = AnthropicConfig::new(key);
+    if let Ok(base) = std::env::var("AK_BASE_URL") {
+        config.base_url = base;
+    }
+    let provider = Arc::new(Anthropic::new(config, recorder.clone()));
     scenario(provider).await?;
     let fixtures = recorder.take();
     let path = out.join(format!("{name}.json"));

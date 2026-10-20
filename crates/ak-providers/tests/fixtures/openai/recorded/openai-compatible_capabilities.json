@@ -1,0 +1,22 @@
+[
+  {
+    "source": "recorded",
+    "request": {
+      "method": "GET",
+      "path": "/v1/models",
+      "body": null
+    },
+    "response": {
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json"
+        ]
+      ],
+      "chunks": [
+        "{\"object\": \"list\", \"data\": [{\"id\": \"qwen3.8-flash-next-gptq-nvfp4\", \"object\": \"model\", \"status\": {\"value\": \"loaded\"}, \"meta\": {\"n_ctx\": 245760}, \"architecture\": {\"input_modalities\": [\"text\", \"image\"], \"output_modalities\": [\"text\"]}}]}"
+      ]
+    }
+  }
+]

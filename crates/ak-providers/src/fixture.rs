@@ -129,6 +129,28 @@ impl HttpTransport for FixtureTransport {
     }
 }
 
+/// Accumulates one response body and stores its fixture on drop.
+struct Capture {
+    bytes: Vec<u8>,
+    fixture: Option<Fixture>,
+    recorded: Arc<Mutex<Vec<Option<Fixture>>>>,
+    slot: usize,
+}
+
+impl Drop for Capture {
+    fn drop(&mut self) {
+        let Some(mut fixture) = self.fixture.take() else {
+            return;
+        };
+        fixture.response.chunks = vec![String::from_utf8_lossy(&self.bytes).into_owned()];
+        if let Ok(mut r) = self.recorded.lock()
+            && let Some(s) = r.get_mut(self.slot)
+        {
+            *s = Some(fixture);
+        }
+    }
+}
+
 /// Response headers worth keeping in a fixture. Everything else (cookies, org ids,
 /// rate-limit details) is dropped.
 const KEPT_HEADERS: &[&str] = &["content-type", "retry-after", "request-id"];
@@ -151,9 +173,10 @@ impl<T: HttpTransport> RecordingTransport<T> {
     /// Completed exchanges in request order. A response is complete once its body
     /// has been read to the end.
     pub fn take(&self) -> Vec<Fixture> {
+        // Slots stay in place so responses still being read land correctly later.
         self.recorded
             .lock()
-            .map(|mut r| r.drain(..).flatten().collect())
+            .map(|mut r| r.iter_mut().filter_map(Option::take).collect())
             .unwrap_or_default()
     }
 }
@@ -187,41 +210,32 @@ impl<T: HttpTransport> HttpTransport for RecordingTransport<T> {
                 .cloned()
                 .collect();
             let status = resp.status;
-            let buf: Arc<Mutex<Vec<u8>>> = Arc::default();
-            let tee = buf.clone();
-            let recorded = self.recorded.clone();
-            let kept = headers.clone();
-            let body = resp.body.inspect(move |chunk| {
-                if let (Ok(c), Ok(mut b)) = (chunk, tee.lock()) {
-                    b.extend_from_slice(c);
-                }
-            });
-            let finish = stream::once(async move {
-                let bytes = buf
-                    .lock()
-                    .map(|mut b| std::mem::take(&mut *b))
-                    .unwrap_or_default();
-                let fixture = Fixture {
+            // Decoders stop reading at their end marker (`[DONE]`, `message_stop`)
+            // without draining the body, so the fixture is written when the body
+            // stream is dropped, with whatever was read.
+            let mut capture = Capture {
+                bytes: Vec::new(),
+                fixture: Some(Fixture {
                     source: Some("recorded".into()),
                     request: recorded_request,
                     response: RecordedResponse {
                         status,
-                        headers: kept,
-                        chunks: vec![String::from_utf8_lossy(&bytes).into_owned()],
+                        headers: headers.clone(),
+                        chunks: Vec::new(),
                     },
-                };
-                if let Ok(mut r) = recorded.lock()
-                    && let Some(s) = r.get_mut(slot)
-                {
-                    *s = Some(fixture);
+                }),
+                recorded: self.recorded.clone(),
+                slot,
+            };
+            let body = resp.body.inspect(move |chunk| {
+                if let Ok(c) = chunk {
+                    capture.bytes.extend_from_slice(c);
                 }
-                None::<Result<Vec<u8>, ProviderError>>
-            })
-            .filter_map(|x| async move { x });
+            });
             Ok(HttpResponse {
                 status,
                 headers,
-                body: body.chain(finish).boxed(),
+                body: body.boxed(),
             })
         })
     }
@@ -320,6 +334,29 @@ mod tests {
         let t = FixtureTransport::new(Vec::new());
         assert!(t.send(request("/v1/chat", "{}")).await.is_err());
         assert_eq!(t.sent().len(), 1);
+    }
+
+    /// Regression: a consumer that stops reading early (decoders stop at `[DONE]`)
+    /// must still produce a fixture once it drops the body.
+    #[tokio::test]
+    async fn recorder_saves_partially_read_bodies_on_drop() {
+        let inner = FixtureTransport::new(Fixture::load(fixture_path()).unwrap());
+        let rec = RecordingTransport::new(inner);
+        let mut resp = rec
+            .send(request("/v1/chat", r#"{"model":"m","stream":true}"#))
+            .await
+            .unwrap();
+        resp.body.next().await.unwrap().unwrap(); // read only the first chunk
+        assert!(
+            rec.take().is_empty(),
+            "not recorded while the body is alive"
+        );
+        drop(resp);
+        let saved = rec.take();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].source.as_deref(), Some("recorded"));
+        assert_eq!(saved[0].request.path, "/v1/chat");
+        assert!(saved[0].response.chunks[0].contains("keep-alive"));
     }
 
     #[test]
