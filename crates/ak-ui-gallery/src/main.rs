@@ -61,7 +61,7 @@ fn Gallery() -> impl IntoView {
     let remove = move |id: u32| items.update(|list| list.retain(|i| i.id != id));
 
     view! {
-        <main class="mx-auto flex max-w-2xl flex-col gap-6 p-6 text-gray-900 dark:text-gray-100">
+        <main data-ak-id="gallery-screen" class="mx-auto flex max-w-2xl flex-col gap-6 p-6 text-gray-900 dark:text-gray-100">
             <header class="flex flex-wrap items-center justify-between gap-4">
                 <h1 data-ak-id="gallery-title" class="text-2xl font-bold">
                     "ak-ui gallery"

@@ -47,7 +47,7 @@ fn Home() -> impl IntoView {
     };
 
     view! {
-        <main class="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-6 p-6">
+        <main data-ak-id="home-screen" class="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-6 p-6">
             <h1 data-ak-id="home-title" class="text-3xl font-bold">
                 "My App"
             </h1>

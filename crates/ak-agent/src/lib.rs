@@ -15,7 +15,8 @@ pub mod tools;
 pub mod usage;
 
 pub use agent::{
-    Agent, AgentConfig, Checkpointer, ConversationStore, NoCheckpoints, NoStore, TurnSummary,
+    Agent, AgentConfig, Checkpointer, ConversationStore, IdPass, NoCheckpoints, NoStore,
+    TurnSummary,
 };
 
 pub(crate) use ak_types::ids::new_id;

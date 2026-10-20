@@ -212,7 +212,12 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Remove `NO_COLOR`: trunk parses it as a true/false flag, and `NO_COLOR=1` makes it exit.
   - Set `TRUNK_SKIP_VERSION_CHECK=true`; otherwise trunk checks the network for updates.
 - **Point-and-select:**
-  - Every meaningful element in generated UI carries a stable `data-ak-id`. The agent must add these, and AgentKnife may auto-insert missing ones.
+  - Every meaningful element in generated UI carries a stable `data-ak-id`. The agent must add these, and AgentKnife auto-inserts missing ones.
+    - `StackProfile::add_missing_ids(rel_path, source)` (default: none). For tauri-leptos it is `ak_preview::ids` on `src/**.rs`: syn (span-locations) finds each `view!`, rstml 0.13 parses it like leptos_macro (`recover_block`), and ` data-ak-id="…"` goes right after the tag name.
+    - Only meaningful lowercase HTML elements without an id (buttons, links, inputs, headings, lists, landmarks…). Never components (they take `ak_id`), and never `view!` inside closures (rows, `.map`, `move ||`), where a fixed id would repeat; those need ids built from data, which the agent writes.
+    - Ids are words from the text or a describing attribute plus the kind (`sign-up-button`, `email-input`), else the component name; unique per file (-2, -3). The pass is idempotent, and a file that does not parse is left alone.
+    - `Agent::with_id_pass` runs it on the turn's changed files when the model ends the turn, before the build check, and tells the preview.
+    - Template, examples and the gallery must already pass it unchanged (tested), so `<main>` screens carry ids too.
   - The inspector reports the id, DOM path, and screenshot rect via `postMessage`.
   - For `<canvas>` regions, send the screenshot rect and coordinates. Apps may implement `ak-bridge`'s `hit_test(x, y)` for exact mapping.
   - Generated frontends call `ak_bridge::start()` before mounting. Canvas apps may call `ak_bridge::set_hit_test(…)`, which receives canvas pixel coordinates. In release builds both are no-ops.
@@ -325,6 +330,7 @@ Prerequisites for developing AgentKnife:
 | See every ak-ui component (toolchain on PATH, see "Running trunk") | `cd crates/ak-ui-gallery && trunk serve` (http://127.0.0.1:47130) |
 | Real OS keychain round trip (writes and deletes a test entry) | `cargo test -p ak-providers --test credentials -- --ignored` |
 | Live check of the preview manager (new project, real toolchain; minutes) | `cargo run -p ak-preview --example preview_live` |
+| Add missing data-ak-ids to Leptos files, in place | `cargo run -p ak-preview --example add_ids -- <file.rs>…` |
 | Doctor report for this computer (read-only) | `cargo run -p ak-doctor --example doctor_report` |
 | Install the isolated toolchain for real (several hundred MB) | `cargo run -p ak-doctor --example doctor_install` |
 | Record real Anthropic fixtures (costs cents) | `ANTHROPIC_API_KEY=… cargo run -p ak-providers --example record_anthropic` |

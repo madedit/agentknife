@@ -1,4 +1,4 @@
-//! The live preview: runs a project's dev server and app backend from its stack's
+﻿//! The live preview: runs a project's dev server and app backend from its stack's
 //! `PreviewPlan` and reports their state ([`dev::Preview`]); plus the stack
 //! profiles ([`profiles`]).
 
@@ -6,6 +6,7 @@
 
 pub mod control;
 pub mod dev;
+pub mod ids;
 pub mod log;
 pub mod process;
 pub mod profiles;

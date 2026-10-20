@@ -10,6 +10,9 @@ ak-doctor = { path = "../ak-doctor" }
 ak-types.workspace = true
 futures-util.workspace = true
 getrandom.workspace = true
+proc-macro2.workspace = true
+rstml.workspace = true
+syn.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["process", "io-util", "sync", "time", "rt", "net", "macros"] }
 tokio-tungstenite.workspace = true

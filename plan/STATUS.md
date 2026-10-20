@@ -294,7 +294,7 @@
     - Cause: stdout and stderr were read from separate pipes, so a compiler error on stderr could arrive before the build-start line on stdout and be dropped, or arrive after the failure line. An agent could have read an error without the compiler message.
     - Fix: both streams share one OS pipe (std::io::pipe), so lines keep the order the process wrote them; after an exit the output is drained for up to 500 ms.
     - The test passed 15/15 runs, and preview_live passed again.
-- P1-PREV-002 — (hash in next commit) — agent-facing preview tools:
+- P1-PREV-002 — af462ae — agent-facing preview tools:
   - ak_types::preview copies of the bridge protocol: ControlAction (+is_read_only), DomSummary/DomItem (+render), AppState, ScreenshotArea, Picked, Rect, Size, CanvasPoint, PAGE_NOT_OPEN/PAGE_CLOSED (now shared constants in ak_bridge::protocol). New agent events BuildChecking / BuildChecked{ok, attempt, max} with fluent agent-build-* (en, zh-TW).
   - ak_preview:
     - control::Controller: the controller WebSocket client; reconnects only when sending fails, never re-sends.
@@ -312,3 +312,12 @@
     - "Change the Greet text": search/edit/build_status/dom_summary, build check ok, Completed.
     - "Add a Clear button and try it": implemented. After the watch fix, the agent typed, read, clicked and read again, and confirmed the field cleared with no failed steps; build check ok.
   - Not here: real screen capture (the Capturer comes from ak-app, P1-APP-001: WebView2 CapturePreview / CDP Page.captureScreenshot with clip, WKWebView takeSnapshot, webkit snapshot).
+- P1-PREV-003 — (hash in next commit) — data-ak-id auto-insert:
+  - ak_preview::ids::add_missing_ids(source, fallback): syn 3 (span-locations) finds view! bodies outside closures, rstml 0.13.1 parses them like leptos_macro 0.8.19 (recover_block), ` data-ak-id="…"` is inserted after the tag name of meaningful lowercase elements without one.
+    - Ids: own text, name, aria-label, alt, title, id, a meaningful input type, placeholder, else the component name (split camel case), else the file stem; plus the kind (button, link, input, checkbox, title, text, list, form…), not repeated when the words already end with it. Unique per file against existing data-ak-id/ak_id (-2, -3).
+  - StackProfile::add_missing_ids(rel_path, source) (default None); tauri-leptos runs it on src/**.rs and returns None when nothing changed or the file does not parse.
+  - ak_agent: Agent::with_id_pass(IdPass) runs it on the turn's changed files when the model ends the turn, before the build check, writes changed files and calls files_changed. Best effort (unreadable files are skipped).
+  - `<main>` in the template, the example-todo screens and the gallery got ids, so they pass unchanged.
+  - add_ids example: the pass as a CLI, in place.
+  - Tests: unit (naming, uniqueness, closures, components, idempotence); golden fixtures signup/todos (AK_BLESS=1 rewrites; output parses and is idempotent); the template and the worked example need no ids; the profile only touches src/**.rs; agent: the pass runs on the changed file, writes it, tells the preview, then the build check.
+  - Compile check: the knowledge-check project (check-knowledge) with its static ids stripped got them back from add_ids (todo-app-main, to-do-title), and 15 were added to snippets.rs; `cargo build --target wasm32-unknown-unknown --features dev` succeeded, so the inserted attributes are valid Leptos.

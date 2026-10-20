@@ -160,6 +160,20 @@ impl StackProfile for TauriLeptos {
         }
     }
 
+    fn add_missing_ids(&self, rel_path: &str, source: &str) -> Option<String> {
+        let path = rel_path.replace('\\', "/");
+        if !(path.starts_with("src/") && path.ends_with(".rs")) {
+            return None;
+        }
+        let stem = path
+            .rsplit('/')
+            .next()
+            .and_then(|f| f.strip_suffix(".rs"))
+            .unwrap_or("screen");
+        let (out, added) = crate::ids::add_missing_ids(source, stem).ok()?;
+        (!added.is_empty()).then_some(out)
+    }
+
     fn bundle(&self) -> BundlePlan {
         let (env, env_remove) = trunk_env();
         BundlePlan {

@@ -18,6 +18,12 @@ pub trait StackProfile: Send + Sync {
     fn doctor_requirements(&self) -> &'static [&'static str];
     fn preview(&self) -> PreviewPlan;
     fn bundle(&self) -> BundlePlan;
+
+    /// Adds missing `data-ak-id`s to a project file (relative path), if this stack
+    /// can. `None`: not a screen file, nothing missing, or it does not parse.
+    fn add_missing_ids(&self, _rel_path: &str, _source: &str) -> Option<String> {
+        None
+    }
 }
 
 impl DoctorReport {

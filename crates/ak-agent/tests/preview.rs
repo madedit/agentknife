@@ -406,3 +406,43 @@ async fn no_check_without_changes_or_without_a_running_preview() {
         "preview not running: no check"
     );
 }
+
+#[tokio::test]
+async fn the_id_pass_runs_on_the_changed_files_before_the_build_check() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("src")).unwrap();
+    std::fs::write(dir.path().join("src/main.rs"), "<button>").unwrap();
+    let p = Arc::new(ScriptedProvider::new(vec![
+        tool_calls(&[("c1", "write_file", "{}")]),
+        text("Done."),
+    ]));
+    let preview = FakePreview::with(vec![ok()]);
+    let mut config = AgentConfig::new("m");
+    config.project_dir = Some(dir.path().to_owned());
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let log = seen.clone();
+    let a = Agent::new(
+        p,
+        ToolRegistry::new().with(Arc::new(Write("src/main.rs"))),
+        config,
+    )
+    .with_gate(Arc::new(AllowAll))
+    .with_preview(preview.clone())
+    .with_id_pass(Arc::new(move |rel: &str, source: &str| {
+        log.lock().unwrap().push(rel.to_owned());
+        (!source.contains("data-ak-id")).then(|| source.replace(">", " data-ak-id=\"x\">"))
+    }));
+    let (outcome, events, _) = turn(&a, "add a button").await;
+    assert_eq!(outcome, TurnOutcome::Completed);
+    assert_eq!(*seen.lock().unwrap(), ["src/main.rs"]);
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("src/main.rs")).unwrap(),
+        "<button data-ak-id=\"x\">"
+    );
+    // The write and then the id pass told the preview; the build was checked after.
+    assert_eq!(
+        *preview.changed.lock().unwrap(),
+        vec![vec!["src/main.rs".to_owned()]; 2]
+    );
+    assert_eq!(build_events(&events), ["checking", "ok=true 0/3"]);
+}

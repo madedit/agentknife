@@ -52,6 +52,9 @@ web-sys = "0.3.106"
 wasm-bindgen-futures = "0.4.79"
 futures-channel = "0.3.34"
 getrandom = "0.3.4"
+syn = { version = "3.0.9", features = ["full", "visit", "parsing"] }
+proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
+rstml = { version = "0.13.1", default-features = false }
 
 [workspace.lints.clippy]
 # AGENTS.md §5: unwrap() is banned outside tests (see clippy.toml).

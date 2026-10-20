@@ -161,7 +161,13 @@ pub struct Agent {
     /// The project's running preview: told about file changes, and checked for a
     /// working build before a turn that changed files ends.
     preview: Option<Arc<dyn PreviewAccess>>,
+    /// Gives the files a turn changed their missing `data-ak-id`s.
+    id_pass: Option<IdPass>,
 }
+
+/// `(path relative to the project, source) -> new source`, `None` when nothing
+/// changes (the stack profile's `add_missing_ids`).
+pub type IdPass = Arc<dyn Fn(&str, &str) -> Option<String> + Send + Sync>;
 
 type Events = UnboundedSender<AgentEvent>;
 
@@ -182,7 +188,15 @@ impl Agent {
             config,
             system,
             preview: None,
+            id_pass: None,
         }
+    }
+
+    /// Connects the id pass (see the `id_pass` field), run when the model ends
+    /// a turn that changed files, before the build check.
+    pub fn with_id_pass(mut self, pass: IdPass) -> Self {
+        self.id_pass = Some(pass);
+        self
     }
 
     /// Connects the project's preview (see the `preview` field).
@@ -522,7 +536,9 @@ impl Agent {
                 if assembled.stop_reason == StopReason::MaxTokens {
                     return TurnOutcome::MaxTokens;
                 }
-                // The model is done. If it changed files, the app must still build.
+                // The model is done. What it added gets ids the user can point
+                // at, and if it changed files, the app must still build.
+                self.add_ids(touched).await;
                 match self
                     .check_build(conversation, events, touched, &mut state)
                     .await
@@ -603,6 +619,31 @@ impl Agent {
             }
         }
         TurnOutcome::StepLimit
+    }
+
+    /// Runs the id pass over the turn's changed files. Best effort: a file that
+    /// cannot be read or written stays as it is.
+    async fn add_ids(&self, touched: &[String]) {
+        let (Some(pass), Some(root)) = (&self.id_pass, &self.config.project_dir) else {
+            return;
+        };
+        let mut changed = Vec::new();
+        for rel in touched {
+            let path = root.join(rel);
+            let Ok(source) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            if let Some(new) = pass(rel, &source)
+                && std::fs::write(&path, new).is_ok()
+            {
+                changed.push(rel.clone());
+            }
+        }
+        if !changed.is_empty()
+            && let Some(preview) = &self.preview
+        {
+            preview.files_changed(&changed).await;
+        }
     }
 
     /// After a turn that changed files: waits for the preview build. A failure

@@ -150,7 +150,7 @@ fn TodoApp() -> impl IntoView {
     let left = move || todos.with(|v| v.iter().filter(|t| !t.done).count());
 
     view! {
-        <main class="mx-auto flex min-h-screen max-w-xl flex-col gap-4 p-6">
+        <main data-ak-id="todo-screen" class="mx-auto flex min-h-screen max-w-xl flex-col gap-4 p-6">
             <h1 data-ak-id="app-title" class="text-3xl font-bold">"To-do"</h1>
             <Form ak_id="add-form" on_submit=add>
                 <Input ak_id="todo-input" value=text label="New item" placeholder="Buy milk" />
