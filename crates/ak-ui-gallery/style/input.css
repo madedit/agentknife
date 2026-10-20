@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+/* ak-ui writes its classes in its own sources; let Tailwind see them. */
+@source "../../ak-ui/src";
+@source "../src";

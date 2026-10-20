@@ -194,7 +194,7 @@
       - Escape sent cancel; disable removed the overlay and restored clicks.
     - Two bugs were found and fixed: canvas coordinates included the border, and Escape was lost without focus.
   - Native tests cover the protocol, CSS paths and text shortening. The DOM code is only covered by the manual live check; no browser runs in CI.
-- P1-BRIDGE-003 — (hash in next commit) — control channel:
+- P1-BRIDGE-003 — 872e118 — control channel:
   - Protocol:
     - `ClientMessage::Control` (controller) and `ControlResult` (page); `ServerMessage::Control` (to the page) and `ControlResult` (to the controller).
     - `ControlAction`: click, type{enter}, dom_summary, app_state, prepare_screenshot{ak_id}.
@@ -218,3 +218,11 @@
     - Errors were clear for a missing id and for typing into a button.
     - After the backend was killed and restarted, the page reconnected by itself and actions worked without a reload.
     - Found and fixed: the token leaked through the page URL in reports.
+- P1-UI-001 — (hash in next commit) — ak-ui component kit:
+  - Components: Button (Primary/Secondary/Danger/Ghost, submit, aria label), Input (bound RwSignal, label, kind), Form (Enter or submit -> on_submit, no reload), List (keyed rows `<id>-<key>`, empty state), Dialog (open signal; Escape, backdrop and × close; role=dialog, aria-modal), Nav (items, active signal, aria-current), Card, Toggle (role=switch, aria-checked), Toast (ToastHost + use_toaster(); info/success/error; role status/alert; auto-dismiss 4 s; `<id>-<n>`).
+  - All take `ak_id` and have no fixed strings. Tailwind v4 classes are full literals, with dark: variants.
+  - Tests: 8 HTML render tests (ids, derived ids, aria). leptos `ssr` is a dev-dependency only; csr+ssr unify fine.
+  - ak-ui-gallery: a CSR app using all nine components. `trunk build`/`serve` with the isolated toolchain (trunk 0.21.14, wasm-bindgen 0.2.129, tailwindcss 4.3.3 from PATH; nothing downloaded); `@source` picks up the ak-ui classes.
+  - Checked in Chrome: add via Enter (toast), delete (row ids stay key-based), toggle, dialog (Escape closes; confirm clears; empty state; disabled button), toast auto-dismiss, nav tab switch.
+  - Found for P1-PREV-001: `NO_COLOR=1` makes trunk exit (it parses NO_COLOR as a bool), and trunk checks for updates unless TRUNK_SKIP_VERSION_CHECK=true. Both are in AGENTS.md.
+  - ci: the wasm step also covers ak-ui and ak-ui-gallery; `**/dist/` is git-ignored.

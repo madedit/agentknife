@@ -1,0 +1,9 @@
+# Tools come from the AgentKnife toolchain on PATH (pinned in versions.toml).
+[tools]
+wasm_bindgen = "0.2.129"
+tailwindcss = "4.3.3"
+
+[serve]
+addresses = ["127.0.0.1"]
+port = 47130
+open = false

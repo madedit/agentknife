@@ -6,6 +6,11 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+leptos.workspace = true
+
+[dev-dependencies]
+# Tests render components to HTML natively.
+leptos = { workspace = true, features = ["ssr"] }
 
 [lints]
 workspace = true

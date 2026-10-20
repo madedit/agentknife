@@ -83,6 +83,7 @@ crates/
   ak-preview/    Trunk dev-server management, bridge host, inspector protocol, screenshots.
   ak-bundle/     Host-platform bundling + install instructions.
   ak-ui/         Component kit used by generated apps (Leptos + Tailwind).
+  ak-ui-gallery/ Every ak-ui component on one page (trunk serve; dev only).
   ak-bridge/     Crate embedded in generated apps: WebSocket invoke, inspector, control channel.
 templates/
   agentknife/    Stack-independent .agentknife/ skeleton (PROJECT.<locale>.md, STATUS.md, tasks.md,
@@ -164,6 +165,15 @@ plan/            STATUS.md and execution-plan.md (format in §8).
     - Apps may expose state with `ak_bridge::set_state_reader`.
   - Crates that link Tauri and have tests need the Windows Common-Controls manifest for their test binaries (see `crates/ak-bridge/build.rs`); otherwise the tests fail to start with STATUS_ENTRYPOINT_NOT_FOUND.
   - A "Run in real window" button runs `cargo tauri dev`.
+- **ak-ui:**
+  - Every component takes `ak_id` and renders `data-ak-id`. Parts get derived ids via `ak_ui::part_id` (`<id>-<key>` rows, `<id>-close`, numbered toasts).
+  - No fixed UI strings: labels such as `close_label` are props, in the app's language.
+  - Tailwind classes are complete literals, so Tailwind can find them. Generated apps add `@source` for the ak-ui sources.
+  - Tests render with `to_html()` (leptos `ssr` as a dev-dependency only).
+  - Any new component must be shown in ak-ui-gallery.
+- **Running trunk** (preview, gallery): put the toolchain's `cargo/bin` and `bin` first on PATH, so trunk uses the pinned wasm-bindgen and tailwindcss and downloads nothing.
+  - Remove `NO_COLOR`: trunk parses it as a true/false flag, and `NO_COLOR=1` makes it exit.
+  - Set `TRUNK_SKIP_VERSION_CHECK=true`; otherwise trunk checks the network for updates.
 - **Point-and-select:**
   - Every meaningful element in generated UI carries a stable `data-ak-id`. The agent must add these, and AgentKnife may auto-insert missing ones.
   - The inspector reports the id, DOM path, and screenshot rect via `postMessage`.
@@ -264,6 +274,7 @@ Prerequisites for developing AgentKnife:
 | Full pre-commit gate | `cargo xtask ci` |
 | Refresh the vendored CodeMirror | `cargo xtask vendor-codemirror` |
 | Re-pin download checksums after a tool version change | `cargo xtask pin-downloads` |
+| See every ak-ui component (toolchain on PATH, see "Running trunk") | `cd crates/ak-ui-gallery && trunk serve` (http://127.0.0.1:47130) |
 | Real OS keychain round trip (writes and deletes a test entry) | `cargo test -p ak-providers --test credentials -- --ignored` |
 | Doctor report for this computer (read-only) | `cargo run -p ak-doctor --example doctor_report` |
 | Install the isolated toolchain for real (several hundred MB) | `cargo run -p ak-doctor --example doctor_install` |

@@ -6,7 +6,13 @@ use std::process::Command;
 use crate::{Result, bridge, downloads, i18n, layering, nonode, vendor, versions};
 
 /// Crates that must also build for `wasm32-unknown-unknown`.
-const WASM_CRATES: &[&str] = &["ak-types", "ak-shell", "ak-bridge"];
+const WASM_CRATES: &[&str] = &[
+    "ak-types",
+    "ak-shell",
+    "ak-bridge",
+    "ak-ui",
+    "ak-ui-gallery",
+];
 
 pub fn run(root: &Path) -> Result<()> {
     step("fmt", || cargo(root, &["fmt", "--all", "--check"]))?;
