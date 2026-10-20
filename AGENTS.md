@@ -317,7 +317,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Opening a project starts its preview, loads the chat, reports an interrupted turn, then adds the project notes (`open_session`) and greets a brand-new chat.
   - Each turn builds its agent from the current connection (keychain key, capabilities → vision/context/max tokens, cost basis), with ProjectPolicy, the UI bridge (confirmations, plans, questions answered by request id), preview tools, the id pass, timeline checkpoints, the conversation store and the usage ledger. The selection goes to the session and to the AI as a context note. Continue / try another way send fixed requests in the UI language (`agent-continue-request`, `agent-try-another-request`).
   - Files come from `ignore` (honours .gitignore; hides .agentknife, .git, ak/); every path goes through `ak_agent::tools::path::resolve`. Links open through `open_url` (https only, tauri-plugin-opener); folders are picked with tauri-plugin-dialog.
-  - Run it with `cargo tauri dev` from `crates/ak-app` with the toolchain on PATH (it starts `trunk serve` for ak-shell). To drive the window from scripts, start it with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` and use the DevTools protocol (Runtime.evaluate, Input.dispatchMouseEvent, Page.captureScreenshot).
+  - Run it with `cargo xtask dev`: `cargo tauri dev` in `crates/ak-app` with AgentKnife's own toolchain (cargo-tauri, trunk, Tailwind; nothing to install or put on PATH by hand; it starts `trunk serve` for ak-shell). Arguments after `dev` go to `cargo tauri dev`. To drive the window from scripts, start it with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` and use the DevTools protocol (Runtime.evaluate, Input.dispatchMouseEvent, Page.captureScreenshot).
   - Editing a crate while `cargo tauri dev` runs restarts the window (state is in memory: open the project again).
 - **Privacy:** no telemetry by default. Crash reports are opt-in only.
 
@@ -357,7 +357,7 @@ Prerequisites for developing AgentKnife:
 
 | Task | Command |
 |---|---|
-| Run AgentKnife (shell + UI, hot reload) | `cargo tauri dev` (from `crates/ak-app`) |
+| Run AgentKnife (shell + UI, hot reload; uses AgentKnife's toolchain) | `cargo xtask dev` |
 | Run the UI alone in a browser (http://127.0.0.1:47120, toolchain on PATH as for the gallery) | `trunk serve` (from `crates/ak-shell`) |
 | Test one crate | `cargo test -p <crate>` |
 | Full pre-commit gate | `cargo xtask ci` |
