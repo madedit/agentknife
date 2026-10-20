@@ -43,6 +43,11 @@ pub enum AgentEvent {
         label: String,
         reason: ConfirmReason,
     },
+    /// Before a big change the agent proposes a plan and waits for "Start".
+    PlanProposed {
+        request_id: String,
+        plan: PlanProposal,
+    },
     /// The agent asks the user to choose (`ask_user` tool).
     QuestionAsked {
         request_id: String,
@@ -61,6 +66,29 @@ pub enum AgentEvent {
     TurnFinished {
         outcome: TurnOutcome,
     },
+}
+
+/// A plan for a big change, written by the model in the user's language.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanProposal {
+    pub title: String,
+    /// 3–5 plain-language steps.
+    pub steps: Vec<String>,
+    /// Rough time estimate in the model's words, if given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimate: Option<String>,
+}
+
+/// The user's answer to a [`PlanProposal`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "decision", rename_all = "snake_case")]
+pub enum PlanDecision {
+    Start,
+    /// Change the plan as described.
+    Revise {
+        feedback: String,
+    },
+    Cancel,
 }
 
 /// Contents of `.agentknife/turn.lock`, written while a turn runs. A leftover lock
@@ -155,6 +183,12 @@ pub enum TurnOutcome {
     },
     /// The step limit was reached; the user can let it continue.
     StepLimit,
+    /// Building or running kept failing after the automatic fix attempts. The UI
+    /// offers: try another way, go back to the last checkpoint, show details.
+    Stuck {
+        attempts: u32,
+        last_error: String,
+    },
     Cancelled,
     Failed {
         message: String,

@@ -74,6 +74,10 @@ impl Tool for ReadFile {
 pub struct WriteFile;
 
 impl Tool for WriteFile {
+    fn changes_project(&self) -> bool {
+        true
+    }
+
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "write_file".into(),
@@ -123,6 +127,10 @@ impl Tool for WriteFile {
 pub struct EditFile;
 
 impl Tool for EditFile {
+    fn changes_project(&self) -> bool {
+        true
+    }
+
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "edit_file".into(),

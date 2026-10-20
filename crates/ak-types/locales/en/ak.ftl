@@ -39,3 +39,15 @@ timeline-bundle = Installer built
 timeline-marked = Marked version
 timeline-abandoned = Set aside (can be brought back)
 timeline-restore = Went back to an earlier version
+
+## Plans and getting stuck
+
+plan-title = Here is my plan
+plan-start = Start
+plan-revise = Change the plan
+plan-cancel = Cancel
+# $attempts (Number) automatic fix attempts made
+stuck-title = I tried to fix this { $attempts } times and it still fails.
+stuck-try-another = Try a different way
+stuck-roll-back = Go back to the last checkpoint
+stuck-show-details = Show technical details

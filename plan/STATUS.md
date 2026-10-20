@@ -62,8 +62,18 @@
   - The policy now protects the .agentknife internals.
   - A real `git fsck --strict` validates the repo (Chinese filenames included).
   - The Checkpointer glue into ak_agent belongs in ak-app.
-- P1-PROJ-004 — (hash in next commit) — Timeline::gc(keep_turns):
+- P1-PROJ-004 — 97260f6 — Timeline::gc(keep_turns):
   - Keeps the newest N turn entries; older ones fold their changed files into the next surviving entry (their task).
   - Initial, task, bundle, marked, abandoned and restore entries, and the newest entry, are never collected.
   - Idempotent; survives reopening; kept entries still restore. DEFAULT_KEEP_TURNS = 50.
   - Fixed in PROJ-003: task checkpoints now always record (they were skipped when nothing changed since the last turn, which is the normal case).
+- P1-AGENT-004 — (hash in next commit) — behaviour rules:
+  - Plan before big changes: loop-owned `propose_plan` → PlanProposed event → PlanReviewer (Start / Revise / Cancel). PlanMode Auto / AlwaysAsk / NeverAsk.
+  - Auto-fix limit: after max_fix_attempts (default 3) the turn ends as TurnOutcome::Stuck {attempts, last_error}.
+  - Static system prompt (`ak_agent::prompt`, built once) whose first section is the reply-language rule, with the UI language as fallback. This resolves the AGENTS conflict with the append-only rule.
+  - Fluent messages for plan-* and stuck-*.
+  - 7 fake-LLM tests (mutation-checked).
+  - Live on the owner's server:
+    - no plan for small edits; a 5-step zh-TW plan for "make a full todo list", built after Start.
+    - auto-fix stopped as Stuck after 3 attempts, with the compiler error.
+    - language: 0/12 mismatches across zh → en → zh switches, after strengthening the rule (the first wording replied in Chinese to an English message).

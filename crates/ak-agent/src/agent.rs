@@ -6,8 +6,9 @@ use std::sync::Arc;
 use ak_providers::{
     ChatRequest, Effort, MessageAssembler, Provider, ProviderError, StopReason, StreamEvent, Usage,
 };
-use ak_types::agent::{AgentEvent, TokenUsage, TurnOutcome};
+use ak_types::agent::{AgentEvent, PlanDecision, PlanProposal, TokenUsage, TurnOutcome};
 use ak_types::chat::{ContentPart, Conversation, Message, ToolCall};
+use ak_types::i18n::Locale;
 use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
 use tokio::sync::mpsc::UnboundedSender;
@@ -16,12 +17,15 @@ use tokio_util::sync::CancellationToken;
 use crate::lock::TurnLock;
 use crate::new_id;
 use crate::permission::{ConfirmRequest, Confirmer, Decision, DeclineAll, PermissionGate};
+use crate::plan::{CancelPlans, PlanReviewer};
 use crate::policy::{PermissionMode, ProjectPolicy};
+use crate::prompt::{PLAN_TOOL, PlanMode, plan_tool_spec, system_prompt};
 use crate::tool::{ToolContext, ToolOutput, ToolRegistry, split_label};
 
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
     pub model: String,
+    /// Product instructions; behaviour rules are appended (see `prompt`).
     pub system: Option<String>,
     pub max_tokens: u32,
     pub effort: Option<Effort>,
@@ -29,6 +33,12 @@ pub struct AgentConfig {
     pub max_steps: u32,
     /// Project root; `None` disables `turn.lock` (tests, scratch chats).
     pub project_dir: Option<PathBuf>,
+    /// Fallback reply language when a message has no words.
+    pub ui_locale: Locale,
+    pub plan_mode: PlanMode,
+    /// Automatic fixes after a failed build/run before the turn stops as
+    /// [`TurnOutcome::Stuck`].
+    pub max_fix_attempts: u32,
 }
 
 impl AgentConfig {
@@ -40,9 +50,24 @@ impl AgentConfig {
             effort: None,
             max_steps: 50,
             project_dir: None,
+            ui_locale: Locale::FALLBACK,
+            plan_mode: PlanMode::Auto,
+            max_fix_attempts: 3,
         }
     }
 }
+
+/// Per-turn state of the behaviour rules.
+#[derive(Default)]
+struct TurnState {
+    plan_approved: bool,
+    /// Consecutive failed builds/runs.
+    failures: u32,
+    last_error: String,
+}
+
+/// Tools whose failure counts towards auto-fix.
+const BUILD_TOOLS: &[&str] = &["run_command"];
 
 /// What a finished turn did, for the checkpoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,21 +104,45 @@ pub struct Agent {
     gate: Arc<dyn PermissionGate>,
     confirmer: Arc<dyn Confirmer>,
     checkpointer: Arc<dyn Checkpointer>,
+    reviewer: Arc<dyn PlanReviewer>,
     config: AgentConfig,
+    /// Built once: never changes during a conversation.
+    system: String,
 }
 
 type Events = UnboundedSender<AgentEvent>;
 
 impl Agent {
     pub fn new(provider: Arc<dyn Provider>, tools: ToolRegistry, config: AgentConfig) -> Self {
+        let system = system_prompt(config.system.as_deref(), config.ui_locale, config.plan_mode);
         Self {
             provider,
             tools,
             gate: Arc::new(ProjectPolicy::new(PermissionMode::Standard)),
             confirmer: Arc::new(DeclineAll),
             checkpointer: Arc::new(NoCheckpoints),
+            reviewer: Arc::new(CancelPlans),
             config,
+            system,
         }
+    }
+
+    pub fn with_plan_reviewer(mut self, reviewer: Arc<dyn PlanReviewer>) -> Self {
+        self.reviewer = reviewer;
+        self
+    }
+
+    /// The exact system prompt sent with every request.
+    pub fn system_prompt(&self) -> &str {
+        &self.system
+    }
+
+    fn tool_specs(&self) -> Vec<ak_types::chat::ToolSpec> {
+        let mut specs = self.tools.specs();
+        if self.config.plan_mode != PlanMode::NeverAsk {
+            specs.push(plan_tool_spec());
+        }
+        specs
     }
 
     pub fn with_gate(mut self, gate: Arc<dyn PermissionGate>) -> Self {
@@ -206,12 +255,13 @@ impl Agent {
             cancel: cancel.clone(),
             events: Some(events.clone()),
         };
+        let mut state = TurnState::default();
         for step in 0..self.config.max_steps {
             let request = ChatRequest {
                 model: self.config.model.clone(),
-                system: self.config.system.clone(),
+                system: Some(self.system.clone()),
                 messages: conversation.messages(),
-                tools: self.tools.specs(),
+                tools: self.tool_specs(),
                 max_tokens: self.config.max_tokens,
                 effort: self.config.effort,
             };
@@ -249,7 +299,10 @@ impl Agent {
                     ToolOutput::error("Cancelled by the user before this step ran.")
                 } else {
                     let step_id = format!("{turn_id}-{step}-{i}");
-                    match self.run_tool(call, &step_id, events, &ctx).await {
+                    match self
+                        .run_tool(call, &step_id, events, &ctx, &mut state)
+                        .await
+                    {
                         Some(out) => out,
                         None => {
                             cancelled = true;
@@ -257,6 +310,14 @@ impl Agent {
                         }
                     }
                 };
+                if !cancelled && BUILD_TOOLS.contains(&call.name.as_str()) {
+                    if output.is_error {
+                        state.failures += 1;
+                        state.last_error = output_text(&output);
+                    } else {
+                        state.failures = 0;
+                    }
+                }
                 step_touched.extend(output.touched.iter().cloned());
                 append(
                     conversation,
@@ -284,8 +345,74 @@ impl Agent {
             if cancelled {
                 return TurnOutcome::Cancelled;
             }
+            if state.failures > self.config.max_fix_attempts {
+                return TurnOutcome::Stuck {
+                    attempts: self.config.max_fix_attempts,
+                    last_error: std::mem::take(&mut state.last_error),
+                };
+            }
         }
         TurnOutcome::StepLimit
+    }
+
+    /// The `propose_plan` tool: show the plan, wait for the user's decision.
+    async fn review_plan(
+        &self,
+        call: &ToolCall,
+        step_id: &str,
+        events: &Events,
+        ctx: &ToolContext,
+        state: &mut TurnState,
+    ) -> Option<ToolOutput> {
+        let args = &call.arguments;
+        let steps: Vec<String> = args["steps"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| {
+                s.as_str()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_owned)
+            })
+            .collect();
+        let title = args["title"].as_str().unwrap_or_default().trim().to_owned();
+        if call.invalid_arguments.is_some() || steps.is_empty() || title.is_empty() {
+            return Some(ToolOutput::error(
+                "A plan needs a `title` and 3 to 5 `steps`. Call propose_plan again.",
+            ));
+        }
+        let plan = PlanProposal {
+            title,
+            steps,
+            estimate: args["estimate"].as_str().map(str::to_owned),
+        };
+        let request_id = format!("{step_id}-plan");
+        emit(
+            events,
+            AgentEvent::PlanProposed {
+                request_id: request_id.clone(),
+                plan: plan.clone(),
+            },
+        );
+        let decision = tokio::select! {
+            biased;
+            _ = ctx.cancel.cancelled() => return None,
+            d = self.reviewer.review(request_id, plan) => d,
+        };
+        Some(match decision {
+            PlanDecision::Start => {
+                state.plan_approved = true;
+                ToolOutput::text("The user approved the plan. Carry it out now.")
+            }
+            PlanDecision::Revise { feedback } => ToolOutput::text(format!(
+                "The user wants changes to the plan: {feedback}\nPropose a revised plan."
+            )),
+            PlanDecision::Cancel => ToolOutput::text(
+                "The user cancelled the plan. Make no changes; acknowledge briefly and ask \
+                 what they would like instead.",
+            ),
+        })
     }
 
     /// One model call, streamed to `events`. A cancelled call is not appended.
@@ -328,7 +455,11 @@ impl Agent {
         step_id: &str,
         events: &Events,
         ctx: &ToolContext,
+        state: &mut TurnState,
     ) -> Option<ToolOutput> {
+        if call.name == PLAN_TOOL && self.config.plan_mode != PlanMode::NeverAsk {
+            return self.review_plan(call, step_id, events, ctx, state).await;
+        }
         let (label, args) = split_label(call.arguments.clone());
         let label = label.unwrap_or_else(|| call.name.clone());
         emit(
@@ -345,7 +476,13 @@ impl Agent {
                  Call the tool again with complete, smaller arguments.",
             )
         } else if let Some(tool) = self.tools.get(&call.name) {
+            let needs_plan = self.config.plan_mode == PlanMode::AlwaysAsk
+                && tool.changes_project()
+                && !state.plan_approved;
             let allowed = match self.gate.check(&call.name, &args, ctx) {
+                _ if needs_plan => Err(ToolOutput::error(format!(
+                    "Before changing the project, call {PLAN_TOOL} and wait for the user's approval."
+                ))),
                 Decision::Allow => Ok(()),
                 Decision::Deny { reason } => Err(ToolOutput::error(format!(
                     "Not allowed because {} ({}). Find another way that stays inside \
@@ -456,6 +593,22 @@ fn token_usage(u: Usage) -> TokenUsage {
         cache_read_tokens: u.cache_read_tokens,
         cache_write_tokens: u.cache_write_tokens,
     }
+}
+
+/// The text of a tool result, shortened for [`TurnOutcome::Stuck`].
+fn output_text(out: &ToolOutput) -> String {
+    let text: String = out
+        .content
+        .iter()
+        .filter_map(|p| match p {
+            ContentPart::Text { text } => Some(text.as_str()),
+            ContentPart::Image { .. } => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let chars = text.chars().count();
+    // The end of a build log carries the error.
+    text.chars().skip(chars.saturating_sub(2_000)).collect()
 }
 
 fn plain_text(m: &Message) -> String {

@@ -11,12 +11,14 @@ use std::error::Error;
 use std::sync::Arc;
 
 use ak_agent::permission::{ConfirmRequest, Confirmer};
+use ak_agent::plan::PlanReviewer;
 use ak_agent::tools::{Asker, Question, ToolEnv, project_tools};
 use ak_agent::{Agent, AgentConfig};
 use ak_providers::anthropic::{Anthropic, AnthropicConfig};
 use ak_providers::openai::{OpenAiCompat, OpenAiCompatConfig};
 use ak_providers::{Provider, ReqwestTransport};
 use ak_types::agent::AgentEvent;
+use ak_types::agent::{PlanDecision, PlanProposal};
 use ak_types::chat::{Conversation, Message};
 use ak_types::i18n::{self, I18n, Locale};
 use futures_util::future::BoxFuture;
@@ -34,6 +36,24 @@ impl Confirmer for PrintAndAllow {
             self.0.t_args(r.reason.kind.message_id(), &args)
         );
         Box::pin(async { true })
+    }
+}
+
+/// Prints a proposed plan and starts it.
+struct PrintPlanAndStart;
+
+impl PlanReviewer for PrintPlanAndStart {
+    fn review(&self, _: String, plan: PlanProposal) -> BoxFuture<'_, PlanDecision> {
+        println!(
+            "\n[plan] {} ({})",
+            plan.title,
+            plan.estimate.unwrap_or_default()
+        );
+        for (i, s) in plan.steps.iter().enumerate() {
+            println!("       {}. {s}", i + 1);
+        }
+        println!("       -> Start");
+        Box::pin(async { PlanDecision::Start })
     }
 }
 
@@ -109,7 +129,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         project_tools(ToolEnv::default(), Arc::new(FirstOption)),
         config,
     )
-    .with_confirmer(Arc::new(PrintAndAllow(I18n::new(Locale::ZhTw)?)));
+    .with_confirmer(Arc::new(PrintAndAllow(I18n::new(Locale::ZhTw)?)))
+    .with_plan_reviewer(Arc::new(PrintPlanAndStart));
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     let printer = tokio::spawn(async move {
         while let Some(e) = rx.recv().await {
@@ -128,6 +149,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for request in [
         "請把「Add」按鈕改成藍色",
         "notes/old.txt 用不到了，請把它刪掉",
+        // A big change: the model should propose a plan first.
+        "幫我把它做成完整的待辦清單：可以新增項目、勾選完成、刪除項目，並在下面顯示已完成幾項",
+        // Another language: the reply should follow it.
+        "Please make the title text bigger.",
     ] {
         println!("\n===== {request}");
         agent

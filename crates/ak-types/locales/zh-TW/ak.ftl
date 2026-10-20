@@ -39,3 +39,15 @@ timeline-bundle = 產生了安裝檔
 timeline-marked = 標記的版本
 timeline-abandoned = 暫存起來（可以找回來）
 timeline-restore = 回到之前的版本
+
+## 計畫與卡住時
+
+plan-title = 這是我的計畫
+plan-start = 開始
+plan-revise = 修改計畫
+plan-cancel = 取消
+# $attempts（數字）已自動修正的次數
+stuck-title = 我已經自動修正 { $attempts } 次，還是失敗。
+stuck-try-another = 換個做法試試
+stuck-roll-back = 回到上一個檢查點
+stuck-show-details = 顯示技術細節

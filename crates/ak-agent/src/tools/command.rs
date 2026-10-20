@@ -101,6 +101,10 @@ async fn kill_tree(pid: Option<u32>) {
 }
 
 impl Tool for RunCommand {
+    fn changes_project(&self) -> bool {
+        true
+    }
+
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "run_command".into(),

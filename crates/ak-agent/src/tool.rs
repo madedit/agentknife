@@ -64,6 +64,12 @@ pub trait Tool: Send + Sync {
     /// Name, description and JSON schema, without the `label` argument.
     fn spec(&self) -> ToolSpec;
 
+    /// Whether the tool changes the project (files or commands). Such tools need an
+    /// approved plan in `PlanMode::AlwaysAsk`.
+    fn changes_project(&self) -> bool {
+        false
+    }
+
     /// Runs the tool. `args` no longer contains `label`.
     fn call<'a>(&'a self, args: Value, ctx: &'a ToolContext) -> BoxFuture<'a, ToolOutput>;
 }
