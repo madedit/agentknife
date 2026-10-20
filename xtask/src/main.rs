@@ -9,6 +9,7 @@ mod i18n;
 mod kit;
 mod layering;
 mod nonode;
+mod stack;
 mod vendor;
 mod versions;
 

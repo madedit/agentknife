@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::{Result, bridge, downloads, i18n, kit, layering, nonode, vendor, versions};
+use crate::{Result, bridge, downloads, i18n, kit, layering, nonode, stack, vendor, versions};
 
 /// Crates that must also build for `wasm32-unknown-unknown`.
 const WASM_CRATES: &[&str] = &[
@@ -64,6 +64,7 @@ pub fn run(root: &Path) -> Result<()> {
     step("downloads", || downloads::check(root))?;
     step("bridge", || bridge::check(root))?;
     step("kit", || kit::check(root))?;
+    step("stack", || stack::check(root))?;
     step("i18n", || i18n::check(root))?;
     step("vendor", || vendor::check(root))?;
     step("no-node", || nonode::check(root))?;

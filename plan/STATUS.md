@@ -226,7 +226,7 @@
   - Checked in Chrome: add via Enter (toast), delete (row ids stay key-based), toggle, dialog (Escape closes; confirm clears; empty state; disabled button), toast auto-dismiss, nav tab switch.
   - Found for P1-PREV-001: `NO_COLOR=1` makes trunk exit (it parses NO_COLOR as a bool), and trunk checks for updates unless TRUNK_SKIP_VERSION_CHECK=true. Both are in AGENTS.md.
   - ci: the wasm step also covers ak-ui and ak-ui-gallery; `**/dist/` is git-ignored.
-- P1-TPL-001 — (hash in next commit) — tauri-leptos template:
+- P1-TPL-001 — 763a2b6 — tauri-leptos template:
   - templates/tauri-leptos:
     - Frontend `app-ui`: Leptos CSR, ak-ui and ak-bridge; a "Say hello" screen with a Card, Form, Input, Button, Toast and data-ak-ids, calling the backend `greet` command via `ak_bridge::invoke`.
     - Backend `src-tauri`: the `greet` command, `ak_bridge::init()`, window hidden until shown by setup.
@@ -243,3 +243,22 @@
     - Control-channel type, click, Enter and dom_summary worked; the token was stripped from the reported URL.
   - For P1-BUNDLE-001: NSIS came from %LOCALAPPDATA%\tauri\NSIS, which already existed (2026-10-19). On a clean machine tauri-bundler downloads NSIS there on the first bundle; decide whether the doctor provisions it or AgentKnife asks first.
   - For P1-TPL-002 / project creation: substitute template.toml [replace] values, rename gitignore to .gitignore, and run vendor-kit's output when AgentKnife updates.
+- P1-TPL-002 — (hash in next commit) — StackProfile trait:
+  - ak_types::stack defines the StackProfile trait (id, template, knowledge_pack, doctor_requirements, preview, bundle) and its data:
+    - Template: files, replace and renames. `instantiate` fills values (escaped for JSON/TOML/Rust or HTML/SVG) in text files only.
+    - ProjectValues::for_name: product name, and a reverse-DNS identifier (an app+unique fallback for non-ASCII names).
+    - CommandSpec / Tool / `fill` placeholders, ReadySignal, PreviewPlan, BundlePlan + Artifact per OS, KnowledgePack.
+    - DoctorReport::ready_for.
+  - ak_preview::profiles::TauriLeptos is the only implementation; build.rs embeds the template (no target/dist/template.toml).
+    - preview: `trunk serve --features dev --address 127.0.0.1 --port {port}`, and the backend with `cargo run --manifest-path src-tauri/Cargo.toml --features dev` + AK_BRIDGE_* placeholders. Readiness is HTTP 200 / `AK_BRIDGE_READY `. src-tauri and ak/ak-bridge restart the backend. Trunk env fixes apply (TRUNK_SKIP_VERSION_CHECK, no NO_COLOR).
+    - bundle: `cargo-tauri build` (no dev), with artifacts for nsis/dmg/appimage/deb.
+    - Lookup: `default_profile`, `by_id`, `all`.
+  - ak_project: ProjectMeta.stack (optional, so old files still load); `Project::scaffold(&dyn StackProfile)` writes missing files only, refuses another stack and is idempotent.
+  - xtask step `stack`: the literal stack name is only allowed in that profile, its build.rs and its tests.
+  - Tests:
+    - instantiate escaping and identifiers.
+    - Template embedding; template.toml defaults equal the code's, and no default name is left after instantiation.
+    - The bridge constants equal ak-bridge's.
+    - dev appears only in the preview.
+    - ak-project scaffold with a fake stack.
+    - End to end: registry.create + scaffold with the real stack ("待辦清單 Todo" -> com.agentknife.todo), with binary icons byte-identical.

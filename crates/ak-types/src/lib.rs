@@ -9,3 +9,4 @@ pub mod i18n;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ids;
 pub mod settings;
+pub mod stack;

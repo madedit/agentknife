@@ -22,6 +22,9 @@ pub enum ProjectError {
     /// Written by a newer AgentKnife: never overwrite it.
     #[error("{path} was saved by a newer version of AgentKnife")]
     TooNew { path: PathBuf },
+    /// The project was created with another app stack.
+    #[error("this project uses the {have} stack, not {wanted}")]
+    OtherStack { have: String, wanted: String },
 }
 
 pub(crate) trait IoContext<T> {

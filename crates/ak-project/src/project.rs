@@ -6,6 +6,7 @@ use ak_types::chat::{Conversation, ConversationError};
 use ak_types::i18n::Locale;
 use ak_types::ids::{new_id, unix_now};
 use ak_types::settings::{AiConnection, AiOverride};
+use ak_types::stack::{ProjectValues, StackProfile};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{IoContext, ProjectError};
@@ -30,6 +31,9 @@ pub struct ProjectMeta {
     pub created_at: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ai_override: Option<AiOverride>,
+    /// The app stack's id (`StackProfile::id`), once the app code is in place.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stack: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -76,6 +80,7 @@ impl Project {
                         name: name.trim().to_owned(),
                         created_at: unix_now(),
                         ai_override: None,
+                        stack: None,
                     },
                 };
                 project.save_meta()?;
@@ -146,6 +151,34 @@ impl Project {
             Some(o) => global.with_override(o),
             None => global.clone(),
         }
+    }
+
+    /// Puts the stack's starter app into the project and records the stack.
+    /// Files that already exist are kept (re-running only fills in what is
+    /// missing). Returns the files written, relative to the project.
+    pub fn scaffold(&mut self, profile: &dyn StackProfile) -> Result<Vec<PathBuf>, ProjectError> {
+        if let Some(have) = self.meta.stack.as_deref()
+            && have != profile.id()
+        {
+            return Err(ProjectError::OtherStack {
+                have: have.to_owned(),
+                wanted: profile.id().to_owned(),
+            });
+        }
+        let values = ProjectValues::for_name(&self.meta.name, &self.meta.id);
+        let mut written = Vec::new();
+        for (rel, contents) in profile.template().instantiate(&values) {
+            let rel = PathBuf::from(rel);
+            let path = self.root.join(&rel);
+            if path.exists() {
+                continue;
+            }
+            write_atomic(&path, &contents)?;
+            written.push(rel);
+        }
+        self.meta.stack = Some(profile.id().to_owned());
+        self.save_meta()?;
+        Ok(written)
     }
 
     fn save_meta(&self) -> Result<(), ProjectError> {

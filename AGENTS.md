@@ -104,6 +104,11 @@ plan/            STATUS.md and execution-plan.md (format in §8).
 - Core crates may depend on `ak-types`.
 - `ak-ui` and `ak-bridge` are consumed by generated apps and must not depend on any other `ak-*` crate.
 - Stack-specific logic goes behind a `StackProfile` trait, which covers template, knowledge pack, doctor requirements, preview strategy, and bundle strategy. Do not hard-code `tauri-leptos` outside its profile implementation.
+  - The trait and its plain-data plans live in `ak_types::stack`: Template (embedded files, values to replace, renames, `instantiate`), KnowledgePack, doctor requirement ids (`DoctorReport::ready_for`), PreviewPlan and BundlePlan.
+    - The plans hold CommandSpecs for toolchain tools, with `{port}`, `{bridge_port}`, `{bridge_token}` and `{bridge_origin}` placeholders and env to set or remove.
+    - They also say how to tell readiness, which paths restart the backend, and where installers appear.
+  - Implementations live in `ak_preview::profiles` (`default_profile`, `by_id`); `tauri_leptos.rs` embeds `templates/tauri-leptos` via build.rs. Projects store the stack id in project.json; `Project::scaffold(&dyn StackProfile)` writes the starter app and never overwrites existing files.
+  - `cargo xtask ci` (step `stack`) rejects the literal stack name anywhere under crates/ except that profile, its build.rs and its tests.
 
 ## 4. Key design contracts
 
