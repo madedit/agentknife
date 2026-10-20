@@ -19,7 +19,7 @@ use ak_types::ipc::{AGENT_EVENT, Answer, InterruptionChoice, SendMessage, StuckC
 use ak_types::preview::Picked;
 use ak_types::settings::{Permissions, Plans};
 use futures_util::future::BoxFuture;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio_util::sync::CancellationToken;
 
 use crate::state::{AppState, Pending};
@@ -122,8 +122,10 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
             inner.settings.clone(),
         )
     };
-    let provider =
-        crate::connect::provider(&effective, None).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let provider = match &state.provider {
+        Some(p) => p.clone(),
+        None => crate::connect::provider(&effective, None).map_err(|e| anyhow::anyhow!("{e}"))?,
+    };
     let caps = provider
         .capabilities(&effective.model)
         .await
@@ -223,12 +225,12 @@ async fn claim(state: &AppState) -> Option<Parts> {
     })
 }
 
-fn emit(app: &AppHandle, event: AgentEvent) {
+fn emit<R: Runtime>(app: &AppHandle<R>, event: AgentEvent) {
     let _ = app.emit(AGENT_EVENT, event);
 }
 
 /// Runs one turn in the background.
-fn spawn(app: AppHandle, start: Start) {
+fn spawn<R: Runtime>(app: AppHandle<R>, start: Start) {
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
         let Some(parts) = claim(&state).await else {
@@ -316,7 +318,7 @@ fn spawn(app: AppHandle, start: Start) {
 }
 
 /// After a project opens: the project notes for the AI, then the greeting.
-pub async fn on_open(app: AppHandle, greet: bool) {
+pub async fn on_open<R: Runtime>(app: AppHandle<R>, greet: bool) {
     let state = app.state::<AppState>();
     let Some(parts) = claim(&state).await else {
         return;
@@ -361,8 +363,8 @@ fn words(id: &str) -> String {
 }
 
 #[tauri::command]
-pub async fn send_message(
-    app: AppHandle,
+pub async fn send_message<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     request: SendMessage,
 ) -> Res<()> {
@@ -441,7 +443,7 @@ pub async fn cancel_turn(state: State<'_, AppState>) -> Res<()> {
 }
 
 #[tauri::command]
-pub fn continue_turn(app: AppHandle) -> Res<()> {
+pub fn continue_turn<R: Runtime>(app: AppHandle<R>) -> Res<()> {
     spawn(
         app,
         Start::Message {
@@ -453,8 +455,8 @@ pub fn continue_turn(app: AppHandle) -> Res<()> {
 }
 
 #[tauri::command]
-pub async fn stuck_choice(
-    app: AppHandle,
+pub async fn stuck_choice<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     request: StuckChoice,
 ) -> Res<()> {
@@ -503,8 +505,8 @@ pub async fn stuck_choice(
 }
 
 #[tauri::command]
-pub async fn resolve_interruption(
-    app: AppHandle,
+pub async fn resolve_interruption<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     request: InterruptionChoice,
 ) -> Res<()> {

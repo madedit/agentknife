@@ -1,162 +1,20 @@
-//! AgentKnife: the Tauri window around ak-shell, and the commands behind it
-//! (`ak_types::ipc`). The only AgentKnife crate that depends on tauri; the
-//! only one that uses `anyhow`.
+//! The AgentKnife window (the commands are in the library, src/lib.rs).
 
 #![forbid(unsafe_code)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod connect;
-mod crash;
-mod home;
-mod settings;
-mod state;
-mod tools;
-mod turn;
-mod workspace;
-
-use ak_types::i18n::Locale;
-use tauri::{Manager, RunEvent};
-
-/// Command results: errors are JSON (text, `ConnectError`, `BundleFailure`).
-pub type Res<T> = Result<T, serde_json::Value>;
-
-pub fn fail(e: impl std::fmt::Display) -> serde_json::Value {
-    serde_json::Value::String(e.to_string())
-}
-
-/// The language chosen in the settings (`None`: the system's).
-static LANGUAGE: std::sync::RwLock<Option<Locale>> = std::sync::RwLock::new(None);
-
-pub fn set_language(language: Option<Locale>) {
-    if let Ok(mut l) = LANGUAGE.write() {
-        *l = language;
-    }
-}
-
-/// The UI language: the settings' choice, else the system's.
-pub fn ui_locale() -> Locale {
-    let chosen = LANGUAGE.read().ok().and_then(|l| *l);
-    Locale::resolve(chosen, &Locale::os_preferences())
-}
-
-/// Every command the window can call, named as in `ak_types::ipc::cmd`.
-#[cfg(test)]
-const COMMANDS: &[&str] = &[
-    "home_state",
-    "create_project",
-    "open_project",
-    "open_folder",
-    "list_models",
-    "check_model",
-    "save_connection",
-    "send_message",
-    "answer_confirmation",
-    "answer_plan",
-    "answer_question",
-    "cancel_turn",
-    "continue_turn",
-    "stuck_choice",
-    "resolve_interruption",
-    "preview_status",
-    "run_app",
-    "list_files",
-    "read_file",
-    "write_file",
-    "timeline",
-    "restore",
-    "mark_version",
-    "doctor_check",
-    "doctor_install",
-    "doctor_action",
-    "bundle",
-    "reveal",
-    "open_url",
-    "get_settings",
-    "save_settings",
-    "crash_reports",
-];
+use ak_app::{crash, state};
 
 fn main() -> anyhow::Result<()> {
     crash::install(state::state_dir().join(crash::FOLDER));
     let state = state::AppState::load()?;
-    set_language(tauri::async_runtime::block_on(async {
+    ak_app::set_language(tauri::async_runtime::block_on(async {
         state.inner.lock().await.settings.language
     }));
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
-        .manage(state)
-        .invoke_handler(tauri::generate_handler![
-            home::home_state,
-            home::create_project,
-            home::open_project,
-            home::open_folder,
-            connect::list_models,
-            connect::check_model,
-            connect::save_connection,
-            turn::send_message,
-            turn::answer_confirmation,
-            turn::answer_plan,
-            turn::answer_question,
-            turn::cancel_turn,
-            turn::continue_turn,
-            turn::stuck_choice,
-            turn::resolve_interruption,
-            workspace::preview_status,
-            workspace::run_app,
-            workspace::list_files,
-            workspace::read_file,
-            workspace::write_file,
-            workspace::timeline,
-            workspace::restore,
-            workspace::mark_version,
-            tools::doctor_check,
-            tools::doctor_install,
-            tools::doctor_action,
-            tools::bundle,
-            tools::reveal,
-            tools::open_url,
-            settings::get_settings,
-            settings::save_settings,
-            settings::crash_reports,
-        ])
-        .build(tauri::generate_context!())?;
-    app.run(|handle, event| {
-        // Stop the preview's dev servers and the app window with AgentKnife.
-        if let RunEvent::Exit = event {
-            let state = handle.state::<state::AppState>();
-            tauri::async_runtime::block_on(async {
-                let open = state.inner.lock().await.open.take();
-                home::close(open).await;
-            });
-        }
-    });
+        .plugin(tauri_plugin_opener::init());
+    let app = ak_app::with_commands(builder, state).build(tauri::generate_context!())?;
+    app.run(ak_app::on_event);
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::BTreeSet;
-
-    use super::*;
-
-    #[test]
-    fn every_ipc_command_is_handled() {
-        let ours: BTreeSet<&str> = COMMANDS.iter().copied().collect();
-        let contract: BTreeSet<&str> = ak_types::ipc::cmd::ALL.iter().copied().collect();
-        assert_eq!(ours, contract);
-        // The handler list above names the same functions.
-        let source = include_str!("main.rs");
-        let handlers = source
-            .split("generate_handler![")
-            .nth(1)
-            .and_then(|s| s.split(']').next())
-            .unwrap_or_default();
-        for c in COMMANDS {
-            assert!(
-                handlers.contains(&format!("::{c},")),
-                "{c} is not registered"
-            );
-        }
-    }
 }

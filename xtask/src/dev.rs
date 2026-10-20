@@ -1,7 +1,7 @@
 //! `cargo xtask dev` / `cargo xtask build`: `cargo tauri dev` or a release
 //! `cargo tauri build --no-bundle` in crates/ak-app, with AgentKnife's own
 //! toolchain, so nothing has to be installed or put on PATH by hand. Further
-//! arguments go to `cargo tauri`.
+//! arguments go to `cargo tauri`. Also `cargo xtask e2e`, the end-to-end test.
 
 use std::path::Path;
 use std::process::Command;
@@ -27,6 +27,32 @@ pub fn build(root: &Path, args: &[String]) -> Result<()> {
         .join("release")
         .join(format!("agentknife{}", std::env::consts::EXE_SUFFIX));
     println!("built {}", exe.display());
+    Ok(())
+}
+
+/// Runs the end-to-end test (crates/ak-app/tests/e2e.rs; ignored by
+/// `cargo test` because it builds and packages a real app). Further arguments
+/// go to the test binary.
+pub fn e2e(root: &Path, args: &[String]) -> Result<()> {
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let status = Command::new(cargo)
+        .args([
+            "test",
+            "-p",
+            "ak-app",
+            "--test",
+            "e2e",
+            "--",
+            "--ignored",
+            "--nocapture",
+        ])
+        .args(args)
+        .current_dir(root)
+        .env_remove("NO_COLOR")
+        .status()?;
+    if !status.success() {
+        return Err(format!("the end-to-end test failed ({status})").into());
+    }
     Ok(())
 }
 

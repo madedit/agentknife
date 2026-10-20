@@ -27,3 +27,41 @@ jobs:
       # Only crates are downloaded. `cargo xtask ci` itself never fetches anything.
       - name: cargo xtask ci
         run: cargo xtask ci
+
+  # P1-E2E-001: the scripted first-use story, building and packaging a real
+  # app. AgentKnife's toolchain is cached; only a cache miss downloads it
+  # (through doctor_install, AK_E2E_PROVISION=1).
+  e2e:
+    name: xtask e2e (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Install pinned toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2.9.2
+
+      # What the generated apps need on Linux (Tauri prerequisites).
+      - name: System packages (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: AgentKnife toolchain cache
+        uses: actions/cache@v4.2.3
+        with:
+          path: ${{ runner.temp }}/ak-toolchain
+          key: ak-toolchain-${{ runner.os }}-${{ hashFiles('versions.toml') }}
+
+      - name: cargo xtask e2e
+        run: cargo xtask e2e
+        env:
+          AK_E2E_TOOLCHAIN: ${{ runner.temp }}/ak-toolchain
+          AK_E2E_PROVISION: "1"

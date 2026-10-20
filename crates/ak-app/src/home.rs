@@ -8,7 +8,7 @@ use ak_preview::{Preview, PreviewSession, profiles};
 use ak_project::{Project, RecentProject, Timeline};
 use ak_types::ipc::{HomeState, NewProject, OpenedProject, PREVIEW_EVENT, ProjectRow};
 use ak_types::stack::StackProfile;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::Mutex;
 
@@ -46,8 +46,8 @@ pub async fn home_state(state: State<'_, AppState>) -> Res<HomeState> {
 }
 
 #[tauri::command]
-pub async fn create_project(
-    app: AppHandle,
+pub async fn create_project<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     request: NewProject,
 ) -> Res<OpenedProject> {
@@ -65,8 +65,8 @@ pub async fn create_project(
 }
 
 #[tauri::command]
-pub async fn open_project(
-    app: AppHandle,
+pub async fn open_project<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     request: String,
 ) -> Res<OpenedProject> {
@@ -85,7 +85,10 @@ pub async fn open_project(
 }
 
 #[tauri::command]
-pub async fn open_folder(app: AppHandle, state: State<'_, AppState>) -> Res<Option<OpenedProject>> {
+pub async fn open_folder<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Res<Option<OpenedProject>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.dialog().file().pick_folder(move |picked| {
         let _ = tx.send(picked);
@@ -119,7 +122,11 @@ pub async fn close(open: Option<OpenProject>) {
     o.preview.stop().await;
 }
 
-async fn open(app: AppHandle, state: &State<'_, AppState>, project: Project) -> Res<OpenedProject> {
+async fn open<R: Runtime>(
+    app: AppHandle<R>,
+    state: &State<'_, AppState>,
+    project: Project,
+) -> Res<OpenedProject> {
     let root = project.root().to_path_buf();
     let id = project.meta().id.clone();
     let profile = profile_of(&project);
@@ -179,7 +186,7 @@ async fn open(app: AppHandle, state: &State<'_, AppState>, project: Project) -> 
 }
 
 /// Sends every status change of the preview to the window.
-fn forward_status(app: AppHandle, session: Arc<PreviewSession>) {
+fn forward_status<R: Runtime>(app: AppHandle<R>, session: Arc<PreviewSession>) {
     let mut rx = session.subscribe();
     tauri::async_runtime::spawn(async move {
         let _ = app.emit(PREVIEW_EVENT, rx.borrow().clone());

@@ -35,6 +35,8 @@ tokio-util.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# tests/e2e.rs: the commands on the mock runtime.
+tauri = { workspace = true, features = ["test"] }
 
 [lints]
 workspace = true

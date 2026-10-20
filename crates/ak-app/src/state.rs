@@ -8,6 +8,7 @@ use std::sync::Arc;
 use ak_agent::usage::UsageLedger;
 use ak_preview::{PreviewSession, Tools};
 use ak_project::{Project, Registry};
+use ak_providers::Provider;
 use ak_types::agent::PlanDecision;
 use ak_types::chat::Conversation;
 use ak_types::settings::AppSettings;
@@ -84,14 +85,28 @@ pub struct AppState {
     pub tools: Tools,
     pub toolchain: ak_doctor::Toolchain,
     pub pinned: ak_doctor::Pinned,
+    /// Used instead of the connection's AI (tests: a scripted one).
+    pub provider: Option<Arc<dyn Provider>>,
 }
 
 impl AppState {
     pub fn load() -> anyhow::Result<AppState> {
-        let state_dir = state_dir();
-        let registry = Registry::load_default()?;
+        AppState::new(
+            state_dir(),
+            Registry::load_default()?,
+            ak_doctor::Toolchain::default_root(),
+        )
+    }
+
+    /// The state kept in `state_dir`, with the projects of `registry` and the
+    /// toolchain in `toolchain_root`.
+    pub fn new(
+        state_dir: PathBuf,
+        registry: Registry,
+        toolchain_root: PathBuf,
+    ) -> anyhow::Result<AppState> {
         let pinned = ak_doctor::Pinned::builtin().map_err(anyhow::Error::msg)?;
-        let toolchain = ak_doctor::Toolchain::new(ak_doctor::Toolchain::default_root(), &pinned);
+        let toolchain = ak_doctor::Toolchain::new(toolchain_root, &pinned);
         Ok(AppState {
             inner: Mutex::new(Inner {
                 registry,
@@ -104,6 +119,7 @@ impl AppState {
             toolchain,
             pinned,
             state_dir,
+            provider: None,
         })
     }
 }

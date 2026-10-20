@@ -314,7 +314,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - The preview's `trunk serve` writes to `target/ak-preview-dist`, never `dist/`, so a release build cannot swap the preview's screens for ones without `dev`.
   - On Windows the zip needs WebView2 (built into Windows 10/11); on Linux the tar.gz needs WebKitGTK 4.1 installed on the target computer.
   - `ak_bundle::guide`: `install_guide(os, output)` returns doctor-style `GuideStep`s (fluent `bundle-guide-…` with `$file` and `$app` from `guide_args`, and a command where one is needed), ending with a sharing step for the same OS. `reveal(path)` shows the file in Explorer/Finder or opens its folder on Linux. `other_os_note` gives `bundle-other-os` (with `os-*` names) for requests for another system; the product prompt tells the agent the same.
-- **AgentKnife app** (`ak-app`, binary `agentknife`): one Tauri command per `ak_types::ipc::cmd` (the test `every_ipc_command_is_handled` checks the list and the handler macro), events `agent-event`, `preview-status`, `doctor-progress`, `bundle-progress`. Errors are JSON (text, `ConnectError`, `BundleFailure`); `anyhow` stays inside ak-app.
+- **AgentKnife app** (`ak-app`, binary `agentknife`; a library plus src/main.rs so tests can use it): one Tauri command per `ak_types::ipc::cmd` (the test `every_ipc_command_is_handled` checks the list and the handler macro), events `agent-event`, `preview-status`, `doctor-progress`, `bundle-progress`. Errors are JSON (text, `ConnectError`, `BundleFailure`); `anyhow` stays inside ak-app.
   - State: the registry, `<data>/AgentKnife/settings.json` (the AI connection; never keys), the usage ledger, and the open project (Project, PreviewSession, conversation, running turn, "before turn" entry for roll back, the real-window process).
   - Opening a project starts its preview, loads the chat, reports an interrupted turn, then adds the project notes (`open_session`) and greets a brand-new chat.
   - Each turn builds its agent from the current connection (keychain key, capabilities → vision/context/max tokens, cost basis), with ProjectPolicy, the UI bridge (confirmations, plans, questions answered by request id), preview tools, the id pass, timeline checkpoints, the conversation store and the usage ledger. The selection goes to the session and to the AI as a context note. Continue / try another way send fixed requests in the UI language (`agent-continue-request`, `agent-try-another-request`).
@@ -323,6 +323,8 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Settings (`ak_types::settings::AppSettings` in `<data>/AgentKnife/settings.json`, loaded clamped; files without the newer fields still load): language (None = the system's), permissions (→ `ProjectPolicy` mode), plans (→ `PlanMode`), max_fix_attempts, keep_turns (timeline GC after each turn), daily_cap_usd. `save_settings` keeps the AI connection (only the wizard changes it, with its key) and switches the UI language at once (`i18n::Tr::set_locale`; take the `Tr` before going async, contexts are not reachable from spawned tasks).
   - No telemetry. Crash reports: a panic hook writes `<data>/AgentKnife/crash-reports/<unix time>.txt` (version, OS, message, place, backtrace; the newest 20 are kept). AgentKnife never sends them; the settings page lists them with "Copy" and "Show in folder".
   - Editing a crate while `cargo tauri dev` runs restarts the window (state is in memory: open the project again).
+  - Commands are generic over `tauri::Runtime`; `ak_app::with_commands(builder, state)` adds the state and the handler (plugins are added by main). `AppState::new(state_dir, registry, toolchain_root)`; `AppState::provider` replaces the connection's AI (tests).
+  - End-to-end test (P1-E2E-001, `crates/ak-app/tests/e2e.rs`, ignored by `cargo test`; `cargo xtask e2e`): Tauri's mock runtime (`tauri/test`) runs the real commands with a `ScriptedProvider`, collecting the window's events: connect → doctor check → new project → greeting → to-do app (`tests/fixtures/todo/main.rs`, local storage) → selected button turns green → bundle → install steps. It builds and packages a real app with AgentKnife's toolchain (`AK_E2E_TOOLCHAIN`, default the data folder; `AK_E2E_PROVISION=1` installs a missing one). CI's `e2e` job caches the toolchain folder.
 - **Privacy:** no telemetry by default. Crash reports are opt-in only.
 
 ## 5. Coding rules
@@ -363,6 +365,7 @@ Prerequisites for developing AgentKnife:
 |---|---|
 | Run AgentKnife (shell + UI, hot reload; uses AgentKnife's toolchain) | `cargo xtask dev` |
 | Build AgentKnife (release, screens built in) → `target/release/agentknife.exe`; run that file | `cargo xtask build` |
+| End-to-end test with a scripted AI (builds and packages a real app; minutes; needs AgentKnife's toolchain) | `cargo xtask e2e` |
 | Run the UI alone in a browser (http://127.0.0.1:47120, toolchain on PATH as for the gallery) | `trunk serve` (from `crates/ak-shell`) |
 | Test one crate | `cargo test -p <crate>` |
 | Full pre-commit gate | `cargo xtask ci` |

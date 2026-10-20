@@ -14,7 +14,7 @@ use ak_types::ipc::{
     BUNDLE_EVENT, BundleFailure, BundleProgress, BundleResult, DOCTOR_EVENT, DoctorCheck,
 };
 use ak_types::stack::HostOs;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_opener::OpenerExt;
 use tokio_util::sync::CancellationToken;
 
@@ -38,7 +38,10 @@ pub async fn doctor_check(state: State<'_, AppState>) -> Res<DoctorCheck> {
 }
 
 #[tauri::command]
-pub async fn doctor_install(app: AppHandle, state: State<'_, AppState>) -> Res<DoctorCheck> {
+pub async fn doctor_install<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Res<DoctorCheck> {
     let fetch = HttpFetch::new().map_err(fail)?;
     let probe = SystemProbe::default();
     let runner = SystemProbe {
@@ -98,8 +101,8 @@ fn os_key(os: HostOs) -> &'static str {
 }
 
 #[tauri::command]
-pub async fn bundle(
-    app: AppHandle,
+pub async fn bundle<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<BundleResult, serde_json::Value> {
     let as_value = |f: BundleFailure| serde_json::to_value(f).unwrap_or(serde_json::Value::Null);
@@ -159,7 +162,7 @@ pub fn reveal(request: String) -> Res<()> {
 
 /// Opens an https page in the user's browser.
 #[tauri::command]
-pub fn open_url(app: AppHandle, request: String) -> Res<()> {
+pub fn open_url<R: Runtime>(app: AppHandle<R>, request: String) -> Res<()> {
     if !request.starts_with("https://") {
         return Err(fail("only https pages open from AgentKnife"));
     }
