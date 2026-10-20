@@ -18,7 +18,11 @@ pub use host::{init, is_preview};
 #[cfg(target_arch = "wasm32")]
 mod client;
 #[cfg(target_arch = "wasm32")]
-pub use client::{HitTestInput, InvokeError, invoke, invoke_value, set_hit_test, start};
+pub use client::{
+    HitTestInput, InvokeError, invoke, invoke_value, set_hit_test, set_state_reader, start,
+};
+#[cfg(all(target_arch = "wasm32", feature = "dev"))]
+mod control;
 #[cfg(all(target_arch = "wasm32", feature = "dev"))]
 mod inspector;
 

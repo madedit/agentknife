@@ -66,7 +66,11 @@ type Ws =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 async fn connect(addr: SocketAddr, token: &str, origin: Option<&str>) -> Result<Ws, String> {
-    let mut req = format!("ws://{addr}/?token={token}")
+    connect_as(addr, &format!("token={token}"), origin).await
+}
+
+async fn connect_as(addr: SocketAddr, query: &str, origin: Option<&str>) -> Result<Ws, String> {
+    let mut req = format!("ws://{addr}/?{query}")
         .into_client_request()
         .unwrap();
     if let Some(o) = origin {
@@ -85,7 +89,10 @@ async fn call(ws: &mut Ws, id: u64, cmd: &str, args: Value) -> (bool, Value) {
         let Some(Ok(Message::Text(text))) = ws.next().await else {
             panic!("connection closed");
         };
-        let ServerMessage::Result { id: got, ok, value } = serde_json::from_str(&text).unwrap();
+        let ServerMessage::Result { id: got, ok, value } = serde_json::from_str(&text).unwrap()
+        else {
+            continue;
+        };
         if got == id {
             return (ok, value);
         }
@@ -155,7 +162,9 @@ fn many_requests_in_flight() {
             let Some(Ok(Message::Text(text))) = ws.next().await else {
                 panic!("closed");
             };
-            let ServerMessage::Result { id, ok, .. } = serde_json::from_str(&text).unwrap();
+            let ServerMessage::Result { id, ok, .. } = serde_json::from_str(&text).unwrap() else {
+                panic!("not a result: {text}");
+            };
             assert!(ok);
             ids.push(id);
         }
@@ -182,8 +191,8 @@ fn strangers_are_turned_away() {
             .await
             .unwrap_err();
         assert!(err.contains("403"), "{err}");
-        let err = connect(locked, TOKEN, None).await.unwrap_err();
-        assert!(err.contains("403"), "{err}");
+        // No Origin at all: a native client (AgentKnife's controller), not a page.
+        assert!(connect(locked, TOKEN, None).await.is_ok());
         assert!(
             connect(locked, TOKEN, Some("http://127.0.0.1:8123"))
                 .await
@@ -202,10 +211,117 @@ fn garbage_is_answered_not_fatal() {
         let Some(Ok(Message::Text(text))) = ws.next().await else {
             panic!("closed");
         };
-        let ServerMessage::Result { id, ok, .. } = serde_json::from_str(&text).unwrap();
+        let ServerMessage::Result { id, ok, .. } = serde_json::from_str(&text).unwrap() else {
+            panic!("not a result: {text}");
+        };
         assert_eq!((id, ok), (0, false));
         assert_eq!(
             call(&mut ws, 1, "add_todo", json!({ "text": "still works" })).await,
+            (true, json!(1))
+        );
+    });
+}
+
+async fn next_msg(ws: &mut Ws) -> ServerMessage {
+    loop {
+        match ws.next().await {
+            Some(Ok(Message::Text(text))) => return serde_json::from_str(&text).unwrap(),
+            Some(Ok(_)) => continue,
+            other => panic!("connection ended: {other:?}"),
+        }
+    }
+}
+
+async fn control(ws: &mut Ws, id: u64, action: Value) {
+    let msg = json!({ "type": "control", "id": id, "action": action });
+    ws.send(Message::text(msg.to_string())).await.unwrap();
+}
+
+#[test]
+fn control_actions_reach_the_newest_page_and_answers_come_back() {
+    use ak_bridge::protocol::ControlAction;
+    let app = app();
+    let addr = start(&app, Some("http://127.0.0.1:8123"));
+    rt().block_on(async {
+        let page_origin = Some("http://127.0.0.1:8123");
+        let controller_q = format!("token={TOKEN}&role=controller");
+        let mut agent = connect_as(addr, &controller_q, None).await.unwrap();
+
+        // No page yet.
+        control(&mut agent, 1, json!({ "action": "dom_summary" })).await;
+        assert_eq!(
+            next_msg(&mut agent).await,
+            ServerMessage::ControlResult {
+                id: 1,
+                ok: false,
+                value: json!("the preview page is not open")
+            }
+        );
+
+        // Two pages: the newest (e.g. after a reload) gets the action.
+        let mut old_page = connect(addr, TOKEN, page_origin).await.unwrap();
+        let mut page = connect(addr, TOKEN, page_origin).await.unwrap();
+        control(
+            &mut agent,
+            7,
+            json!({ "action": "click", "ak_id": "add-button" }),
+        )
+        .await;
+        let ServerMessage::Control { id: sid, action } = next_msg(&mut page).await else {
+            panic!("expected a control action");
+        };
+        assert_eq!(
+            action,
+            ControlAction::Click {
+                ak_id: "add-button".into()
+            }
+        );
+        let reply = json!({ "type": "control_result", "id": sid, "ok": true,
+                            "value": { "clicked": "add-button", "tag": "button" } });
+        page.send(Message::text(reply.to_string())).await.unwrap();
+        assert_eq!(
+            next_msg(&mut agent).await,
+            ServerMessage::ControlResult {
+                id: 7,
+                ok: true,
+                value: json!({ "clicked": "add-button", "tag": "button" })
+            }
+        );
+
+        // The page closes before answering: the agent hears about it.
+        control(&mut agent, 8, json!({ "action": "app_state" })).await;
+        let ServerMessage::Control { .. } = next_msg(&mut page).await else {
+            panic!("expected a control action");
+        };
+        page.close(None).await.unwrap();
+        assert_eq!(
+            next_msg(&mut agent).await,
+            ServerMessage::ControlResult {
+                id: 8,
+                ok: false,
+                value: json!("the preview page closed")
+            }
+        );
+
+        // The older page takes over.
+        control(&mut agent, 9, json!({ "action": "dom_summary" })).await;
+        let ServerMessage::Control { action, .. } = next_msg(&mut old_page).await else {
+            panic!("expected a control action");
+        };
+        assert_eq!(action, ControlAction::DomSummary);
+
+        // A page cannot drive another page.
+        control(&mut old_page, 3, json!({ "action": "dom_summary" })).await;
+        let ServerMessage::ControlResult {
+            id: 3, ok: false, ..
+        } = next_msg(&mut old_page).await
+        else {
+            panic!("a page must not send control actions");
+        };
+
+        // The controller may also call commands.
+        assert_eq!(
+            call(&mut agent, 10, "add_todo", json!({ "text": "via agent" })).await,
             (true, json!(1))
         );
     });

@@ -52,6 +52,7 @@ pub fn is_preview() -> bool {
 
 #[cfg(feature = "dev")]
 pub mod server {
+    use std::collections::HashMap;
     use std::net::SocketAddr;
     use std::sync::{Arc, Mutex};
 
@@ -66,7 +67,10 @@ pub mod server {
     use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
     use tokio_tungstenite::tungstenite::http::StatusCode;
 
-    use crate::protocol::{ClientMessage, ENV_ORIGIN, ENV_PORT, ENV_TOKEN, ServerMessage};
+    use crate::protocol::{
+        CONTROLLER_ROLE, ClientMessage, ControlAction, ENV_ORIGIN, ENV_PORT, ENV_TOKEN,
+        ServerMessage,
+    };
 
     #[derive(Debug, Clone)]
     pub struct Config {
@@ -90,6 +94,27 @@ pub mod server {
         }
     }
 
+    type Tx = mpsc::UnboundedSender<ServerMessage>;
+
+    /// Who is connected, and which control requests wait for the page.
+    #[derive(Default)]
+    struct Hub {
+        /// Open preview pages by connection id; the newest one gets control.
+        pages: Vec<(u64, Tx)>,
+        /// Server control id -> (page connection, controller, controller's id).
+        pending: HashMap<u64, (u64, Tx, u64)>,
+        next: u64,
+    }
+
+    impl Hub {
+        fn id(&mut self) -> u64 {
+            self.next += 1;
+            self.next
+        }
+    }
+
+    type SharedHub = Arc<Mutex<Hub>>;
+
     /// Binds 127.0.0.1 and serves in the background. Returns the bound address.
     pub fn start<R: Runtime>(
         app: AppHandle<R>,
@@ -99,9 +124,15 @@ pub mod server {
             tauri::async_runtime::block_on(TcpListener::bind(("127.0.0.1", config.port)))?;
         let addr = listener.local_addr()?;
         let config = Arc::new(config);
+        let hub = SharedHub::default();
         tauri::async_runtime::spawn(async move {
             while let Ok((stream, _)) = listener.accept().await {
-                tauri::async_runtime::spawn(connection(app.clone(), stream, config.clone()));
+                tauri::async_runtime::spawn(connection(
+                    app.clone(),
+                    stream,
+                    config.clone(),
+                    hub.clone(),
+                ));
             }
         });
         Ok(addr)
@@ -113,13 +144,25 @@ pub mod server {
         r
     }
 
-    /// The token (constant-time compare) and, if configured, the origin.
-    fn check(req: &Request, config: &Config) -> Result<(), StatusCode> {
-        let token = req
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Role {
+        /// The preview page (runs control actions).
+        Page,
+        /// AgentKnife's agent (sends them).
+        Controller,
+    }
+
+    /// The token (constant-time compare) and, if configured, the origin. Browsers
+    /// always send `Origin`, so a missing one means a native client (AgentKnife).
+    fn check(req: &Request, config: &Config) -> Result<Role, StatusCode> {
+        let params: Vec<&str> = req
             .uri()
             .query()
             .into_iter()
             .flat_map(|q| q.split('&'))
+            .collect();
+        let token = params
+            .iter()
             .find_map(|kv| kv.strip_prefix("token="))
             .unwrap_or_default();
         let same = token.len() == config.token.len()
@@ -131,31 +174,40 @@ pub mod server {
         if !same {
             return Err(StatusCode::UNAUTHORIZED);
         }
-        if let Some(want) = &config.origin {
-            let origin = req
-                .headers()
-                .get("origin")
-                .and_then(|o| o.to_str().ok())
-                .unwrap_or_default();
-            if origin != want {
-                return Err(StatusCode::FORBIDDEN);
-            }
+        let origin = req.headers().get("origin").and_then(|o| o.to_str().ok());
+        if let (Some(want), Some(origin)) = (&config.origin, origin)
+            && origin != want
+        {
+            return Err(StatusCode::FORBIDDEN);
         }
-        Ok(())
+        Ok(if params.contains(&CONTROLLER_ROLE) {
+            Role::Controller
+        } else {
+            Role::Page
+        })
     }
 
     // tungstenite's handshake callback must return its (large) ErrorResponse.
     #[allow(clippy::result_large_err)]
-    async fn connection<R: Runtime>(app: AppHandle<R>, stream: TcpStream, config: Arc<Config>) {
+    async fn connection<R: Runtime>(
+        app: AppHandle<R>,
+        stream: TcpStream,
+        config: Arc<Config>,
+        hub: SharedHub,
+    ) {
+        let mut role = Role::Page;
         let callback = |req: &Request, resp: Response| match check(req, &config) {
-            Ok(()) => Ok(resp),
+            Ok(r) => {
+                role = r;
+                Ok(resp)
+            }
             Err(status) => Err(reject(status)),
         };
         let Ok(ws) = tokio_tungstenite::accept_hdr_async(stream, callback).await else {
             return;
         };
         let (mut sink, mut source) = ws.split();
-        // Commands finish in any order; one writer sends their results.
+        // Answers finish in any order; one writer sends them.
         let (tx, mut rx) = mpsc::unbounded_channel::<ServerMessage>();
         let writer = tauri::async_runtime::spawn(async move {
             while let Some(msg) = rx.recv().await {
@@ -167,6 +219,16 @@ pub mod server {
                 }
             }
         });
+        let me = match hub.lock() {
+            Ok(mut h) => {
+                let id = h.id();
+                if role == Role::Page {
+                    h.pages.push((id, tx.clone()));
+                }
+                id
+            }
+            Err(_) => return,
+        };
         while let Some(Ok(msg)) = source.next().await {
             let Message::Text(text) = msg else {
                 continue;
@@ -178,6 +240,29 @@ pub mod server {
                         let _ = tx.send(ServerMessage::Result { id, ok, value });
                     });
                 }
+                Ok(ClientMessage::Control { id, action }) if role == Role::Controller => {
+                    forward(&hub, &tx, id, action);
+                }
+                Ok(ClientMessage::ControlResult { id, ok, value }) if role == Role::Page => {
+                    let waiting = hub.lock().ok().and_then(|mut h| h.pending.remove(&id));
+                    if let Some((_, controller, their_id)) = waiting {
+                        let _ = controller.send(ServerMessage::ControlResult {
+                            id: their_id,
+                            ok,
+                            value,
+                        });
+                    }
+                }
+                Ok(ClientMessage::Control { id, .. }) => {
+                    let _ = tx.send(ServerMessage::ControlResult {
+                        id,
+                        ok: false,
+                        value: Value::String(
+                            "only a controller connection may send control actions".into(),
+                        ),
+                    });
+                }
+                Ok(ClientMessage::ControlResult { .. }) => {}
                 Err(e) => {
                     // Malformed request: answer with id 0 so the client can log it.
                     let _ = tx.send(ServerMessage::Result {
@@ -188,8 +273,46 @@ pub mod server {
                 }
             }
         }
+        if let Ok(mut h) = hub.lock() {
+            h.pages.retain(|(id, _)| *id != me);
+            // Nothing will answer what this page was asked.
+            let lost: Vec<u64> = h
+                .pending
+                .iter()
+                .filter(|(_, (page, _, _))| *page == me)
+                .map(|(sid, _)| *sid)
+                .collect();
+            for sid in lost {
+                if let Some((_, controller, their_id)) = h.pending.remove(&sid) {
+                    let _ = controller.send(ServerMessage::ControlResult {
+                        id: their_id,
+                        ok: false,
+                        value: Value::String("the preview page closed".into()),
+                    });
+                }
+            }
+        }
         drop(tx);
         let _ = writer.await;
+    }
+
+    /// Hands a controller's action to the newest open page.
+    fn forward(hub: &SharedHub, controller: &Tx, their_id: u64, action: ControlAction) {
+        let Ok(mut h) = hub.lock() else {
+            return;
+        };
+        let Some((page_id, page)) = h.pages.last().cloned() else {
+            let _ = controller.send(ServerMessage::ControlResult {
+                id: their_id,
+                ok: false,
+                value: Value::String("the preview page is not open".into()),
+            });
+            return;
+        };
+        let sid = h.id();
+        h.pending
+            .insert(sid, (page_id, controller.clone(), their_id));
+        let _ = page.send(ServerMessage::Control { id: sid, action });
     }
 
     /// The app's main webview, else any webview (for commands that take one).

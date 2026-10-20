@@ -154,6 +154,14 @@ plan/            STATUS.md and execution-plan.md (format in §8).
     - Apps show their windows themselves when `ak_bridge::is_preview()` is false.
     - Backend-to-frontend events (`emit`/`listen`) are not bridged yet; prefer commands.
   - Frontend code calls `ak_bridge::invoke(cmd, &args)`, never Tauri's JS directly.
+  - Control channel (the agent checks its work): AgentKnife connects to the same bridge with `?token=…&role=controller` and sends `ControlAction`s.
+    - The actions are click, type (optionally Enter), dom_summary, app_state and prepare_screenshot.
+    - The server hands each action to the newest open preview page and routes the answer back. Only controllers may send actions.
+    - A connection without an `Origin` header is a native client; browsers always send one, and it must match.
+    - Pages connect at `start()` and reconnect after the backend restarts.
+    - `prepare_screenshot` only scrolls, waits for paint and reports the area. The pixels are captured by AgentKnife (P1-PREV-002).
+    - Page reports strip the `ak_bridge` URL parameter, because it carries the token and the reports go to the model.
+    - Apps may expose state with `ak_bridge::set_state_reader`.
   - Crates that link Tauri and have tests need the Windows Common-Controls manifest for their test binaries (see `crates/ak-bridge/build.rs`); otherwise the tests fail to start with STATUS_ENTRYPOINT_NOT_FOUND.
   - A "Run in real window" button runs `cargo tauri dev`.
 - **Point-and-select:**

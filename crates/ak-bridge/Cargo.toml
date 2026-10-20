@@ -50,6 +50,15 @@ web-sys = { workspace = true, features = [
     "DomRect",
     "MouseEvent",
     "KeyboardEvent",
+    "KeyboardEventInit",
+    "EventInit",
+    "HtmlInputElement",
+    "HtmlTextAreaElement",
+    "HtmlSelectElement",
+    "HtmlFormElement",
+    "Node",
+    "NodeList",
+    "DomRectList",
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]

@@ -173,7 +173,7 @@
     - Managed state, async commands, the command's own error, missing args, unknown command, 20 requests in flight, two clients.
     - Bad or missing token gives 401; wrong or missing origin gives 403; garbage input gives an error reply.
   - The wasm client was verified in Chrome during P1-BRIDGE-002 (see there). Not yet verified: the real wry runtime (P1-TPL-001 live check). Backend-to-frontend events are not bridged.
-- P1-BRIDGE-002 — (hash in next commit) — inspector (point-and-select):
+- P1-BRIDGE-002 — 02437c7 — inspector (point-and-select):
   - Protocol (ak_bridge::protocol):
     - JSON strings `{"ak_inspector": …}`. InspectorCommand is enable/disable. InspectorEvent is ready/hover/select/cancel.
     - A selection (Picked) carries: ak_id (closest data-ak-id, plus `exact`), CSS path (starts at the nearest element id, nth-of-type when needed), tag, short text, rect and viewport in CSS px, and an optional canvas point.
@@ -194,3 +194,27 @@
       - Escape sent cancel; disable removed the overlay and restored clicks.
     - Two bugs were found and fixed: canvas coordinates included the border, and Escape was lost without focus.
   - Native tests cover the protocol, CSS paths and text shortening. The DOM code is only covered by the manual live check; no browser runs in CI.
+- P1-BRIDGE-003 — (hash in next commit) — control channel:
+  - Protocol:
+    - `ClientMessage::Control` (controller) and `ControlResult` (page); `ServerMessage::Control` (to the page) and `ControlResult` (to the controller).
+    - `ControlAction`: click, type{enter}, dom_summary, app_state, prepare_screenshot{ak_id}.
+    - The DomSummary and DomItem structs, plus `render_dom_summary` (compact text for the model).
+    - The AppState and ScreenshotArea structs, plus `strip_bridge_param`, which keeps the token out of reported URLs.
+  - Server:
+    - Roles come from `role=controller`. Pages are tracked; an action goes to the newest one under a server-side id; answers are routed back.
+    - If no page is open, or the page closes, the controller gets an error. Pages may not send actions.
+    - A missing Origin is allowed (native client); a present one must match.
+  - Page (wasm, dev):
+    - `start()` connects and keeps the connection, reconnecting 1 s after the backend restarts.
+    - click: scroll, focus, `click()`.
+    - type: value, then `input` and `change`; with Enter, keydown/keyup, and if unhandled the form's `requestSubmit`.
+    - dom_summary: elements with data-ak-id, interactive elements, text blocks and role; visible only; values and checked state; passwords masked; capped at 400 items.
+    - app_state: URL, title, localStorage (JSON-parsed), plus `set_state_reader`.
+    - prepare_screenshot: scroll, two frames (or 100 ms), then rect, viewport and DPR.
+  - Tests:
+    - Mock-runtime routing: no page, newest page wins, page closes mid-action, fallback to the older page, pages cannot drive, the controller can invoke.
+    - Protocol: summary rendering, URL redaction, message format.
+  - Live in Chrome (demo built with the isolated toolchain): a controller program typed, clicked, pressed Enter (form submit), then read the DOM summary, app_state and the screenshot area; the page called the backend, and the summary showed the result.
+    - Errors were clear for a missing id and for typing into a button.
+    - After the backend was killed and restarted, the page reconnected by itself and actions worked without a reload.
+    - Found and fixed: the token leaked through the page URL in reports.

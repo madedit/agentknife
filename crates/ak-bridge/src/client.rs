@@ -11,11 +11,23 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 
 /// Call once at startup, before mounting the app. In AgentKnife's preview it
-/// lets the user point at elements (the inspector); in release builds it does
-/// nothing.
+/// lets the user point at elements (the inspector) and the agent check its work
+/// (the control channel); in release builds it does nothing.
 pub fn start() {
     #[cfg(feature = "dev")]
-    crate::inspector::install();
+    {
+        crate::inspector::install();
+        bridge::keep_connected();
+    }
+}
+
+/// Lets the agent read the app's state in the preview (`app_state`), e.g. the
+/// list held in a signal. Ignored in release builds.
+pub fn set_state_reader(f: impl Fn() -> Value + 'static) {
+    #[cfg(feature = "dev")]
+    crate::control::set_state_reader(f);
+    #[cfg(not(feature = "dev"))]
+    drop(f);
 }
 
 /// What a canvas hit test receives: the canvas's `data-ak-id` and the point in
@@ -154,10 +166,13 @@ mod bridge {
     type Pending = RefCell<HashMap<u64, oneshot::Sender<Result<Value, InvokeError>>>>;
     type Handler = Closure<dyn FnMut(web_sys::Event)>;
 
+    /// How long to wait before reconnecting after the backend went away.
+    const RECONNECT_MS: i32 = 1000;
+
     struct Conn {
         ws: WebSocket,
         open: Cell<bool>,
-        /// Requests sent before the socket opened.
+        /// Messages sent before the socket opened.
         queue: RefCell<Vec<String>>,
         pending: Pending,
         next_id: Cell<u64>,
@@ -165,8 +180,23 @@ mod bridge {
         _handlers: RefCell<Vec<Handler>>,
     }
 
+    impl Conn {
+        fn send(&self, text: String) -> Result<(), InvokeError> {
+            if self.open.get() {
+                self.ws
+                    .send_with_str(&text)
+                    .map_err(|e| InvokeError::Transport(super::js_text(&e)))
+            } else {
+                self.queue.borrow_mut().push(text);
+                Ok(())
+            }
+        }
+    }
+
     thread_local! {
         static CONN: RefCell<Option<Rc<Conn>>> = const { RefCell::new(None) };
+        /// Stay connected (and reconnect) so the agent can reach the page.
+        static KEEP: Cell<bool> = const { Cell::new(false) };
     }
 
     /// The bridge URL: from `?ak_bridge=` on first load, then from sessionStorage
@@ -189,9 +219,59 @@ mod bridge {
         storage.and_then(|s| s.get_item(STORAGE_KEY).ok().flatten())
     }
 
+    /// Connects now and keeps the connection (reconnecting after backend restarts),
+    /// so control actions reach the page even before it invokes anything.
+    pub fn keep_connected() {
+        let Some(url) = url() else {
+            return;
+        };
+        KEEP.with(|k| k.set(true));
+        let _ = conn(&url);
+    }
+
     fn fail_all(conn: &Conn, why: &str) {
         for (_, tx) in conn.pending.borrow_mut().drain() {
             let _ = tx.send(Err(InvokeError::Transport(why.to_owned())));
+        }
+    }
+
+    fn conn(url: &str) -> Result<Rc<Conn>, InvokeError> {
+        CONN.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            if let Some(c) = slot.as_ref() {
+                return Ok(c.clone());
+            }
+            let c = connect(url)?;
+            *slot = Some(c.clone());
+            Ok(c)
+        })
+    }
+
+    fn on_text(conn: &Rc<Conn>, text: &str) {
+        match serde_json::from_str::<ServerMessage>(text) {
+            Ok(ServerMessage::Result { id, ok, value }) => {
+                if let Some(tx) = conn.pending.borrow_mut().remove(&id) {
+                    let _ = tx.send(if ok {
+                        Ok(value)
+                    } else {
+                        Err(InvokeError::Command(value))
+                    });
+                }
+            }
+            Ok(ServerMessage::Control { id, action }) => {
+                let conn = Rc::downgrade(conn);
+                wasm_bindgen_futures::spawn_local(async move {
+                    let (ok, value) = match crate::control::run(action).await {
+                        Ok(v) => (true, v),
+                        Err(e) => (false, Value::String(e)),
+                    };
+                    let reply = ClientMessage::ControlResult { id, ok, value };
+                    if let (Some(c), Ok(text)) = (conn.upgrade(), serde_json::to_string(&reply)) {
+                        let _ = c.send(text);
+                    }
+                });
+            }
+            Ok(ServerMessage::ControlResult { .. }) | Err(_) => {}
         }
     }
 
@@ -223,24 +303,28 @@ mod bridge {
             ) else {
                 return;
             };
-            let Ok(ServerMessage::Result { id, ok, value }) = serde_json::from_str(&text) else {
-                return;
-            };
-            if let Some(tx) = c.pending.borrow_mut().remove(&id) {
-                let _ = tx.send(if ok {
-                    Ok(value)
-                } else {
-                    Err(InvokeError::Command(value))
-                });
-            }
+            on_text(&c, &text);
         });
         let weak = Rc::downgrade(&conn);
         let on_close = Handler::new(move |_| {
-            if let Some(c) = weak.upgrade() {
-                fail_all(&c, "the preview backend disconnected");
+            let Some(c) = weak.upgrade() else {
+                return;
+            };
+            // `error` and `close` both fire; act once.
+            let current = CONN.with(|slot| {
+                slot.borrow()
+                    .as_ref()
+                    .is_some_and(|cur| Rc::ptr_eq(cur, &c))
+            });
+            if !current {
+                return;
             }
-            // The next invoke reconnects (the backend restarts after code changes).
+            fail_all(&c, "the preview backend disconnected");
             CONN.with(|slot| *slot.borrow_mut() = None);
+            // The backend restarts after code changes: come back when it does.
+            if KEEP.with(Cell::get) {
+                reconnect_later();
+            }
         });
         conn.ws.set_onopen(Some(on_open.as_ref().unchecked_ref()));
         conn.ws
@@ -253,16 +337,19 @@ mod bridge {
         Ok(conn)
     }
 
+    fn reconnect_later() {
+        let Some(window) = web_sys::window() else {
+            return;
+        };
+        let retry = Closure::once_into_js(keep_connected);
+        let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+            retry.unchecked_ref(),
+            RECONNECT_MS,
+        );
+    }
+
     pub async fn invoke(url: &str, cmd: &str, args: Value) -> Result<Value, InvokeError> {
-        let conn = CONN.with(|slot| -> Result<Rc<Conn>, InvokeError> {
-            let mut slot = slot.borrow_mut();
-            if let Some(c) = slot.as_ref() {
-                return Ok(c.clone());
-            }
-            let c = connect(url)?;
-            *slot = Some(c.clone());
-            Ok(c)
-        })?;
+        let conn = conn(url)?;
         let id = conn.next_id.get();
         conn.next_id.set(id + 1);
         let text = serde_json::to_string(&ClientMessage::Invoke {
@@ -273,13 +360,7 @@ mod bridge {
         .map_err(|e| InvokeError::Decode(e.to_string()))?;
         let (tx, rx) = oneshot::channel();
         conn.pending.borrow_mut().insert(id, tx);
-        if conn.open.get() {
-            conn.ws
-                .send_with_str(&text)
-                .map_err(|e| InvokeError::Transport(super::js_text(&e)))?;
-        } else {
-            conn.queue.borrow_mut().push(text);
-        }
+        conn.send(text)?;
         drop(conn);
         rx.await
             .unwrap_or_else(|_| Err(InvokeError::Transport("the request was dropped".into())))
