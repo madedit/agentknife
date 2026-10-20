@@ -7,7 +7,7 @@
 
 use std::collections::VecDeque;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
@@ -18,6 +18,10 @@ use crate::{HttpRequest, HttpResponse, HttpTransport, Method, ProviderError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Fixture {
+    /// `"recorded"` (captured from the real API) or `"synthetic"` (hand-written from
+    /// the documented wire format; replace by recording when a key is available).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     pub request: RecordedRequest,
     pub response: RecordedResponse,
 }
@@ -122,6 +126,104 @@ impl HttpTransport for FixtureTransport {
     fn send(&self, request: HttpRequest) -> BoxFuture<'_, Result<HttpResponse, ProviderError>> {
         let result = self.replay(request);
         Box::pin(async move { result })
+    }
+}
+
+/// Response headers worth keeping in a fixture. Everything else (cookies, org ids,
+/// rate-limit details) is dropped.
+const KEPT_HEADERS: &[&str] = &["content-type", "retry-after", "request-id"];
+
+/// Wraps a real transport and records every exchange as a [`Fixture`]. Request
+/// headers (credentials) are never recorded.
+pub struct RecordingTransport<T> {
+    inner: T,
+    recorded: Arc<Mutex<Vec<Option<Fixture>>>>,
+}
+
+impl<T: HttpTransport> RecordingTransport<T> {
+    pub fn new(inner: T) -> Self {
+        Self {
+            inner,
+            recorded: Arc::default(),
+        }
+    }
+
+    /// Completed exchanges in request order. A response is complete once its body
+    /// has been read to the end.
+    pub fn take(&self) -> Vec<Fixture> {
+        self.recorded
+            .lock()
+            .map(|mut r| r.drain(..).flatten().collect())
+            .unwrap_or_default()
+    }
+}
+
+impl<T: HttpTransport> HttpTransport for RecordingTransport<T> {
+    fn send(&self, request: HttpRequest) -> BoxFuture<'_, Result<HttpResponse, ProviderError>> {
+        Box::pin(async move {
+            let recorded_request = RecordedRequest {
+                method: match request.method {
+                    Method::Get => "GET".into(),
+                    Method::Post => "POST".into(),
+                },
+                path: path_of(&request.url).to_owned(),
+                body: request
+                    .body
+                    .as_deref()
+                    .and_then(|b| serde_json::from_slice(b).ok()),
+            };
+            let resp = self.inner.send(request).await?;
+            let slot = match self.recorded.lock() {
+                Ok(mut r) => {
+                    r.push(None);
+                    r.len() - 1
+                }
+                Err(_) => return Err(ProviderError::Transport("recorder lock poisoned".into())),
+            };
+            let headers: Vec<(String, String)> = resp
+                .headers
+                .iter()
+                .filter(|(k, _)| KEPT_HEADERS.iter().any(|h| k.eq_ignore_ascii_case(h)))
+                .cloned()
+                .collect();
+            let status = resp.status;
+            let buf: Arc<Mutex<Vec<u8>>> = Arc::default();
+            let tee = buf.clone();
+            let recorded = self.recorded.clone();
+            let kept = headers.clone();
+            let body = resp.body.inspect(move |chunk| {
+                if let (Ok(c), Ok(mut b)) = (chunk, tee.lock()) {
+                    b.extend_from_slice(c);
+                }
+            });
+            let finish = stream::once(async move {
+                let bytes = buf
+                    .lock()
+                    .map(|mut b| std::mem::take(&mut *b))
+                    .unwrap_or_default();
+                let fixture = Fixture {
+                    source: Some("recorded".into()),
+                    request: recorded_request,
+                    response: RecordedResponse {
+                        status,
+                        headers: kept,
+                        chunks: vec![String::from_utf8_lossy(&bytes).into_owned()],
+                    },
+                };
+                if let Ok(mut r) = recorded.lock()
+                    && let Some(s) = r.get_mut(slot)
+                {
+                    *s = Some(fixture);
+                }
+                None::<Result<Vec<u8>, ProviderError>>
+            })
+            .filter_map(|x| async move { x });
+            Ok(HttpResponse {
+                status,
+                headers,
+                body: body.chain(finish).boxed(),
+            })
+        })
     }
 }
 

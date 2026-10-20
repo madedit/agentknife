@@ -166,7 +166,8 @@ APP and E2E integrate all tracks.
 - Depends on: P1-AGENT-001, P1-PROJ-002, P1-PROJ-003
 - Acceptance:
   - At session start the agent loads `.agentknife/PROJECT.md`, `plan/STATUS.md`, and `plan/tasks.md`.
-  - Older turns are compacted when the context hits a threshold.
+  - Older turns are compacted when the context hits a threshold. Compaction is **append-only** (AGENTS.md §4), using the provider's server-side compaction where available (Anthropic: beta `compact-2026-01-12`) or an appended summary.
+  - A test asserts that the history prefix sent to the provider never changes between turns.
   - The agent updates PROJECT.md and STATUS.md through tools.
   - A test shows a long scripted session staying under the context limit.
   - Resume after interruption: given a `turn.lock`, the agent continues the interrupted turn.

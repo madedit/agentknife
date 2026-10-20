@@ -131,7 +131,13 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Message kinds: user, assistant text, thinking, tool call, tool result, checkpoint marker.
   - The format carries `schema_version`, with migrations for older versions.
   - Provider adapters convert to and from the neutral schema.
-  - Thinking blocks carry `origin` (provider id) and an opaque `signature`. Adapters replay thinking **only to its origin provider**, because Anthropic extended thinking with tool use *requires* the signed blocks back. Every other provider drops it, since providers reject each other's thinking. To the user it is display-only.
+  - Assistant messages carry an optional `ProviderReplay { origin, content }`: the provider's exact output, including signed thinking and block order.
+    - The origin provider echoes it **verbatim**. Anthropic requires signed thinking back unchanged, and drops on its side any blocks the current model can't read.
+    - Other providers rebuild the request from the neutral text and tool calls instead.
+    - Neutral `thinking` is display-only.
+  - **Histories are append-only.** Never edit, reorder or remove earlier messages, and never rebuild `system` or `tools` mid-conversation. Providers bind reasoning signatures to the exact prefix, so an edit makes later thinking invalid (a 400 on new Anthropic accounts).
+    - Compaction must use the provider's server-side compaction, or append a summary. It must never rewrite.
+    - The Anthropic adapter also sends `thinking.block_binding.prefix_mismatch_behavior: "drop_block"` as a safety net.
   - Switching providers mid-project must keep working.
 - **Interrupted turns:** at turn start, the agent writes `.agentknife/turn.lock`, holding the request, the files touched so far, and the current step. The lock is deleted only after the turn's checkpoint is created.
   - On project open, a leftover lock or un-checkpointed changes trigger a plain-language prompt: "Last time I stopped halfway (doing: …). **Continue**, or **go back to the last checkpoint**?"
@@ -190,6 +196,7 @@ Prerequisites for developing AgentKnife:
 | Full pre-commit gate | `cargo xtask ci` |
 | Refresh the vendored CodeMirror | `cargo xtask vendor-codemirror` |
 
+| Record real Anthropic fixtures (costs cents) | `ANTHROPIC_API_KEY=… cargo run -p ak-providers --example record_anthropic` |
 | Regenerate `rust-toolchain.toml` | `cargo xtask gen-toolchain` (never edit it by hand) |
 
 **Windows gotcha:** run cargo from PowerShell or cmd, not Git Bash. Git Bash's `/usr/bin/link` shadows MSVC `link.exe`, and every build fails with `link: extra operand`.
@@ -199,7 +206,11 @@ When building the workspace skeleton, implement exactly these entry points. If a
 ## 7. Testing
 
 - Every crate has unit tests.
-- Providers are tested against recorded fixtures and never call real APIs in CI.
+- Providers are tested against fixtures (`crates/ak-providers/tests/fixtures/<provider>/`) and never call real APIs in CI.
+  - Each fixture is marked `"source": "synthetic"` (hand-written from the documented wire format, with exact request bodies asserted) or `"recorded"`.
+  - Recorded fixtures are captured with `cargo run -p ak-providers --example record_<provider>` using an env-var key. They live in `recorded/` and are replayed by a decode-to-completion test.
+  - Fixtures never contain request headers or keys.
+- Before coding against a provider API, check its current docs. For Anthropic, load the `claude-api` skill. Model behaviour changes quickly; for example, `budget_tokens` is rejected by current Claude models.
 - Agent flows are tested end-to-end with a **scripted fake LLM**.
 - MVP acceptance scenario, as a fake-LLM E2E test and run manually on clean machines (Windows 11, macOS, Linux): a non-programmer installs AgentKnife, connects an AI, lets doctor set up tools, and builds a to-do list app (add and delete items, local storage) only through chat. Along the way they click a button in the preview to change its color. At the end they get an installer and successfully install and run the app.
 - CI: GitHub Actions on Windows, macOS, and Linux. CI makes no network fetches beyond crate downloads.

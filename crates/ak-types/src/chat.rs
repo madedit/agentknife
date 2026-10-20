@@ -1,8 +1,12 @@
 //! Provider-neutral conversation messages (AGENTS.md §4, "Chat history format").
 //!
-//! Provider adapters convert these to and from their wire formats. Nothing here is
-//! specific to one provider; provider-specific data is either dropped or kept as an
-//! opaque, origin-tagged blob (see [`Thinking`]).
+//! Provider adapters convert these to and from their wire formats. The neutral fields
+//! are what the UI shows and what any provider can rebuild a request from. Exact
+//! provider output that must be echoed back unchanged (signed thinking, block order)
+//! is kept separately as an origin-tagged [`ProviderReplay`].
+//!
+//! Histories are **append-only**: never edit, reorder or remove an earlier message.
+//! Providers bind reasoning signatures to the exact conversation prefix.
 
 use serde::{Deserialize, Serialize};
 
@@ -14,13 +18,17 @@ pub enum Message {
         content: Vec<ContentPart>,
     },
     Assistant {
-        /// Reasoning shown collapsed in the UI. Replayed only to its origin provider.
+        /// Reasoning, shown collapsed in the UI. Display-only: never re-sent from here.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         thinking: Vec<Thinking>,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         text: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         tool_calls: Vec<ToolCall>,
+        /// The provider's own content, replayed verbatim when the same provider is
+        /// asked again; other providers rebuild from the neutral fields above.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        replay: Option<ProviderReplay>,
     },
     ToolResult {
         call_id: String,
@@ -51,19 +59,21 @@ pub enum ContentPart {
     },
 }
 
-/// Model reasoning.
-///
-/// Some providers (Anthropic extended thinking with tool use) require signed thinking
-/// to be sent back unchanged within the same provider. Adapters replay a block only
-/// when `origin` matches themselves, and drop it otherwise.
+/// Model reasoning as shown to the user.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Thinking {
+    /// May be empty when the provider withholds reasoning text.
     pub text: String,
-    /// Provider id that produced this block, e.g. `"anthropic"`.
+    /// Provider id that produced it, e.g. `"anthropic"`.
     pub origin: String,
-    /// Opaque provider data (signature, redacted payload) needed for replay.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signature: Option<String>,
+}
+
+/// Opaque provider content for an assistant message.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProviderReplay {
+    /// Provider id ([`Thinking::origin`] uses the same ids).
+    pub origin: String,
+    pub content: serde_json::Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -71,7 +81,12 @@ pub struct ToolCall {
     /// Provider-assigned id, echoed back in [`Message::ToolResult::call_id`].
     pub id: String,
     pub name: String,
+    /// Parsed arguments. `Null` when [`ToolCall::invalid_arguments`] is set.
     pub arguments: serde_json::Value,
+    /// Raw argument text that was not valid JSON (e.g. cut off by the token limit).
+    /// The agent must answer such a call with an error result, not run it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invalid_arguments: Option<String>,
 }
 
 /// A tool the model may call.
@@ -95,14 +110,18 @@ mod tests {
                 thinking: vec![Thinking {
                     text: "find the button".into(),
                     origin: "anthropic".into(),
-                    signature: Some("sig".into()),
                 }],
                 text: String::new(),
                 tool_calls: vec![ToolCall {
                     id: "call_1".into(),
                     name: "read_file".into(),
                     arguments: serde_json::json!({ "path": "src/app.rs" }),
+                    invalid_arguments: None,
                 }],
+                replay: Some(ProviderReplay {
+                    origin: "anthropic".into(),
+                    content: serde_json::json!([{ "type": "thinking", "signature": "s" }]),
+                }),
             },
             Message::ToolResult {
                 call_id: "call_1".into(),

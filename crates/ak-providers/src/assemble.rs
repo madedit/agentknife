@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use ak_types::chat::{Message, Thinking, ToolCall};
+use ak_types::chat::{Message, ProviderReplay, Thinking, ToolCall};
 use futures_util::StreamExt;
 
 use crate::{EventStream, ProviderError, StopReason, StreamEvent, Usage};
@@ -22,12 +22,13 @@ pub struct MessageAssembler {
     open_thinking: Option<String>,
     text: String,
     tool_calls: BTreeMap<usize, (String, String, String)>,
+    replay: Option<serde_json::Value>,
     usage: Usage,
     stop_reason: Option<StopReason>,
 }
 
 impl MessageAssembler {
-    /// `origin` is the provider id recorded on thinking blocks.
+    /// `origin` is the provider id recorded on thinking and replay content.
     pub fn new(origin: impl Into<String>) -> Self {
         Self {
             origin: origin.into(),
@@ -35,6 +36,7 @@ impl MessageAssembler {
             open_thinking: None,
             text: String::new(),
             tool_calls: BTreeMap::new(),
+            replay: None,
             usage: Usage::default(),
             stop_reason: None,
         }
@@ -51,14 +53,7 @@ impl MessageAssembler {
                     .get_or_insert_with(String::new)
                     .push_str(&t);
             }
-            StreamEvent::ThinkingSignature(sig) => {
-                let text = self.open_thinking.take().unwrap_or_default();
-                self.thinking.push(Thinking {
-                    text,
-                    origin: self.origin.clone(),
-                    signature: Some(sig),
-                });
-            }
+            StreamEvent::ThinkingEnd => self.close_thinking(),
             StreamEvent::ToolCallStart { index, id, name } => {
                 if self
                     .tool_calls
@@ -81,45 +76,62 @@ impl MessageAssembler {
                     )));
                 }
             },
+            StreamEvent::Fallback { .. } => {
+                // The declined attempt's reasoning and tool calls must not be kept
+                // or executed; its text stays as continuation context.
+                self.thinking.clear();
+                self.open_thinking = None;
+                self.tool_calls.clear();
+            }
             StreamEvent::Usage(u) => self.usage += u,
+            StreamEvent::Replay(content) => self.replay = Some(content),
             StreamEvent::Done { stop_reason } => self.stop_reason = Some(stop_reason),
         }
         Ok(())
     }
 
+    fn close_thinking(&mut self) {
+        let text = self.open_thinking.take().unwrap_or_default();
+        self.thinking.push(Thinking {
+            text,
+            origin: self.origin.clone(),
+        });
+    }
+
     pub fn finish(mut self) -> Result<Assembled, ProviderError> {
-        let stop_reason = self.stop_reason.ok_or(ProviderError::Incomplete)?;
-        if let Some(text) = self.open_thinking.take() {
-            // Unsigned thinking (e.g. OpenAI-compatible reasoning): display-only.
-            self.thinking.push(Thinking {
-                text,
-                origin: self.origin.clone(),
-                signature: None,
-            });
+        let stop_reason = self.stop_reason.take().ok_or(ProviderError::Incomplete)?;
+        if self.open_thinking.is_some() {
+            self.close_thinking();
         }
         let tool_calls = self
             .tool_calls
             .into_values()
             .map(|(id, name, args)| {
-                let arguments = if args.trim().is_empty() {
-                    serde_json::Value::Object(Default::default())
+                let (arguments, invalid_arguments) = if args.trim().is_empty() {
+                    (serde_json::Value::Object(Default::default()), None)
                 } else {
-                    serde_json::from_str(&args).map_err(|e| {
-                        ProviderError::Decode(format!("tool `{name}` arguments: {e}"))
-                    })?
+                    match serde_json::from_str(&args) {
+                        Ok(v) => (v, None),
+                        Err(_) => (serde_json::Value::Null, Some(args)),
+                    }
                 };
-                Ok(ToolCall {
+                ToolCall {
                     id,
                     name,
                     arguments,
-                })
+                    invalid_arguments,
+                }
             })
-            .collect::<Result<Vec<_>, ProviderError>>()?;
+            .collect();
+        let origin = self.origin;
         Ok(Assembled {
             message: Message::Assistant {
                 thinking: self.thinking,
                 text: self.text,
                 tool_calls,
+                replay: self
+                    .replay
+                    .map(|content| ProviderReplay { origin, content }),
             },
             usage: self.usage,
             stop_reason,
@@ -151,60 +163,72 @@ mod tests {
         })
     }
 
+    fn start(index: usize, id: &str, name: &str) -> StreamEvent {
+        StreamEvent::ToolCallStart {
+            index,
+            id: id.into(),
+            name: name.into(),
+        }
+    }
+
+    fn args(index: usize, s: &str) -> StreamEvent {
+        StreamEvent::ToolCallDelta {
+            index,
+            arguments_fragment: s.into(),
+        }
+    }
+
+    fn done(stop_reason: StopReason) -> StreamEvent {
+        StreamEvent::Done { stop_reason }
+    }
+
+    fn assistant(m: Message) -> (Vec<Thinking>, String, Vec<ToolCall>, Option<ProviderReplay>) {
+        let Message::Assistant {
+            thinking,
+            text,
+            tool_calls,
+            replay,
+        } = m
+        else {
+            panic!("not an assistant message");
+        };
+        (thinking, text, tool_calls, replay)
+    }
+
     #[test]
-    fn assembles_thinking_text_and_tool_calls() {
+    fn assembles_thinking_text_tool_calls_and_replay() {
         let mut a = MessageAssembler::new("anthropic");
         for ev in [
             usage(10, 0),
             StreamEvent::ThinkingDelta("look at ".into()),
             StreamEvent::ThinkingDelta("the file".into()),
-            StreamEvent::ThinkingSignature("sig1".into()),
+            StreamEvent::ThinkingEnd,
             StreamEvent::TextDelta("Reading it.".into()),
-            StreamEvent::ToolCallStart {
-                index: 1,
-                id: "c1".into(),
-                name: "read_file".into(),
-            },
-            StreamEvent::ToolCallDelta {
-                index: 1,
-                arguments_fragment: "{\"path\":".into(),
-            },
-            StreamEvent::ToolCallDelta {
-                index: 1,
-                arguments_fragment: "\"a.rs\"}".into(),
-            },
-            StreamEvent::ToolCallStart {
-                index: 2,
-                id: "c2".into(),
-                name: "list_files".into(),
-            },
+            start(1, "c1", "read_file"),
+            args(1, "{\"path\":"),
+            args(1, "\"a.rs\"}"),
+            start(2, "c2", "list_files"),
             usage(0, 42),
-            StreamEvent::Done {
-                stop_reason: StopReason::ToolUse,
-            },
+            StreamEvent::Replay(serde_json::json!([{ "type": "text" }])),
+            done(StopReason::ToolUse),
         ] {
             a.push(ev).unwrap();
         }
         let done = a.finish().unwrap();
-        assert_eq!(done.usage.input_tokens, 10);
-        assert_eq!(done.usage.output_tokens, 42);
+        assert_eq!(
+            (done.usage.input_tokens, done.usage.output_tokens),
+            (10, 42)
+        );
         assert_eq!(done.stop_reason, StopReason::ToolUse);
-        let Message::Assistant {
-            thinking,
-            text,
-            tool_calls,
-        } = done.message
-        else {
-            panic!("not an assistant message");
-        };
+        let (thinking, text, tool_calls, replay) = assistant(done.message);
         assert_eq!(text, "Reading it.");
         assert_eq!(thinking.len(), 1);
         assert_eq!(thinking[0].text, "look at the file");
         assert_eq!(thinking[0].origin, "anthropic");
-        assert_eq!(thinking[0].signature.as_deref(), Some("sig1"));
         assert_eq!(tool_calls.len(), 2);
         assert_eq!(tool_calls[0].arguments["path"], "a.rs");
         assert_eq!(tool_calls[1].arguments, serde_json::json!({}));
+        assert_eq!(replay.unwrap().origin, "anthropic");
     }
 
     #[test]
@@ -215,54 +239,63 @@ mod tests {
     }
 
     #[test]
-    fn bad_tool_arguments_fail() {
+    fn invalid_tool_arguments_are_marked_not_fatal() {
         let mut a = MessageAssembler::new("x");
-        a.push(StreamEvent::ToolCallStart {
-            index: 0,
-            id: "c".into(),
-            name: "t".into(),
-        })
-        .unwrap();
-        a.push(StreamEvent::ToolCallDelta {
-            index: 0,
-            arguments_fragment: "{oops".into(),
-        })
-        .unwrap();
-        a.push(StreamEvent::Done {
-            stop_reason: StopReason::ToolUse,
-        })
-        .unwrap();
-        assert!(matches!(a.finish(), Err(ProviderError::Decode(_))));
+        a.push(start(0, "c", "write_file")).unwrap();
+        a.push(args(0, "{\"path\":\"a.rs\",\"content\":\"cut off"))
+            .unwrap();
+        a.push(done(StopReason::MaxTokens)).unwrap();
+        let (_, _, calls, _) = assistant(a.finish().unwrap().message);
+        assert_eq!(calls[0].arguments, serde_json::Value::Null);
+        assert!(
+            calls[0]
+                .invalid_arguments
+                .as_deref()
+                .unwrap()
+                .contains("cut off")
+        );
     }
 
     #[test]
-    fn unsigned_trailing_thinking_is_kept_for_display() {
+    fn fallback_voids_earlier_thinking_and_tool_calls_but_keeps_text() {
+        let mut a = MessageAssembler::new("anthropic");
+        for ev in [
+            StreamEvent::ThinkingDelta("declined attempt".into()),
+            StreamEvent::ThinkingEnd,
+            StreamEvent::TextDelta("Partial. ".into()),
+            start(0, "c0", "run"),
+            StreamEvent::Fallback {
+                from: "claude-fable-5-1".into(),
+                to: "claude-opus-5".into(),
+            },
+            StreamEvent::TextDelta("Continued.".into()),
+            start(1, "c1", "read_file"),
+            done(StopReason::ToolUse),
+        ] {
+            a.push(ev).unwrap();
+        }
+        let (thinking, text, calls, _) = assistant(a.finish().unwrap().message);
+        assert!(thinking.is_empty());
+        assert_eq!(text, "Partial. Continued.");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].id, "c1");
+    }
+
+    #[test]
+    fn unclosed_trailing_thinking_is_kept_for_display() {
         let mut a = MessageAssembler::new("openai-compatible");
         a.push(StreamEvent::ThinkingDelta("hmm".into())).unwrap();
-        a.push(StreamEvent::Done {
-            stop_reason: StopReason::EndTurn,
-        })
-        .unwrap();
-        let Message::Assistant { thinking, .. } = a.finish().unwrap().message else {
-            panic!();
-        };
-        assert_eq!(thinking[0].signature, None);
+        a.push(done(StopReason::EndTurn)).unwrap();
+        let (thinking, _, _, replay) = assistant(a.finish().unwrap().message);
+        assert_eq!(thinking[0].text, "hmm");
+        assert!(replay.is_none());
     }
 
     #[test]
     fn events_after_done_and_orphan_deltas_fail() {
         let mut a = MessageAssembler::new("x");
-        assert!(
-            a.push(StreamEvent::ToolCallDelta {
-                index: 9,
-                arguments_fragment: "{}".into()
-            })
-            .is_err()
-        );
-        a.push(StreamEvent::Done {
-            stop_reason: StopReason::EndTurn,
-        })
-        .unwrap();
+        assert!(a.push(args(9, "{}")).is_err());
+        a.push(done(StopReason::EndTurn)).unwrap();
         assert!(a.push(StreamEvent::TextDelta("late".into())).is_err());
     }
 }

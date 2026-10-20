@@ -50,6 +50,16 @@ pub struct HttpResponse {
 }
 
 impl HttpResponse {
+    /// Reads the whole body as UTF-8 (error bodies, JSON endpoints).
+    pub async fn text(mut self) -> Result<String, ProviderError> {
+        use futures_util::StreamExt;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = self.body.next().await {
+            bytes.extend(chunk?);
+        }
+        String::from_utf8(bytes).map_err(|e| ProviderError::Decode(e.to_string()))
+    }
+
     pub fn header(&self, name: &str) -> Option<&str> {
         self.headers
             .iter()

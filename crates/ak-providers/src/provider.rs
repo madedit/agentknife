@@ -14,25 +14,62 @@ pub struct ChatRequest {
     pub system: Option<String>,
     pub messages: Vec<Message>,
     pub tools: Vec<ToolSpec>,
+    /// Upper bound; adapters clamp it to the model's output limit.
     pub max_tokens: u32,
-    /// Reasoning budget in tokens; `None` disables thinking.
-    pub thinking_budget: Option<u32>,
+    /// How hard the model should think. `None` uses the model's default. Adapters map
+    /// it to whatever the model supports (and step down to the nearest lower level).
+    pub effort: Option<Effort>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Effort {
+    Low,
+    Medium,
+    High,
+    #[serde(rename = "xhigh")]
+    XHigh,
+    Max,
+}
+
+impl Effort {
+    pub const ALL: [Effort; 5] = [
+        Effort::Low,
+        Effort::Medium,
+        Effort::High,
+        Effort::XHigh,
+        Effort::Max,
+    ];
+
+    /// Wire name used by providers (`"xhigh"` etc.).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Effort::Low => "low",
+            Effort::Medium => "medium",
+            Effort::High => "high",
+            Effort::XHigh => "xhigh",
+            Effort::Max => "max",
+        }
+    }
 }
 
 /// Incremental output of a streaming completion.
 ///
 /// Ordering contract for adapters:
-/// - `ThinkingDelta`s append to the open thinking block; `ThinkingSignature` closes it.
+/// - `ThinkingDelta`s append to the open thinking block; `ThinkingEnd` closes it.
 /// - Tool calls are keyed by `index`: one `ToolCallStart`, then argument fragments
 ///   whose concatenation is a JSON object (or empty, meaning `{}`).
+/// - `Fallback` marks a server-side switch to another model after a refusal: thinking
+///   and tool calls received before it are void (text stays).
 /// - `Usage` events are deltas; their sum is the request's total.
+/// - `Replay` (at most once, before `Done`) carries the provider's exact content
+///   for verbatim echo on the next request.
 /// - The stream ends with exactly one `Done`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StreamEvent {
     TextDelta(String),
     ThinkingDelta(String),
-    /// Opaque replay data for the open thinking block (signature or redacted payload).
-    ThinkingSignature(String),
+    ThinkingEnd,
     ToolCallStart {
         index: usize,
         id: String,
@@ -42,7 +79,12 @@ pub enum StreamEvent {
         index: usize,
         arguments_fragment: String,
     },
+    Fallback {
+        from: String,
+        to: String,
+    },
     Usage(Usage),
+    Replay(serde_json::Value),
     Done {
         stop_reason: StopReason,
     },
@@ -70,6 +112,10 @@ pub enum StopReason {
     EndTurn,
     ToolUse,
     MaxTokens,
+    /// The model or a safety classifier declined. Partial output must be discarded.
+    Refusal {
+        category: Option<String>,
+    },
     Other(String),
 }
 
@@ -81,6 +127,7 @@ pub struct Capabilities {
     pub vision: bool,
     pub thinking: bool,
     pub context_window: Option<u32>,
+    pub max_output_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,7 +140,8 @@ pub type EventStream = BoxStream<'static, Result<StreamEvent, ProviderError>>;
 
 /// An LLM backend. Object-safe so the provider can be chosen at runtime.
 pub trait Provider: Send + Sync {
-    /// Stable id, also used as [`ak_types::chat::Thinking::origin`].
+    /// Stable id, also used as [`ak_types::chat::Thinking::origin`] and
+    /// [`ak_types::chat::ProviderReplay::origin`].
     fn id(&self) -> &'static str;
 
     fn list_models(&self) -> BoxFuture<'_, Result<Vec<ModelInfo>, ProviderError>>;
@@ -129,5 +177,17 @@ mod tests {
         };
         assert_eq!((total.input_tokens, total.output_tokens), (5, 7));
         assert_eq!(total.cache_read_tokens, 2);
+    }
+
+    #[test]
+    fn effort_orders_and_serializes() {
+        assert!(Effort::Low < Effort::XHigh);
+        assert_eq!(serde_json::to_string(&Effort::XHigh).unwrap(), "\"xhigh\"");
+        for e in Effort::ALL {
+            assert_eq!(
+                serde_json::to_string(&e).unwrap(),
+                format!("\"{}\"", e.as_str())
+            );
+        }
     }
 }

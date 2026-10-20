@@ -6,16 +6,20 @@
 
 #![forbid(unsafe_code)]
 
+pub mod anthropic;
 mod assemble;
 mod error;
 pub mod fixture;
+mod http;
 mod provider;
 pub mod sse;
 mod transport;
 
 pub use assemble::{Assembled, MessageAssembler, collect};
 pub use error::ProviderError;
+pub use http::ReqwestTransport;
 pub use provider::{
-    Capabilities, ChatRequest, EventStream, ModelInfo, Provider, StopReason, StreamEvent, Usage,
+    Capabilities, ChatRequest, Effort, EventStream, ModelInfo, Provider, StopReason, StreamEvent,
+    Usage,
 };
 pub use transport::{ByteStream, HttpRequest, HttpResponse, HttpTransport, Method};

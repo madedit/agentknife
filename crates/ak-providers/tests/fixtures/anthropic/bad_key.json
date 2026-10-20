@@ -1,0 +1,21 @@
+[
+   {
+      "request" : {
+         "method" : "GET",
+         "path" : "/v1/models/claude-opus-5-5"
+      },
+      "response" : {
+         "chunks" : [
+            "{\"error\":{\"message\":\"invalid x-api-key\",\"type\":\"authentication_error\"},\"type\":\"error\"}"
+         ],
+         "headers" : [
+            [
+               "content-type",
+               "application/json"
+            ]
+         ],
+         "status" : 401
+      },
+      "source" : "synthetic"
+   }
+]
