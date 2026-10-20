@@ -46,15 +46,19 @@ fn serve(args: &[String]) {
         .and_then(|w| w[1].parse::<u16>().ok())
         .unwrap_or(0);
     log(&format!("serve port={port} args={}", args.join(" ")));
-    if let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", port)) {
-        std::thread::spawn(move || {
-            for mut stream in listener.incoming().flatten() {
-                let mut buf = [0u8; 1024];
-                let _ = stream.read(&mut buf);
-                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok");
-            }
-        });
-    }
+    // FAKE_LISTEN_DELAY (ms): like trunk, report the build before listening.
+    let delay: u64 = env("FAKE_LISTEN_DELAY").parse().unwrap_or(0);
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(delay));
+        let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", port)) else {
+            return;
+        };
+        for mut stream in listener.incoming().flatten() {
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok");
+        }
+    });
     build(&env("FAKE_FRONT"));
     // Rebuild whenever the trigger file changes: "ok", "fail" or "exit".
     let trigger = env("FAKE_TRIGGER");

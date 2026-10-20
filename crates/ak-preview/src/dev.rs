@@ -199,6 +199,7 @@ impl Preview {
             status: self.status.clone(),
             plan: self.plan.clone(),
             page_url: self.page_url(),
+            port: self.port,
             stopping: stopping.clone(),
         };
         let task = tokio::spawn(watcher.run(child, rx));
@@ -224,6 +225,24 @@ impl Drop for Preview {
         }
     }
 }
+
+/// Waits until something accepts connections on `port` (at most
+/// [`LISTEN_WAIT`]; after that the page is shown anyway).
+async fn wait_listening(port: u16) {
+    let deadline = tokio::time::Instant::now() + LISTEN_WAIT;
+    while tokio::time::Instant::now() < deadline {
+        if tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .is_ok()
+        {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+}
+
+/// How long [`wait_listening`] waits.
+const LISTEN_WAIT: std::time::Duration = std::time::Duration::from_secs(15);
 
 fn set(status: &watch::Sender<PreviewStatus>, side: Side, state: ServerState, url: Option<String>) {
     status.send_if_modified(|s| {
@@ -256,6 +275,8 @@ struct Watcher {
     status: watch::Sender<PreviewStatus>,
     plan: PreviewPlan,
     page_url: String,
+    /// The dev server's port (frontend).
+    port: u16,
     stopping: Arc<AtomicBool>,
 }
 
@@ -279,6 +300,12 @@ impl Watcher {
                     match self.side {
                         Side::Frontend => {
                             if let Some(state) = tracker.feed(&clean) {
+                                // trunk reports success before its server listens:
+                                // a page loaded right then gets "connection refused"
+                                // and never retries.
+                                if state.is_ready() {
+                                    wait_listening(self.port).await;
+                                }
                                 let url = state.is_ready().then(|| self.page_url.clone());
                                 set(&self.status, self.side, state, url);
                             }

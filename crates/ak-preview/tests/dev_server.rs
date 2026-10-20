@@ -20,6 +20,10 @@ struct Setup {
 
 impl Setup {
     fn new(front: &str, back: &str) -> Setup {
+        Setup::with_env(front, back, &[])
+    }
+
+    fn with_env(front: &str, back: &str, extra: &[(&str, &str)]) -> Setup {
         let dir = tempfile::tempdir().unwrap();
         let trigger = dir.path().join("trigger");
         std::fs::write(&trigger, "").unwrap();
@@ -38,6 +42,10 @@ impl Setup {
             ],
             path_prefix: vec![],
         };
+        let mut tools = tools;
+        for (k, v) in extra {
+            tools.env.push(((*k).into(), (*v).into()));
+        }
         let plan = profiles::default_profile().preview();
         let preview = Preview::new(dir.path(), plan, tools).unwrap();
         Setup { dir, preview }
@@ -88,6 +96,18 @@ async fn page_answers(url: &str) -> bool {
     let mut buf = Vec::new();
     let _ = s.read_to_end(&mut buf).await;
     String::from_utf8_lossy(&buf).starts_with("HTTP/1.1 200")
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_is_shown_only_once_its_server_answers() {
+    // Like trunk: "success" first, the server listens 4 s later. Reopening a
+    // project (a cached, fast build) hit that gap: "connection refused".
+    let mut s = Setup::with_env("ok", "ok", &[("FAKE_LISTEN_DELAY", "4000")]);
+    let mut rx = s.preview.subscribe();
+    s.preview.start().unwrap();
+    let st = wait(&mut rx, "frontend ready", |st| st.frontend.is_ready()).await;
+    let url = st.url.clone().unwrap();
+    assert!(page_answers(&url).await, "ready before {url} answered");
 }
 
 #[tokio::test(flavor = "multi_thread")]
