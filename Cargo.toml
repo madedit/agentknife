@@ -46,6 +46,11 @@ ureq = "3.4.2"
 zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2"] }
 flate2 = "1.1.10"
 tar = "0.4.46"
+tokio-tungstenite = "0.30.0"
+js-sys = "0.3.106"
+web-sys = "0.3.106"
+wasm-bindgen-futures = "0.4.79"
+futures-channel = "0.3.34"
 
 [workspace.lints.clippy]
 # AGENTS.md §5: unwrap() is banned outside tests (see clippy.toml).

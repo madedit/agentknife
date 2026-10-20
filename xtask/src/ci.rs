@@ -3,10 +3,10 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::{Result, downloads, i18n, layering, nonode, vendor, versions};
+use crate::{Result, bridge, downloads, i18n, layering, nonode, vendor, versions};
 
 /// Crates that must also build for `wasm32-unknown-unknown`.
-const WASM_CRATES: &[&str] = &["ak-types", "ak-shell"];
+const WASM_CRATES: &[&str] = &["ak-types", "ak-shell", "ak-bridge"];
 
 pub fn run(root: &Path) -> Result<()> {
     step("fmt", || cargo(root, &["fmt", "--all", "--check"]))?;
@@ -21,26 +21,60 @@ pub fn run(root: &Path) -> Result<()> {
                 "-D",
                 "warnings",
             ],
+        )?;
+        // The preview-only code of ak-bridge (off by default).
+        cargo(
+            root,
+            &[
+                "clippy",
+                "-p",
+                "ak-bridge",
+                "--all-targets",
+                "--features",
+                "dev",
+                "--",
+                "-D",
+                "warnings",
+            ],
         )
     })?;
-    step("test", || cargo(root, &["test", "--workspace"]))?;
+    step("test", || {
+        cargo(root, &["test", "--workspace"])?;
+        cargo(root, &["test", "-p", "ak-bridge", "--features", "dev"])
+    })?;
     step("layering", || layering::check(root))?;
     step("versions", || versions::check(root))?;
     step("downloads", || downloads::check(root))?;
+    step("bridge", || bridge::check(root))?;
     step("i18n", || i18n::check(root))?;
     step("vendor", || vendor::check(root))?;
     step("no-node", || nonode::check(root))?;
     step("wasm", || {
-        let mut args = vec!["build", "--target", "wasm32-unknown-unknown"];
+        let mut args = vec!["clippy", "--target", "wasm32-unknown-unknown"];
         for krate in WASM_CRATES {
             args.extend(["-p", krate]);
         }
-        cargo(root, &args)
+        args.extend(["--", "-D", "warnings"]);
+        cargo(root, &args)?;
+        cargo(
+            root,
+            &[
+                "clippy",
+                "--target",
+                "wasm32-unknown-unknown",
+                "-p",
+                "ak-bridge",
+                "--features",
+                "dev",
+                "--",
+                "-D",
+                "warnings",
+            ],
+        )
     })?;
     println!("xtask ci: all checks passed");
     Ok(())
 }
-
 fn step(name: &str, f: impl FnOnce() -> Result<()>) -> Result<()> {
     println!("==> {name}");
     f().map_err(|e| format!("check `{name}` failed: {e}").into())

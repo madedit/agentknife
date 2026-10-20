@@ -145,7 +145,7 @@
   - ReqwestTransport logs each request at debug level; HttpRequest's Debug redacts the key headers.
   - Test: real ReqwestTransport against a local server that echoes the key; the key never appears in serialized AiConnection/AiOverride, config Debug, error Display/Debug or captured tracing output (all levels).
   - The ignored test real_keychain_round_trip passed against Windows Credential Manager; no entry was left. macOS Keychain and Linux Secret Service are not verified.
-- P1-PROV-005 — (hash in next commit) — OpenAI Responses API adapter:
+- P1-PROV-005 — e4b148b — OpenAI Responses API adapter:
   - WireApi on OpenAiCompatConfig. The OpenAi flavor defaults to POST /responses; other flavors keep Chat Completions and can opt in.
   - Request:
     - instructions, input items, function tools (strict: false), reasoning {summary: auto, effort stepped down per the model table}, store: false, include reasoning.encrypted_content, max_output_tokens clamped.
@@ -161,3 +161,15 @@
     - Recorded from the local vLLM-style server (openai-compatible_responses_*): text, tool round trip with replayed encrypted reasoning, vision.
   - Live: agent_tools_live with AK_PROTOCOL=responses behaves the same as Chat Completions on the local server.
   - Not verified against api.openai.com (no key). Synthetic fixtures follow the docs; replaying item ids with store:false is per the SDK types and unconfirmed in the docs.
+- P1-BRIDGE-001 — (hash in next commit) — WebSocket invoke (ak-bridge):
+  - Host (native):
+    - The `init()` Tauri plugin. With `dev` and AK_BRIDGE_TOKEN set, it hides the app's windows, binds 127.0.0.1 (AK_BRIDGE_PORT, 0 = free port) and prints `AK_BRIDGE_READY {"port":N}`.
+    - Clients must send `?token=` (constant-time compare) and, if AK_BRIDGE_ORIGIN is set, the matching Origin.
+    - Each invoke runs through Tauri's own IPC (`Webview::on_message` + `AppHandle::invoke_key()`) on the main thread, against the `main` webview. The MockRuntime alternative was rejected (unstable API, plugins break).
+    - Results can come back out of order, matched by id.
+  - Frontend (wasm): `invoke`/`invoke_value` use `__TAURI_INTERNALS__.invoke` when present; otherwise, with `dev`, the WebSocket named by `?ak_bridge=` (kept in sessionStorage). Requests queue until the socket opens, and the client reconnects after the backend restarts.
+  - Release: without `dev`, the server, client and their deps are cfg-ed out. The xtask `bridge` step checks `cargo tree` (native and wasm) with and without `dev`. ci also lints and tests ak-bridge with `dev`, and lints the wasm crates with clippy.
+  - Tests: mock-runtime app with real `#[tauri::command]`s.
+    - Managed state, async commands, the command's own error, missing args, unknown command, 20 requests in flight, two clients.
+    - Bad or missing token gives 401; wrong or missing origin gives 403; garbage input gives an error reply.
+  - Not yet verified: the wasm client at runtime and the real wry runtime. Both need the template app (P1-TPL-001) and are part of its live check. Backend-to-frontend events are not bridged.

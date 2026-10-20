@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+mod bridge;
 mod ci;
 mod downloads;
 mod i18n;

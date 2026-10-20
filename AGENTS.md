@@ -147,7 +147,14 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - The center pane is an iframe on the Trunk dev server.
   - `ak-bridge` exposes the app's Tauri commands over a localhost WebSocket in dev builds, so the preview is fully functional.
   - Generated apps call a unified `invoke` wrapper (WebSocket in preview, Tauri IPC in production).
-  - Bridge and inspector code is stripped from release bundles.
+  - Bridge and inspector code is stripped from release bundles. Everything preview-only in `ak-bridge` sits behind its `dev` feature, which generated apps enable only for the preview build; `cargo xtask ci` (step `bridge`) fails if ak-bridge without `dev` pulls in WebSocket crates.
+  - The preview backend is the generated app itself, started by AgentKnife with `dev` and `AK_BRIDGE_TOKEN` (at least 16 characters), plus optional `AK_BRIDGE_PORT` and `AK_BRIDGE_ORIGIN`.
+    - The `ak_bridge::init()` plugin hides the app's windows, listens on 127.0.0.1 and prints `AK_BRIDGE_READY {"port":N}`.
+    - Each request runs through Tauri's real IPC (`Webview::on_message`) against the `main` webview, so state, plugins and ACL behave as in the real app.
+    - Apps show their windows themselves when `ak_bridge::is_preview()` is false.
+    - Backend-to-frontend events (`emit`/`listen`) are not bridged yet; prefer commands.
+  - Frontend code calls `ak_bridge::invoke(cmd,   - Bridge and inspector code is stripped from release bundles.args)`, never Tauri's JS directly.
+  - Crates that link Tauri and have tests need the Windows Common-Controls manifest for their test binaries (see `crates/ak-bridge/build.rs`); otherwise the tests fail to start with STATUS_ENTRYPOINT_NOT_FOUND.
   - A "Run in real window" button runs `cargo tauri dev`.
 - **Point-and-select:**
   - Every meaningful element in generated UI carries a stable `data-ak-id`. The agent must add these, and AgentKnife may auto-insert missing ones.
