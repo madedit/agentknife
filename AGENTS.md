@@ -160,7 +160,13 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - `expect("reason")` is allowed only for invariants that cannot fail, such as static init or validated constants. It needs a `// INVARIANT:` comment on the line above.
   - Everything else propagates errors with context.
 - **Two-layer i18n:**
-  - *Fixed strings* use fluent and must have both zh-TW and en entries. These are UI chrome, deterministic progress labels (doctor, bundle, checkpoint), errors, and dialogs. Never hard-code them.
+  - *Fixed strings* use fluent through `ak_types::i18n`.
+    - Files live in `crates/ak-types/locales/<locale>/*.ftl` and are embedded with `include_str!`.
+    - `cargo xtask ci` checks that each locale has the same files, ids and attributes, and that every file is embedded.
+    - Keys use `area-name` (for example `doctor-installing`).
+    - Missing keys fall back to en, then to the key id.
+    - Every Chinese OS locale resolves to zh-TW.
+    - Every fixed string must have both zh-TW and en entries. These are UI chrome, deterministic progress labels (doctor, bundle, checkpoint), errors, and dialogs. Never hard-code them.
   - *AI-generated text* does not use fluent. That covers replies, plans, and tool-call narration. Its language is controlled by the system prompt (§4 "AI reply language").
 - Write plain-language messages for non-programmers. No jargon in default UI text; put technical detail behind "Details".
 - Keep public APIs of core crates documented with `///`.

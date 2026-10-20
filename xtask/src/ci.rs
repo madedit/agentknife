@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::{Result, layering, nonode, vendor, versions};
+use crate::{Result, i18n, layering, nonode, vendor, versions};
 
 /// Crates that must also build for `wasm32-unknown-unknown`.
 const WASM_CRATES: &[&str] = &["ak-types", "ak-shell"];
@@ -26,6 +26,7 @@ pub fn run(root: &Path) -> Result<()> {
     step("test", || cargo(root, &["test", "--workspace"]))?;
     step("layering", || layering::check(root))?;
     step("versions", || versions::check(root))?;
+    step("i18n", || i18n::check(root))?;
     step("vendor", || vendor::check(root))?;
     step("no-node", || nonode::check(root))?;
     step("wasm", || {

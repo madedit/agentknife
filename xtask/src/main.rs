@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod ci;
+mod i18n;
 mod layering;
 mod nonode;
 mod vendor;
