@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Arc::new(Anthropic::new(c, transport))
     } else {
         Arc::new(OpenAiCompat::new(
-            OpenAiCompatConfig::new(base, key),
+            OpenAiCompatConfig::new(base, key.map(Into::into)),
             transport,
         ))
     };

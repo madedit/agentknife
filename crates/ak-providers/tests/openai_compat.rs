@@ -27,8 +27,7 @@ fn provider(
         t = t.rechunked(n);
     }
     let t = Arc::new(t);
-    let key =
-        (flavor == Flavor::OpenAi || flavor == Flavor::OpenRouter).then(|| "sk-test".to_owned());
+    let key = (flavor == Flavor::OpenAi || flavor == Flavor::OpenRouter).then(|| "sk-test".into());
     (
         OpenAiCompat::new(OpenAiCompatConfig::for_flavor(flavor, key), t.clone()),
         t,

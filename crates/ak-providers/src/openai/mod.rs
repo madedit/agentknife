@@ -19,6 +19,7 @@ use futures_util::stream as fstream;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::credentials::ApiKey;
 use crate::sse::sse_events;
 use crate::transport::ok_or_error;
 use crate::{
@@ -81,13 +82,13 @@ pub struct OpenAiCompatConfig {
     /// Including the `/v1` (or `/api/v1`) prefix.
     pub base_url: String,
     /// Not needed by local servers.
-    pub api_key: Option<String>,
+    pub api_key: Option<ApiKey>,
     pub flavor: Flavor,
 }
 
 impl OpenAiCompatConfig {
     /// Flavor detected from `base_url`.
-    pub fn new(base_url: impl Into<String>, api_key: Option<String>) -> Self {
+    pub fn new(base_url: impl Into<String>, api_key: Option<ApiKey>) -> Self {
         let base_url = base_url.into();
         let flavor = Flavor::detect(&base_url);
         Self {
@@ -98,7 +99,7 @@ impl OpenAiCompatConfig {
     }
 
     /// Default base URL for a known flavor.
-    pub fn for_flavor(flavor: Flavor, api_key: Option<String>) -> Self {
+    pub fn for_flavor(flavor: Flavor, api_key: Option<ApiKey>) -> Self {
         Self {
             base_url: flavor.default_base_url().unwrap_or_default().to_owned(),
             api_key,
@@ -166,8 +167,16 @@ impl OpenAiCompat {
 
     fn headers(&self) -> Vec<(String, String)> {
         let mut h = vec![("content-type".to_owned(), "application/json".to_owned())];
-        if let Some(key) = self.config.api_key.as_ref().filter(|k| !k.is_empty()) {
-            h.push(("authorization".to_owned(), format!("Bearer {key}")));
+        if let Some(key) = self
+            .config
+            .api_key
+            .as_ref()
+            .filter(|k| !k.expose().is_empty())
+        {
+            h.push((
+                "authorization".to_owned(),
+                format!("Bearer {}", key.expose()),
+            ));
         }
         if self.config.flavor == Flavor::OpenRouter {
             h.push(("x-openrouter-title".to_owned(), "AgentKnife".to_owned()));
@@ -190,7 +199,10 @@ impl OpenAiCompat {
                 body: body.map(Value::to_string).map(String::into_bytes),
             })
             .await?;
-        let text = ok_or_error(resp).await?.text().await?;
+        let text = ok_or_error(resp, self.config.api_key.as_ref())
+            .await?
+            .text()
+            .await?;
         serde_json::from_str(&text).map_err(|e| ProviderError::Decode(e.to_string()))
     }
 
@@ -371,7 +383,7 @@ impl Provider for OpenAiCompat {
                     body: Some(body.to_string().into_bytes()),
                 })
                 .await?;
-            let resp = ok_or_error(resp).await?;
+            let resp = ok_or_error(resp, self.config.api_key.as_ref()).await?;
             Ok(decode(resp, self.config.flavor))
         })
     }

@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
             .unwrap_or_default()
             .to_owned()
     });
-    let config = OpenAiCompatConfig::new(base, std::env::var("AK_API_KEY").ok());
+    let config = OpenAiCompatConfig::new(base, std::env::var("AK_API_KEY").ok().map(Into::into));
     let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/openai/recorded");
     std::fs::create_dir_all(&out)?;
     let prefix = config.flavor.id();

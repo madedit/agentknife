@@ -4,6 +4,7 @@ use futures_util::future::BoxFuture;
 use futures_util::stream::BoxStream;
 
 use crate::ProviderError;
+use crate::credentials::ApiKey;
 
 /// Header names whose values never appear in logs or `Debug` output.
 const SECRET_HEADERS: &[&str] = &["authorization", "x-api-key", "api-key", "x-goog-api-key"];
@@ -69,8 +70,12 @@ impl HttpResponse {
 }
 
 /// Passes 2xx responses through; turns anything else into a typed error, using the
-/// `{"error": {"message": …}}` body most providers send.
-pub(crate) async fn ok_or_error(resp: HttpResponse) -> Result<HttpResponse, ProviderError> {
+/// `{"error": {"message": …}}` body most providers send. Some servers echo the
+/// key in that message; it is scrubbed.
+pub(crate) async fn ok_or_error(
+    resp: HttpResponse,
+    key: Option<&ApiKey>,
+) -> Result<HttpResponse, ProviderError> {
     if (200..300).contains(&resp.status) {
         return Ok(resp);
     }
@@ -81,6 +86,10 @@ pub(crate) async fn ok_or_error(resp: HttpResponse) -> Result<HttpResponse, Prov
         .ok()
         .and_then(|v| v["error"]["message"].as_str().map(str::to_owned))
         .unwrap_or(text);
+    let message = match key {
+        Some(k) => k.redact(&message),
+        None => message,
+    };
     Err(ProviderError::from_status(
         status,
         retry_after.as_deref(),

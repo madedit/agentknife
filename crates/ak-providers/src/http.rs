@@ -27,6 +27,8 @@ impl ReqwestTransport {
 impl HttpTransport for ReqwestTransport {
     fn send(&self, request: HttpRequest) -> BoxFuture<'_, Result<HttpResponse, ProviderError>> {
         Box::pin(async move {
+            // `HttpRequest`'s Debug redacts the key headers.
+            tracing::debug!(?request, "provider request");
             let mut builder = match request.method {
                 Method::Get => self.client.get(&request.url),
                 Method::Post => self.client.post(&request.url),

@@ -107,6 +107,8 @@ plan/            STATUS.md and execution-plan.md (format in §8).
 ## 4. Key design contracts
 
 - **Agent:** AgentKnife has its own agent loop. Providers sit behind one trait. On connect, check that the model supports tool calling, and warn in plain language if it does not (typical for small local models). API keys go only in the keychain, never in files or logs.
+  - Keys: `ak_providers::credentials`. `Keychain` (service `AgentKnife`) is the only persistent store. The account is the provider id, or `<provider>@<base_url>` for a custom endpoint, so a local server never receives a cloud key. Never add a file or env fallback in the app; env vars are for dev examples only.
+  - Keys travel as `ApiKey`, which has no `Serialize` or `Display`, a redacted `Debug`, and `expose()` only for the request header. Error messages from servers are scrubbed with `ApiKey::redact`. Keyring errors never show stored bytes.
 - **AI reply language:** the agent replies in the language of the user's most recent message. If that cannot be determined, it uses the UI language. The rule lives in the system prompt (`ak_agent::prompt`), first and explicit. The system prompt is built once per conversation and never changes between turns, because providers bind reasoning signatures and the prompt cache to it. So the rule is static, with the UI language named as the fallback.
 - **Permissions:** reads, writes, builds, and runs inside the project folder are automatic. Downloads or installs, access outside the project, and deletions need a plain-language confirmation.
   - Implemented by `ak_agent::policy::ProjectPolicy`, the agent's default gate. Use `AllowAll` only in tests.
@@ -239,6 +241,7 @@ Prerequisites for developing AgentKnife:
 | Full pre-commit gate | `cargo xtask ci` |
 | Refresh the vendored CodeMirror | `cargo xtask vendor-codemirror` |
 | Re-pin download checksums after a tool version change | `cargo xtask pin-downloads` |
+| Real OS keychain round trip (writes and deletes a test entry) | `cargo test -p ak-providers --test credentials -- --ignored` |
 | Doctor report for this computer (read-only) | `cargo run -p ak-doctor --example doctor_report` |
 | Install the isolated toolchain for real (several hundred MB) | `cargo run -p ak-doctor --example doctor_install` |
 | Record real Anthropic fixtures (costs cents) | `ANTHROPIC_API_KEY=… cargo run -p ak-providers --example record_anthropic` |

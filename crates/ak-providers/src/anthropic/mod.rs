@@ -18,6 +18,7 @@ use futures_util::future::BoxFuture;
 use futures_util::stream as fstream;
 use serde_json::Value;
 
+use crate::credentials::ApiKey;
 use crate::sse::sse_events;
 use crate::transport::ok_or_error;
 use crate::{
@@ -34,14 +35,14 @@ pub const DEFAULT_MODEL: &str = "claude-opus-5-5";
 
 #[derive(Clone)]
 pub struct AnthropicConfig {
-    pub api_key: String,
+    pub api_key: ApiKey,
     /// Override for proxies or Claude Platform on AWS. Server-side fallbacks are only
     /// requested against [`DEFAULT_BASE_URL`].
     pub base_url: String,
 }
 
 impl AnthropicConfig {
-    pub fn new(api_key: impl Into<String>) -> Self {
+    pub fn new(api_key: impl Into<ApiKey>) -> Self {
         Self {
             api_key: api_key.into(),
             base_url: DEFAULT_BASE_URL.into(),
@@ -133,7 +134,10 @@ impl Anthropic {
 
     fn headers(&self, betas: &[&str]) -> Vec<(String, String)> {
         let mut h = vec![
-            ("x-api-key".to_owned(), self.config.api_key.clone()),
+            (
+                "x-api-key".to_owned(),
+                self.config.api_key.expose().to_owned(),
+            ),
             ("anthropic-version".to_owned(), API_VERSION.to_owned()),
             ("content-type".to_owned(), "application/json".to_owned()),
         ];
@@ -153,7 +157,7 @@ impl Anthropic {
                 body: None,
             })
             .await?;
-        let resp = ok_or_error(resp).await?;
+        let resp = ok_or_error(resp, Some(&self.config.api_key)).await?;
         let text = resp.text().await?;
         serde_json::from_str(&text).map_err(|e| ProviderError::Decode(e.to_string()))
     }
@@ -238,7 +242,7 @@ impl Provider for Anthropic {
                     body: Some(body),
                 })
                 .await?;
-            let resp = ok_or_error(resp).await?;
+            let resp = ok_or_error(resp, Some(&self.config.api_key)).await?;
             Ok(decode(resp))
         })
     }

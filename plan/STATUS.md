@@ -121,7 +121,7 @@
   - Tests: plan, resume, Range ignored, checksum mismatch, all 3 archive kinds, rustup-init args and env, cargo fallback env, nothing-to-do.
   - Real install on this Windows machine: 856 MB in %APPDATA%/AgentKnife/toolchain; doctor ready; second run installs nothing. User PATH (HKCU\Environment), the Rustup uninstall key and C:\tools\rustup were unchanged.
   - Real run on this machine: MSVC 17.14, SDK 10.0.26100, WebView2 155.0 detected. The real rustc 1.99.1 and wasm32 target were detected through junctions into the AgentKnife layout.
-- P1-DOC-003 — (hash in next commit) — guided system-dependency install:
+- P1-DOC-003 — 2bb19f7 — guided system-dependency install:
   - SystemGuide / GuideStep / SystemAction DTOs in ak-types; fluent steps, buttons (doctor-action-*) and confirmations (doctor-confirm-*) in en and zh-TW; every guide ends with "Check again".
   - Windows:
     - MSVC: winget Microsoft.VisualStudio.BuildTools (VS 2026, 18.x) with the VCTools workload and recommended components. This also covers a missing SDK.
@@ -136,3 +136,12 @@
   - launch() refuses any page that is not one of the official ones.
   - Detection fix: linux-appindicator also accepts appindicator3-0.1 (Fedora, Arch, openSUSE).
   - Not verified on real machines: the winget installs (this PC already has everything), macOS, the Linux commands (openSUSE libappindicator3-devel and the Gentoo list are not from the Tauri page).
+- P1-PROV-004 — (hash in next commit) — credential storage:
+  - ak_providers::credentials:
+    - CredentialStore trait, with Keychain (keyring 4, OS store, service "AgentKnife") and MemoryStore.
+    - account(): the provider id, or provider@base_url for a custom endpoint.
+  - ApiKey type: no Serialize, no Display, redacted Debug, expose() for headers. AnthropicConfig and OpenAiCompatConfig hold ApiKey.
+  - Server error messages are scrubbed of the key (ok_or_error). Keyring BadEncoding/BadDataFormat bytes are never shown.
+  - ReqwestTransport logs each request at debug level; HttpRequest's Debug redacts the key headers.
+  - Test: real ReqwestTransport against a local server that echoes the key; the key never appears in serialized AiConnection/AiOverride, config Debug, error Display/Debug or captured tracing output (all levels).
+  - The ignored test real_keychain_round_trip passed against Windows Credential Manager; no entry was left. macOS Keychain and Linux Secret Service are not verified.
