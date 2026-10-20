@@ -209,6 +209,31 @@ pub struct Ready {
 // Every message is a JSON string `{"ak_inspector": …}`: an [`InspectorCommand`]
 // from AgentKnife, an [`InspectorEvent`] from the preview.
 
+/// Where a frontend `invoke` goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Route {
+    /// The preview bridge (WebSocket to the app's backend).
+    Bridge,
+    /// Tauri IPC (the real app).
+    Tauri,
+    NoBackend,
+}
+
+/// The bridge wins whenever the page has a bridge address: inside AgentKnife
+/// the preview page is an iframe of AgentKnife's own window, and Tauri gives
+/// every frame of a window its `__TAURI_INTERNALS__`, so the page also sees
+/// AgentKnife's IPC. Calls sent there reach AgentKnife, not the app ("greet not
+/// allowed. Plugin not found").
+pub fn route(bridge_url: bool, tauri_internals: bool) -> Route {
+    if bridge_url {
+        Route::Bridge
+    } else if tauri_internals {
+        Route::Tauri
+    } else {
+        Route::NoBackend
+    }
+}
+
 /// The key that marks inspector messages.
 pub const INSPECTOR_KEY: &str = "ak_inspector";
 
@@ -325,6 +350,16 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn the_preview_bridge_wins_over_the_frames_tauri_ipc() {
+        // AgentKnife's iframe: both present; AgentKnife's IPC must not get the call.
+        assert_eq!(route(true, true), Route::Bridge);
+        assert_eq!(route(true, false), Route::Bridge);
+        // The real app.
+        assert_eq!(route(false, true), Route::Tauri);
+        assert_eq!(route(false, false), Route::NoBackend);
+    }
 
     fn step(tag: &str, id: Option<&str>, nth: Option<usize>) -> PathStep {
         PathStep {

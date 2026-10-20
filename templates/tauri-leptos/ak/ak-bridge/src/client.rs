@@ -1,8 +1,10 @@
 //! Frontend side (wasm): one `invoke` for the app's whole life.
 //!
-//! - Inside the real app (`__TAURI_INTERNALS__` exists): Tauri IPC.
 //! - In AgentKnife's preview (`dev` feature, `?ak_bridge=<ws url>`): the bridge
-//!   WebSocket, which runs the same commands in the app's backend process.
+//!   WebSocket, which runs the same commands in the app's backend process. It
+//!   comes first: inside AgentKnife the page also sees AgentKnife's own
+//!   `__TAURI_INTERNALS__` (see `protocol::route`).
+//! - Inside the real app (`__TAURI_INTERNALS__` exists): Tauri IPC.
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -93,14 +95,23 @@ pub async fn invoke<T: DeserializeOwned>(
 
 /// [`invoke`] without types.
 pub async fn invoke_value(cmd: &str, args: Value) -> Result<Value, InvokeError> {
-    if let Some(internals) = tauri_internals() {
-        return tauri_invoke(&internals, cmd, args).await;
-    }
     #[cfg(feature = "dev")]
-    if let Some(url) = bridge::url() {
-        return bridge::invoke(&url, cmd, args).await;
+    let bridge_url = bridge::url();
+    #[cfg(not(feature = "dev"))]
+    let bridge_url: Option<String> = None;
+    let internals = tauri_internals();
+    match crate::protocol::route(bridge_url.is_some(), internals.is_some()) {
+        #[cfg(feature = "dev")]
+        crate::protocol::Route::Bridge => {
+            let url = bridge_url.unwrap_or_default();
+            bridge::invoke(&url, cmd, args).await
+        }
+        crate::protocol::Route::Tauri => match internals {
+            Some(i) => tauri_invoke(&i, cmd, args).await,
+            None => Err(InvokeError::NoBackend),
+        },
+        _ => Err(InvokeError::NoBackend),
     }
-    Err(InvokeError::NoBackend)
 }
 
 fn tauri_internals() -> Option<JsValue> {

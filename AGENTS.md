@@ -162,6 +162,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
     - Tests use `ak-preview-fake-tool`; `cargo run -p ak-preview --example preview_live` checks the real thing.
   - `ak-bridge` exposes the app's Tauri commands over a localhost WebSocket in dev builds, so the preview is fully functional.
   - Generated apps call a unified `invoke` wrapper (WebSocket in preview, Tauri IPC in production).
+    - The bridge comes first whenever the page has a bridge address (`protocol::route`): inside AgentKnife the preview is an iframe of AgentKnife's window, and Tauri gives every frame AgentKnife's own `__TAURI_INTERNALS__`. Calls sent there reach AgentKnife, whose ACL refuses the remote origin ("<cmd> not allowed. Plugin not found").
   - Bridge and inspector code is stripped from release bundles. Everything preview-only in `ak-bridge` sits behind its `dev` feature, which generated apps enable only for the preview build; `cargo xtask ci` (step `bridge`) fails if ak-bridge without `dev` pulls in WebSocket crates.
   - The preview backend is the generated app itself, started by AgentKnife with `dev` and `AK_BRIDGE_TOKEN` (at least 16 characters), plus optional `AK_BRIDGE_PORT` and `AK_BRIDGE_ORIGIN`.
     - The `ak_bridge::init()` plugin hides the app's windows, listens on 127.0.0.1 and prints `AK_BRIDGE_READY {"port":N}`.
