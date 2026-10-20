@@ -153,7 +153,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
     - Each request runs through Tauri's real IPC (`Webview::on_message`) against the `main` webview, so state, plugins and ACL behave as in the real app.
     - Apps show their windows themselves when `ak_bridge::is_preview()` is false.
     - Backend-to-frontend events (`emit`/`listen`) are not bridged yet; prefer commands.
-  - Frontend code calls `ak_bridge::invoke(cmd,   - Bridge and inspector code is stripped from release bundles.args)`, never Tauri's JS directly.
+  - Frontend code calls `ak_bridge::invoke(cmd, &args)`, never Tauri's JS directly.
   - Crates that link Tauri and have tests need the Windows Common-Controls manifest for their test binaries (see `crates/ak-bridge/build.rs`); otherwise the tests fail to start with STATUS_ENTRYPOINT_NOT_FOUND.
   - A "Run in real window" button runs `cargo tauri dev`.
 - **Point-and-select:**
