@@ -79,10 +79,10 @@ pub fn greeting_note(ui_locale: Locale) -> String {
          Write in {lang}. Greet them warmly in one sentence. Then explain in 3 or 4 short \
          points what AgentKnife can do for them: build a desktop app from a description, \
          show it live in the preview while you work, let them point at things to change, \
-         and turn it into an installer at the end. Then suggest the first step: checking \
-         that the development tools are installed on this computer (AgentKnife does it \
-         for them and asks before installing anything). End by asking whether to start \
-         that check. Keep it short and friendly; do not call any tools.",
+         and package it at the end so they can install and share it. Then suggest the \
+         first step: checking that the development tools are installed on this computer \
+         (AgentKnife does it for them and asks before installing anything). End by asking \
+         whether to start that check. Keep it short and friendly; do not call any tools.",
         lang = language_name(ui_locale)
     )
 }

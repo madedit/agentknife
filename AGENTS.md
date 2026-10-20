@@ -284,7 +284,8 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - `ak_bundle::Bundler::build` runs the plan's command (`cargo tauri build --no-bundle` on Windows and Linux, `--bundles dmg` on macOS), streams stages and output lines, and refuses a build that contains a preview marker (the bridge's ready line in the program, the inspector's overlay id under `dist/`).
   - Archives hold `<Name>/<Name>[.exe]` (mode 755 in tar.gz) and go to `target/release/bundle/{zip,tar.gz}/<Name>_<version>_<arch>.<ext>`; name and version come from tauri.conf.json. Every success records a `Bundle` checkpoint.
   - The preview's `trunk serve` writes to `target/ak-preview-dist`, never `dist/`, so a release build cannot swap the preview's screens for ones without `dev`.
-  - On Windows the zip needs WebView2 (built into Windows 10/11); on Linux the tar.gz needs WebKitGTK 4.1 installed on the target computer. The install guidance (P1-BUNDLE-002) must say so.
+  - On Windows the zip needs WebView2 (built into Windows 10/11); on Linux the tar.gz needs WebKitGTK 4.1 installed on the target computer.
+  - `ak_bundle::guide`: `install_guide(os, output)` returns doctor-style `GuideStep`s (fluent `bundle-guide-…` with `$file` and `$app` from `guide_args`, and a command where one is needed), ending with a sharing step for the same OS. `reveal(path)` shows the file in Explorer/Finder or opens its folder on Linux. `other_os_note` gives `bundle-other-os` (with `os-*` names) for requests for another system; the product prompt tells the agent the same.
 - **Privacy:** no telemetry by default. Crash reports are opt-in only.
 
 ## 5. Coding rules

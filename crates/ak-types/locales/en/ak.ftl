@@ -135,3 +135,31 @@ doctor-confirm-open-page = Open the official download page in your browser?
 bundle-building = Building the finished app (the first time takes a few minutes)…
 bundle-checking = Checking that no preview-only parts are inside…
 bundle-packing = Packing the app into one file…
+bundle-done = Your app is ready: { $file }
+bundle-open-folder = Show in folder
+
+## Operating system names
+os-windows = Windows
+os-macos = macOS
+os-linux = Linux
+
+## Install guidance after bundling ($file: the packed file's name; $app: the app's name)
+bundle-guide-win-extract = Right-click “{ $file }” and choose “Extract All…”, then click “Extract”.
+bundle-guide-win-move = A folder named “{ $app }” appears. You can move it anywhere you like, for example to Documents. Keep everything in it together.
+bundle-guide-win-run = Open the folder and double-click “{ $app }” to start the app.
+bundle-guide-win-smartscreen = If Windows says “Windows protected your PC”, click “More info” and then “Run anyway”. Windows shows this for apps that are not signed by a known publisher; this is the app you made.
+bundle-guide-win-shortcut = To start it from the desktop later: right-click “{ $app }”, choose “Show more options” → “Send to” → “Desktop (create shortcut)”.
+bundle-guide-mac-open = Double-click “{ $file }”. A window opens with the app inside.
+bundle-guide-mac-drag = Drag “{ $app }” onto the “Applications” folder in that window.
+bundle-guide-mac-eject = Close the window and eject “{ $app }” in the Finder sidebar.
+bundle-guide-mac-first-open = The first time: open “Applications”, hold Control and click “{ $app }”, choose “Open”, then click “Open” again. macOS asks this because the app is not signed by a known developer; this is the app you made.
+bundle-guide-mac-settings = If macOS says the app cannot be opened and shows no “Open” button: open System Settings → Privacy & Security, scroll down and click “Open Anyway” next to “{ $app }”, then confirm with your password.
+bundle-guide-linux-extract = Right-click “{ $file }” and choose “Extract Here”. A folder named “{ $app }” appears.
+bundle-guide-linux-libraries = The app needs the WebKitGTK 4.1 library. This computer already has it. On another computer with Ubuntu or Debian, run this command in the Terminal (other Linux systems call the package “webkit2gtk4.1”):
+bundle-guide-linux-run = Open the folder and double-click “{ $app }”. If your file manager opens it as text instead, right-click it and choose “Run as a Program”.
+bundle-guide-open = Open “{ $file }” to start the app.
+bundle-guide-share-windows = To give the app to someone else, send them “{ $file }”. They follow the same steps. It works on Windows computers only.
+bundle-guide-share-macos = To give the app to someone else, send them “{ $file }”. They follow the same steps. It works on Macs only.
+bundle-guide-share-linux = To give the app to someone else, send them “{ $file }”. They follow the same steps. It works on Linux computers only.
+# $host, $requested: names of operating systems (os-*)
+bundle-other-os = This computer runs { $host }, so AgentKnife can only make the { $host } version here. To get a { $requested } version, copy this project folder to a { $requested } computer, open it in AgentKnife there and package it again.

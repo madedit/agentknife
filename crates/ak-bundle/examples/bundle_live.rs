@@ -5,17 +5,20 @@
 //! ```text
 //! cargo run -p ak-bundle --example bundle_live            # new project, kept
 //! cargo run -p ak-bundle --example bundle_live -- <dir>   # existing project
+//! # AK_REVEAL=1 also shows the result in the file manager
 //! ```
 
 use std::error::Error;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use ak_bundle::guide::{guide_args, install_guide, reveal};
 use ak_bundle::{BundleEvent, Bundler};
 use ak_doctor::{Pinned, Toolchain};
 use ak_preview::{Tools, profiles};
 use ak_project::Registry;
-use ak_types::i18n::{I18n, Locale};
+use ak_types::i18n::{I18n, Locale, args};
+use ak_types::stack::HostOs;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -39,6 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let i18n = I18n::new(Locale::ZhTw)?;
 
     let (tx, mut rx) = mpsc::unbounded_channel();
+    let labels = I18n::new(Locale::ZhTw)?;
     let printer = tokio::spawn(async move {
         let mut lines = 0usize;
         while let Some(e) = rx.recv().await {
@@ -70,6 +74,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 size as f64 / 1e6,
                 b.checkpoint
             );
+            let a = args(guide_args(&b));
+            println!(
+                "
+{}",
+                labels.t_args("bundle-done", &a)
+            );
+            if let Some(os) = HostOs::current() {
+                for (n, step) in install_guide(os, b.output).iter().enumerate() {
+                    println!("{}. {}", n + 1, labels.t_args(&step.message, &a));
+                    if let Some(c) = &step.command {
+                        println!("     {c}");
+                    }
+                }
+            }
+            if std::env::var_os("AK_REVEAL").is_some() {
+                reveal(&b.path)?;
+            }
         }
         Err(e) => {
             if let ak_bundle::BundleError::BuildFailed { output } = &e {

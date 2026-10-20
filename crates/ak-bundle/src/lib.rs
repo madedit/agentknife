@@ -1,8 +1,10 @@
 //! Host-platform bundling: builds the app in release mode and leaves the user one
-//! file to install from (a stack's `BundlePlan` says how). Install instructions
-//! come later (P1-BUNDLE-002).
+//! file to install from (a stack's `BundlePlan` says how); [`guide`] says how to
+//! install it.
 
 #![forbid(unsafe_code)]
+
+pub mod guide;
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -53,6 +55,8 @@ pub struct Bundle {
     /// The file to hand to the user.
     pub path: PathBuf,
     pub output: BundleOutput,
+    /// The app's folder and program name inside it, as the user will see it.
+    pub app: String,
     /// Id of the `Bundle` timeline entry for the source it was built from.
     pub checkpoint: Option<String>,
 }
@@ -138,7 +142,9 @@ impl Bundler {
                 );
                 let dest = self
                     .root
-                    .join("target/release/bundle")
+                    .join("target")
+                    .join("release")
+                    .join("bundle")
                     .join(format.extension())
                     .join(file);
                 let (dest2, folder) = (dest.clone(), file_name(&name));
@@ -166,6 +172,7 @@ impl Bundler {
         Ok(Bundle {
             path,
             output,
+            app: file_name(&name),
             checkpoint,
         })
     }

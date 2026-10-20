@@ -117,7 +117,7 @@ pub struct SystemGuide {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GuideStep {
-    /// Fluent message id (`doctor-guide-…`).
+    /// Fluent message id (`doctor-guide-…`, `bundle-guide-…`).
     pub message: String,
     /// A command the user copies into a terminal.
     #[serde(default, skip_serializing_if = "Option::is_none")]

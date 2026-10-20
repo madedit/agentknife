@@ -135,3 +135,31 @@ doctor-confirm-open-page = 要在瀏覽器打開官方下載頁面嗎？
 bundle-building = 正在建置完成版 App（第一次要幾分鐘）…
 bundle-checking = 正在確認裡面沒有預覽專用的部分…
 bundle-packing = 正在把 App 打包成一個檔案…
+bundle-done = App 打包好了：{ $file }
+bundle-open-folder = 在資料夾中顯示
+
+## 作業系統名稱
+os-windows = Windows
+os-macos = macOS
+os-linux = Linux
+
+## 打包後的安裝說明（$file：打包出來的檔名；$app：App 的名稱）
+bundle-guide-win-extract = 在「{ $file }」上按右鍵，選「解壓縮全部…」，再按「解壓縮」。
+bundle-guide-win-move = 會出現一個叫「{ $app }」的資料夾。你可以把它搬到任何地方，例如「文件」。裡面的東西請放在一起。
+bundle-guide-win-run = 打開這個資料夾，按兩下「{ $app }」就能啟動 App。
+bundle-guide-win-smartscreen = 如果 Windows 顯示「Windows 已保護您的電腦」，請按「其他資訊」，再按「仍要執行」。沒有知名發行者簽章的 App 都會出現這個畫面；這是你自己做的 App。
+bundle-guide-win-shortcut = 想以後從桌面啟動：在「{ $app }」上按右鍵，選「顯示其他選項」→「傳送到」→「桌面 (建立捷徑)」。
+bundle-guide-mac-open = 按兩下「{ $file }」，會開出一個裝著 App 的視窗。
+bundle-guide-mac-drag = 把「{ $app }」拖到那個視窗裡的「應用程式」資料夾。
+bundle-guide-mac-eject = 關掉視窗，在 Finder 側邊欄把「{ $app }」退出。
+bundle-guide-mac-first-open = 第一次打開時：打開「應用程式」，按住 Control 鍵再點「{ $app }」，選「打開」，然後再按一次「打開」。macOS 會問這個，是因為 App 沒有知名開發者的簽章；這是你自己做的 App。
+bundle-guide-mac-settings = 如果 macOS 說無法打開，而且沒有「打開」按鈕：打開「系統設定」→「隱私權與安全性」，往下捲，在「{ $app }」旁邊按「強制打開」，再輸入密碼確認。
+bundle-guide-linux-extract = 在「{ $file }」上按右鍵，選「在此解壓縮」，會出現一個叫「{ $app }」的資料夾。
+bundle-guide-linux-libraries = 這個 App 需要 WebKitGTK 4.1 函式庫，這台電腦已經有了。在另一台 Ubuntu 或 Debian 電腦上，請在終端機執行這個指令（其他 Linux 的套件名稱是「webkit2gtk4.1」）：
+bundle-guide-linux-run = 打開資料夾，按兩下「{ $app }」。如果檔案管理員把它當文字檔打開，請按右鍵選「當作程式執行」。
+bundle-guide-open = 打開「{ $file }」就能啟動 App。
+bundle-guide-share-windows = 想把 App 給別人：把「{ $file }」傳給對方，照同樣的步驟做就行。只能在 Windows 電腦上用。
+bundle-guide-share-macos = 想把 App 給別人：把「{ $file }」傳給對方，照同樣的步驟做就行。只能在 Mac 上用。
+bundle-guide-share-linux = 想把 App 給別人：把「{ $file }」傳給對方，照同樣的步驟做就行。只能在 Linux 電腦上用。
+# $host、$requested：作業系統名稱（os-*）
+bundle-other-os = 這台電腦是 { $host }，所以 AgentKnife 在這裡只能做出 { $host } 版。想要 { $requested } 版的話，請把這個專案資料夾複製到一台 { $requested } 電腦，在那裡用 AgentKnife 打開再打包一次。

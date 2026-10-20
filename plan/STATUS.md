@@ -321,7 +321,7 @@
   - add_ids example: the pass as a CLI, in place.
   - Tests: unit (naming, uniqueness, closures, components, idempotence); golden fixtures signup/todos (AK_BLESS=1 rewrites; output parses and is idempotent); the template and the worked example need no ids; the profile only touches src/**.rs; agent: the pass runs on the changed file, writes it, tells the preview, then the build check.
   - Compile check: the knowledge-check project (check-knowledge) with its static ids stripped got them back from add_ids (todo-app-main, to-do-title), and 15 were added to snippets.rs; `cargo build --target wasm32-unknown-unknown --features dev` succeeded, so the inserted attributes are valid Leptos.
-- P1-BUNDLE-001 — (hash in next commit) — host-platform bundling (changed by the user 2026-10-20: Windows .zip, Linux .tar.gz; NSIS .exe and .deb moved to the new P1-BUNDLE-003):
+- P1-BUNDLE-001 — 3f9097e — host-platform bundling (changed by the user 2026-10-20: Windows .zip, Linux .tar.gz; NSIS .exe and .deb moved to the new P1-BUNDLE-003):
   - ak_types::stack: BundlePlan is now per-OS BundleTargets (command + BundleOutput::Archive(Zip|TarGz) or Installer{kind, dir, extension}), the release program path, name/version JsonFields and PreviewMarkers (ScanIn::Program / Dir). HostOs::current().
   - tauri-leptos: Windows/Linux `cargo tauri build --no-bundle`, macOS `--bundles dmg` (not run here: no Mac). tauri.conf.json targets are now app + dmg. Markers: AK_BRIDGE_READY in the program, __ak_inspector_overlay under dist/.
   - Preview fix found while designing: trunk serve now writes to target/ak-preview-dist; with the shared dist/ a release build would have replaced the preview's screens with ones without `dev`.
@@ -329,3 +329,10 @@
   - ak_preview::process::read_lines is now shared (moved from dev.rs).
   - Tests (fake `cargo tauri build`, ak-bundle-fake-build): pack + archive contents + stages + output lines + Bundle checkpoints (twice); failure keeps the compiler output; a leaked marker in the program or in dist/ is refused with nothing packed; missing program / empty name (checked before building); cancel. Unit: tar.gz mode, file names, marker search.
   - Live (bundle_live, fresh project, isolated toolchain, Windows 11): `Bundle Check_0.1.0_x64.zip` (2.7 MB) in 112 s with a Bundle checkpoint. The dev builds of the same project contain both markers, the release program does not. Unzipped `Bundle Check/Bundle Check.exe` starts and shows the Home screen.
+- P1-BUNDLE-002 — (hash in next commit) — install guidance:
+  - ak_bundle::guide: install_guide(os, output) -> doctor GuideSteps. Windows zip: extract, move, run, SmartScreen "More info → Run anyway", desktop shortcut. macOS dmg: open, drag to Applications, eject, Control-click Open, System Settings → Privacy & Security → "Open Anyway". Linux tar.gz: extract, WebKitGTK 4.1 (apt command, other distros named), run ("Run as a Program"). Unknown combinations: "open the file". Each ends with sharing (same OS only). guide_args gives $file and $app (Bundle has a new `app` field).
+  - reveal(path): explorer /select,"path" (raw_arg, backslashes), `open -R`, xdg-open on the folder. Archive paths are now built from separate components (they mixed `/` and `\` on Windows).
+  - other_os_note + bundle-other-os/os-* (copy the project folder to that computer and package there). Product prompt version 3 adds a Packaging section; the greeting says "package it" instead of "installer".
+  - Fluent (en, zh-TW): bundle-done, bundle-open-folder, os-*, bundle-guide-*, bundle-other-os.
+  - Tests: steps per system and fallback, the other-OS note, reveal commands; every step renders in every locale with no unfilled argument.
+  - Live (bundle_live on the BUNDLE-001 project, Windows 11): rebuilt in 16 s, printed the zh-TW steps with the real file and app names; AK_REVEAL=1 opened Explorer with the zip selected.
