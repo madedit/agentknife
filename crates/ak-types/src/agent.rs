@@ -12,6 +12,18 @@ pub struct TokenUsage {
     pub cache_write_tokens: u64,
 }
 
+/// Usage over a span (this session, or today across all projects).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct UsageSummary {
+    pub tokens: TokenUsage,
+    /// US dollars; `None` when the price of the model is unknown.
+    pub cost_usd: Option<f64>,
+    /// Part of the usage had an unknown price: the cost is at least this much.
+    pub cost_is_lower_bound: bool,
+    /// Only local (free) models were used.
+    pub free: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum AgentEvent {
@@ -58,6 +70,16 @@ pub enum AgentEvent {
     },
     Usage {
         usage: TokenUsage,
+    },
+    /// Running totals after a model call.
+    UsageTotals {
+        session: UsageSummary,
+        today: UsageSummary,
+    },
+    /// Today's spending reached 80% of the daily cap (once a day).
+    BudgetWarning {
+        spent_usd: f64,
+        cap_usd: f64,
     },
     /// Older messages were summarized to make room (the chat itself is unchanged).
     ContextCompacted,
@@ -133,6 +155,8 @@ pub enum ConfirmKind {
     Unrecognized,
     /// Any change, because the user chose to approve every change.
     Change,
+    /// Today's spending reached the daily cap.
+    DailyCap,
     /// Refused: the path leaves the project.
     PathEscape,
     /// Refused: AgentKnife's own history (`.git`) must not be edited directly.
@@ -151,6 +175,7 @@ impl ConfirmKind {
             ConfirmKind::Elevated => "confirm-elevated",
             ConfirmKind::Unrecognized => "confirm-unrecognized",
             ConfirmKind::Change => "confirm-change",
+            ConfirmKind::DailyCap => "confirm-daily-cap",
             ConfirmKind::PathEscape => "denied-path-escape",
             ConfirmKind::ProtectedPath => "denied-protected-path",
             ConfirmKind::Dangerous => "denied-dangerous",
@@ -166,6 +191,7 @@ impl ConfirmKind {
             ConfirmKind::Elevated => "it asks for administrator rights",
             ConfirmKind::Unrecognized => "its effect cannot be checked",
             ConfirmKind::Change => "the user approves every change",
+            ConfirmKind::DailyCap => "today's spending reached the daily limit",
             ConfirmKind::PathEscape => "the path is outside the project",
             ConfirmKind::ProtectedPath => "`.git` is managed by AgentKnife and must not be edited",
             ConfirmKind::Dangerous => "it could damage the computer",
@@ -173,7 +199,7 @@ impl ConfirmKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TurnOutcome {
     Completed,
@@ -190,6 +216,11 @@ pub enum TurnOutcome {
     Stuck {
         attempts: u32,
         last_error: String,
+    },
+    /// The daily spending cap was reached and the user chose to stop for today.
+    OverBudget {
+        spent_usd: f64,
+        cap_usd: f64,
     },
     Cancelled,
     Failed {
@@ -228,6 +259,7 @@ mod tests {
             ConfirmKind::Elevated,
             ConfirmKind::Unrecognized,
             ConfirmKind::Change,
+            ConfirmKind::DailyCap,
             ConfirmKind::PathEscape,
             ConfirmKind::ProtectedPath,
             ConfirmKind::Dangerous,

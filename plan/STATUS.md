@@ -5,7 +5,7 @@
 
 ## Blocked
 - P1-AGENT-005 (follow-up) — needs: P1-PROV-002 real-key check — Anthropic server-side compaction (beta compact-2026-01-12) is not used yet. All providers use AgentKnife's appended-summary compaction, which works but invalidates replayed thinking once per compaction (drop_block covers it).
-- P1-AGENT-006 (input) — needs: decision when doing AGENT-006 — the owner's Anthropic-COMPATIBLE local server reports `input_tokens` INCLUDING cache reads (in=712, cache_read=705), unlike the official API where they are separate. Summing them double-counts. Harmless for compaction (it triggers earlier), wrong for cost tracking. Needs per-endpoint usage semantics.
+- P1-AGENT-006 (follow-up) — needs: nothing urgent — OpenAI and OpenRouter models show "cost unknown". OpenRouter publishes per-model pricing in GET /models (could feed CostBasis); OpenAI needs a dated table. Token totals from Anthropic-compatible local servers may be ~2x high (their input_tokens include cache reads); they are free, so cost is unaffected.
 - P1-PROJ-004 (follow-up) — needs: nothing urgent — the git objects of collected checkpoints stay on disk as unreachable loose objects (gix 0.89 has no prune/repack). Disk use grows slowly with project size times the number of changes. Revisit if a project folder gets large: repack with a pack writer, or start a fresh repo from the surviving entries.
 - P1-AGENT-002 (follow-up) — needs: decision, low priority — on Windows, output of cmd's *built-in* commands (echo, dir, type) containing non-ASCII text is garbled: cmd writes the ANSI code page to pipes, and chcp 65001 does not change that. External tools (cargo, trunk) output UTF-8 and are fine. A fix needs code-page decoding (encoding_rs + GetACP) or running commands through PowerShell.
 - P1-PROV-002 (follow-up) — needs: owner, a real Anthropic API key — run `cargo run -p ak-providers --example record_anthropic`. The adapter is verified live against an Anthropic-COMPATIBLE local server only (text, tool round trip, vision). Claude-only features are still verified only against synthetic fixtures: adaptive thinking + signature replay, the models API, refusal/fallback.
@@ -79,7 +79,7 @@
     - no plan for small edits; a 5-step zh-TW plan for "make a full todo list", built after Start.
     - auto-fix stopped as Stuck after 3 attempts, with the compiler error.
     - language: 0/12 mismatches across zh → en → zh switches, after strengthening the rule (the first wording replied in Chinese to an English message).
-- P1-AGENT-005 — (hash in next commit) — context management and interruption recovery:
+- P1-AGENT-005 — e423e65 — context management and interruption recovery:
   - Conversation schema v2 (v1 still loads; v1 + v2 golden fixtures) with append-only `context` and `compaction` entries; the model view starts at the latest summary.
   - open_session loads PROJECT.md/STATUS/tasks (deduplicated); a prompt rule keeps them updated; "[AgentKnife" notes are ignored for the reply language.
   - Compaction: estimate (system + tools + messages) vs the reported context size (kept across turns); the cut keeps the last two turns; summary failures are logged and skipped.
@@ -90,3 +90,9 @@
     - simulated crash (future dropped mid-tool) then resume; mutation-checked.
   - Live: 5 rolling zh-TW summaries, and the name and colour from turn 1 were remembered after compaction.
   - Fixed during the live check: the reported context size was reset every turn, and the estimate ignored the system prompt and tools.
+- P1-AGENT-006 — (hash in next commit) — usage and cost:
+  - `ak_agent::usage`: dated Anthropic price table (Haiku 5.5 tiered above 100K prompt tokens). `cost_basis` returns Priced / Free (local endpoints, Ollama, LM Studio) / Unknown, and never guesses.
+  - UsageLedger: per-day totals in usage.json (local date, all projects, 400 days kept). Session totals in the Agent. UsageTotals event after every model call, compaction calls included.
+  - Daily cap: BudgetWarning once at 80%; at 100%, a DailyCap confirmation once a day; declining ends the turn as OverBudget.
+  - Resolved the usage-semantics item: only official endpoints are priced.
+  - Tests: unit + 4 integration (mutation-checked); float tolerance on cap checks.

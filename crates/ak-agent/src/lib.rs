@@ -12,6 +12,7 @@ pub mod prompt;
 pub mod scripted;
 pub mod tool;
 pub mod tools;
+pub mod usage;
 
 pub use agent::{
     Agent, AgentConfig, Checkpointer, ConversationStore, NoCheckpoints, NoStore, TurnSummary,

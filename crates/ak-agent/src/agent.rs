@@ -1,13 +1,15 @@
 //! The turn loop: model -> tool calls -> results -> model, until the model is done.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use ak_providers::{
     ChatRequest, Effort, MessageAssembler, Provider, ProviderError, StopReason, StreamEvent, Usage,
 };
-use ak_types::agent::{AgentEvent, PlanDecision, PlanProposal, TokenUsage, TurnOutcome};
+use ak_types::agent::{
+    AgentEvent, ConfirmKind, ConfirmReason, PlanDecision, PlanProposal, TokenUsage, TurnOutcome,
+};
 use ak_types::chat::{ContentPart, Conversation, Message, ToolCall};
 use ak_types::i18n::Locale;
 use futures_util::StreamExt;
@@ -23,6 +25,7 @@ use crate::plan::{CancelPlans, PlanReviewer};
 use crate::policy::{PermissionMode, ProjectPolicy};
 use crate::prompt::{PLAN_TOOL, PlanMode, plan_tool_spec, system_prompt};
 use crate::tool::{ToolContext, ToolOutput, ToolRegistry, split_label};
+use crate::usage::{CapStatus, CostBasis, Totals, UsageLedger};
 
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
@@ -46,6 +49,10 @@ pub struct AgentConfig {
     pub context_window: Option<u32>,
     /// Compact when the context is this full (0–1).
     pub compact_at: f32,
+    /// How cost is known (`usage::cost_basis`); ak-app decides it from the provider.
+    pub cost_basis: CostBasis,
+    /// Daily spending limit in US dollars, across all projects.
+    pub daily_cap_usd: Option<f64>,
 }
 
 impl AgentConfig {
@@ -62,6 +69,8 @@ impl AgentConfig {
             max_fix_attempts: 3,
             context_window: None,
             compact_at: 0.7,
+            cost_basis: CostBasis::Unknown,
+            daily_cap_usd: None,
         }
     }
 }
@@ -132,6 +141,8 @@ pub struct Agent {
     store: Arc<dyn ConversationStore>,
     /// Context size the provider reported for the latest call (any turn).
     last_context_tokens: AtomicU64,
+    ledger: Arc<UsageLedger>,
+    session: Mutex<Totals>,
     config: AgentConfig,
     /// Built once: never changes during a conversation.
     system: String,
@@ -151,6 +162,8 @@ impl Agent {
             reviewer: Arc::new(CancelPlans),
             store: Arc::new(NoStore),
             last_context_tokens: AtomicU64::new(0),
+            ledger: Arc::new(UsageLedger::in_memory()),
+            session: Mutex::new(Totals::default()),
             config,
             system,
         }
@@ -186,6 +199,12 @@ impl Agent {
 
     pub fn with_checkpointer(mut self, checkpointer: Arc<dyn Checkpointer>) -> Self {
         self.checkpointer = checkpointer;
+        self
+    }
+
+    /// Shares today's spending across agents (one ledger per AgentKnife run).
+    pub fn with_usage_ledger(mut self, ledger: Arc<UsageLedger>) -> Self {
+        self.ledger = ledger;
         self
     }
 
@@ -417,12 +436,7 @@ impl Agent {
                 Ok(a) => a,
                 Err(stop) => return stop,
             };
-            emit(
-                events,
-                AgentEvent::Usage {
-                    usage: token_usage(assembled.usage),
-                },
-            );
+            self.record_usage(events, assembled.usage);
             if let StopReason::Refusal { category } = assembled.stop_reason {
                 // Partial output of a declined answer is discarded, not kept.
                 return TurnOutcome::Refused { category };
@@ -513,6 +527,85 @@ impl Agent {
         TurnOutcome::StepLimit
     }
 
+    /// Adds a model call's usage to the session and today's ledger and reports it.
+    fn record_usage(&self, events: &Events, usage: Usage) {
+        let usage = token_usage(usage);
+        emit(events, AgentEvent::Usage { usage });
+        let basis = self.config.cost_basis;
+        let today = UsageLedger::today();
+        let status = self
+            .ledger
+            .record(&today, &usage, basis, self.config.daily_cap_usd);
+        let session = match self.session.lock() {
+            Ok(mut s) => {
+                s.add(&usage, basis);
+                s.summary()
+            }
+            Err(_) => return,
+        };
+        emit(
+            events,
+            AgentEvent::UsageTotals {
+                session,
+                today: self.ledger.day(&today).summary(),
+            },
+        );
+        if let CapStatus::Warn { spent, cap } = status {
+            emit(
+                events,
+                AgentEvent::BudgetWarning {
+                    spent_usd: spent,
+                    cap_usd: cap,
+                },
+            );
+        }
+    }
+
+    /// At the daily cap, asks once whether to keep going today.
+    async fn check_budget(
+        &self,
+        events: &Events,
+        cancel: &CancellationToken,
+    ) -> Result<(), TurnOutcome> {
+        let today = UsageLedger::today();
+        let Some(spent) = self.ledger.over_cap(&today, self.config.daily_cap_usd) else {
+            return Ok(());
+        };
+        let cap = self.config.daily_cap_usd.unwrap_or_default();
+        let request = ConfirmRequest {
+            request_id: new_id("budget"),
+            tool: String::new(),
+            label: String::new(),
+            reason: ConfirmReason {
+                kind: ConfirmKind::DailyCap,
+                detail: format!("US${spent:.2} / US${cap:.2}"),
+            },
+        };
+        emit(
+            events,
+            AgentEvent::NeedsConfirmation {
+                request_id: request.request_id.clone(),
+                tool: String::new(),
+                label: String::new(),
+                reason: request.reason.clone(),
+            },
+        );
+        let yes = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => return Err(TurnOutcome::Cancelled),
+            yes = self.confirmer.confirm(request) => yes,
+        };
+        if yes {
+            self.ledger.override_cap(&today);
+            Ok(())
+        } else {
+            Err(TurnOutcome::OverBudget {
+                spent_usd: spent,
+                cap_usd: cap,
+            })
+        }
+    }
+
     fn append(
         &self,
         conversation: &mut Conversation,
@@ -564,9 +657,12 @@ impl Agent {
             max_tokens: self.config.max_tokens.min(8_192),
             effort: self.config.effort,
         };
+        self.check_budget(events, cancel).await?;
         let summarize = async {
             let stream = self.provider.stream(request).await?;
-            ak_providers::collect(stream, self.provider.id()).await
+            let assembled = ak_providers::collect(stream, self.provider.id()).await?;
+            self.record_usage(events, assembled.usage);
+            Ok::<_, ak_providers::ProviderError>(assembled)
         };
         let assembled = tokio::select! {
             biased;
@@ -656,6 +752,7 @@ impl Agent {
         events: &Events,
         cancel: &CancellationToken,
     ) -> Result<ak_providers::Assembled, TurnOutcome> {
+        self.check_budget(events, cancel).await?;
         // `biased`: when both are ready, cancellation wins (no random pick).
         let started = tokio::select! {
             biased;

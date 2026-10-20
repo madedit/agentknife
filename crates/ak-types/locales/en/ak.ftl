@@ -51,3 +51,11 @@ stuck-title = I tried to fix this { $attempts } times and it still fails.
 stuck-try-another = Try a different way
 stuck-roll-back = Go back to the last checkpoint
 stuck-show-details = Show technical details
+
+## Usage and spending ($detail: "US$1.23 of US$1.00")
+
+confirm-daily-cap = Today's AI spending has reached your daily limit ({ $detail }). Keep going today?
+# $spent, $cap (Number, US dollars)
+budget-warning = You have used { $spent } of today's { $cap } limit (US dollars).
+usage-free = Free (runs on your computer)
+usage-unknown = Cost unknown for this AI service

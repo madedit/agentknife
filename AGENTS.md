@@ -122,6 +122,10 @@ plan/            STATUS.md and execution-plan.md (format in §8).
 - **Progress display:** every step shows a plain-language label. Labels for deterministic steps (doctor, bundle, checkpoint) come from fluent, and labels for agent tool calls are AI-generated (see §5).
   - The agent loop adds a required `label` argument to every tool schema and strips it before the tool runs. Tools must never define their own `label` argument. Raw commands and output go under "Details". Thinking is collapsed by default.
 - **Usage:** show token and cost estimates for cloud providers, with an optional daily cap and a warning before it is reached.
+  - `ak_agent::usage`: cost comes only from the dated price table (`ANTHROPIC_PRICES_AS_OF`) for models on their official endpoints. Local endpoints are free; everything else is "unknown". Never guess a price.
+  - Per-day totals live in `<data_dir>/AgentKnife/usage.json` (local calendar day, shared by all projects); session totals live in the Agent.
+  - At 80% of the cap a `BudgetWarning` is sent once a day. At 100% the user is asked (`ConfirmKind::DailyCap`) once a day; declining ends the turn as `OverBudget`.
+  - When prices change, update the table and its date in the same change.
 - **Doctor:** detection and installation are deterministic Rust code, and the AI only narrates. Install Rust, targets, Trunk, wasm-bindgen, tauri-cli, and Tailwind CLI in AgentKnife's own directory (custom `RUSTUP_HOME`/`CARGO_HOME`). For system-level dependencies (MSVC Build Tools, WebView2, Xcode CLT, Linux webkit packages), guide the user step by step. Installs must be idempotent and resumable.
 - **Preview:**
   - The center pane is an iframe on the Trunk dev server.

@@ -51,3 +51,11 @@ stuck-title = 我已經自動修正 { $attempts } 次，還是失敗。
 stuck-try-another = 換個做法試試
 stuck-roll-back = 回到上一個檢查點
 stuck-show-details = 顯示技術細節
+
+## 用量與花費（$detail：「US$1.23 / US$1.00」）
+
+confirm-daily-cap = 今天的 AI 花費已經達到你設定的每日上限（{ $detail }）。今天要繼續使用嗎？
+# $spent、$cap（數字，美元）
+budget-warning = 今天已經用了 { $spent }，每日上限是 { $cap }（美元）。
+usage-free = 免費（在你的電腦上執行）
+usage-unknown = 無法得知這個 AI 服務的費用
