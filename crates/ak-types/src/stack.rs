@@ -206,20 +206,30 @@ pub fn fill(text: &str, values: &[(&str, &str)]) -> String {
     })
 }
 
-/// How to tell a started process is ready.
+/// How to tell a started backend is ready.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReadySignal {
-    /// The frontend URL answers HTTP 200.
-    HttpOk,
     /// A stdout line starting with this (the rest may carry JSON).
     StdoutPrefix(&'static str),
+}
+
+/// Substrings of a dev server's output lines that mark its state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LogMarkers {
+    /// A (re)build started.
+    pub building: &'static [&'static str],
+    /// The build finished and is being served.
+    pub success: &'static [&'static str],
+    /// The build failed.
+    pub error: &'static [&'static str],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreviewPlan {
     /// The dev server for the screens, serving on `{port}`.
     pub frontend: CommandSpec,
-    pub frontend_ready: ReadySignal,
+    /// How to read the dev server's output (built, rebuilding, failed).
+    pub frontend_log: LogMarkers,
     /// The app's backend serving its commands to the preview, if the stack has one.
     pub backend: Option<CommandSpec>,
     pub backend_ready: ReadySignal,

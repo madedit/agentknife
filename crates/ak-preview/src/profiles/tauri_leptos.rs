@@ -4,7 +4,7 @@
 //! This is the only place that knows those names (checked by `cargo xtask ci`).
 
 use ak_types::stack::{
-    Artifact, BundlePlan, CommandSpec, HostOs, KnowledgePack, PreviewPlan, ReadySignal,
+    Artifact, BundlePlan, CommandSpec, HostOs, KnowledgePack, LogMarkers, PreviewPlan, ReadySignal,
     StackProfile, Template, TemplateFile, TemplateValue, Tool,
 };
 
@@ -132,7 +132,11 @@ impl StackProfile for TauriLeptos {
                 env,
                 env_remove: env_remove.clone(),
             },
-            frontend_ready: ReadySignal::HttpOk,
+            frontend_log: LogMarkers {
+                building: &["INFO starting build"],
+                success: &["INFO success"],
+                error: &["ERROR error"],
+            },
             backend: Some(CommandSpec {
                 tool: Tool::Cargo,
                 args: strings(&[

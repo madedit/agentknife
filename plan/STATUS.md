@@ -262,7 +262,7 @@
     - dev appears only in the preview.
     - ak-project scaffold with a fake stack.
     - End to end: registry.create + scaffold with the real stack ("待辦清單 Todo" -> com.agentknife.todo), with binary icons byte-identical.
-- P1-KNOW-001 — (hash in next commit) — knowledge pack:
+- P1-KNOW-001 — b67e571 — knowledge pack:
   - knowledge/tauri-leptos: pack.toml (pack 0.1.0; describes tauri 2.12.4, tauri-cli 2.12.3, leptos 0.8.22, wasm-bindgen 0.2.129, trunk 0.21.14, tailwind-cli 4.3.3), plus 12 topics: overview, leptos-components, leptos-reactivity, forms, tauri-commands, storage, ak-bridge, ak-ui, data-ak-id, tailwind, example-todo, troubleshooting.
   - Embedding: ak_types::stack::KnowledgePack gains `topics` (KnowledgeTopic id/title/summary/body); ak-preview build.rs embeds pack.toml and the topics.
   - Tool: `read_knowledge(topic)` (ReadKnowledge; enum of topic ids, the index in its description, unknown -> error with the index). `project_tools` takes `Option<KnowledgePack>`; the policy always allows it. Product prompt v2: read 1–2 relevant topics before writing app code.
@@ -274,3 +274,19 @@
     - The to-do example ran in the preview on the real runtime: add/check/delete/filter via the control channel; it survived a reload (todos.json in app data, then deleted).
     - Live agent (local model) calls read_knowledge on its own with relevant topics. Found and fixed: the policy asked for confirmation on every read_knowledge; the docs used use_toaster() inside async blocks.
   - Fixed in ak-bridge (control channel): dom_summary dropped text in non-reported children (a row's label in a <span>); containers now include text outside reported children.
+- P1-PREV-001 — (hash in next commit) — dev-server manager:
+  - ak_types::preview: PreviewStatus {frontend, backend: ServerState Off/Starting/Building/Ready/Error{output}, url}, plus ready() and error().
+  - ak_types::stack changes: PreviewPlan.frontend_log (LogMarkers) replaces frontend_ready, and ReadySignal is StdoutPrefix only. The tauri-leptos markers come from real trunk 0.21.14 output: "INFO starting build" / "INFO success" / "ERROR error".
+  - ak_preview::Preview:
+    - new/start/stop/restart/restart_backend/files_changed; subscribe() (watch channel); page_url/controller_url.
+    - Ports: free ports for the frontend and the bridge (the bridge port is kept across backend restarts); getrandom token.
+    - Tools from ak_doctor::Toolchain: full paths, toolchain env, PATH first, inherited cargo/rustup vars removed, plan env filled.
+    - Processes: own process tree, killed with taskkill /T or the process group; Drop kills.
+    - Parsing: BuildTracker follows markers, keeps only this build's lines (bounded) and appends "Caused by" details; backend Tail; exits become errors ("could not be built" / "stopped").
+  - Tests:
+    - log parser on real trunk output.
+    - 4 integration tests with ak-preview-fake-tool: ready, URL/placeholders/token, failing rebuild with compiler output (page kept), recovery, stop; backend compile error and crash; backend restart only for backend paths, same port/token, no prefix confusion; dying dev server is an error and Drop stops the tree.
+  - Live (preview_live, fresh scaffolded project, NO_COLOR=1 set):
+    - Both sides ready in 87 s (cold build). A broken screen became an error with error[E0308] in 0.86 s; fixed, ready in 3 s. A backend change restarted the backend, ready in 3 s.
+    - Stop: no processes left.
+  - Note: each preview run of a project leaves the app's WebView2 data in %LOCALAPPDATA%\<identifier> (the generated app's own data).

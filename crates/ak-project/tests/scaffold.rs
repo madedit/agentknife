@@ -6,8 +6,8 @@
 use ak_project::{Project, ProjectError};
 use ak_types::i18n::Locale;
 use ak_types::stack::{
-    BundlePlan, CommandSpec, KnowledgePack, PreviewPlan, ReadySignal, StackProfile, Template,
-    TemplateFile, TemplateValue, Tool,
+    BundlePlan, CommandSpec, KnowledgePack, LogMarkers, PreviewPlan, ReadySignal, StackProfile,
+    Template, TemplateFile, TemplateValue, Tool,
 };
 
 struct Fake(&'static str);
@@ -64,9 +64,13 @@ impl StackProfile for Fake {
     fn preview(&self) -> PreviewPlan {
         PreviewPlan {
             frontend: cmd(),
-            frontend_ready: ReadySignal::HttpOk,
+            frontend_log: LogMarkers {
+                building: &[],
+                success: &[],
+                error: &[],
+            },
             backend: None,
-            backend_ready: ReadySignal::HttpOk,
+            backend_ready: ReadySignal::StdoutPrefix("READY"),
             backend_watch: &[],
             bridge_url_param: "x",
         }

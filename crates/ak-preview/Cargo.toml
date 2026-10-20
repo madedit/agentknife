@@ -6,17 +6,28 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+ak-doctor = { path = "../ak-doctor" }
 ak-types.workspace = true
+getrandom.workspace = true
+tokio = { workspace = true, features = ["process", "io-util", "sync", "time", "rt", "net", "macros"] }
 
 [build-dependencies]
 # Reads knowledge/<stack>/pack.toml.
 toml.workspace = true
+
+[[bin]]
+# Test helper: imitates `trunk serve` and the app backend (tests/dev_server.rs).
+name = "ak-preview-fake-tool"
+path = "src/bin/fake_tool.rs"
+test = false
+doc = false
 
 [dev-dependencies]
 # Keeps the preview settings in step with what ak-bridge expects.
 ak-bridge = { path = "../ak-bridge" }
 ak-project = { path = "../ak-project" }
 tempfile.workspace = true
+tokio = { workspace = true, features = ["process", "io-util", "sync", "time", "rt", "rt-multi-thread", "net", "macros"] }
 toml.workspace = true
 
 [lints]

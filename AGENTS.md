@@ -151,6 +151,13 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Downloads resume from `<file>.part`. A file whose checksum fails is deleted, never used. Programs are written to a temporary file and renamed into place. rustup-init always gets `--no-modify-path`: never touch the user's PATH, dotfiles or registry.
 - **Preview:**
   - The center pane is an iframe on the Trunk dev server.
+  - `ak_preview::Preview` runs one project's preview from its stack's PreviewPlan with the isolated toolchain (`Tools::from_toolchain`).
+    - It picks free ports and a 128-bit random bridge token. The bridge port stays the same across backend restarts.
+    - It publishes `ak_types::preview::PreviewStatus` on a watch channel: frontend and backend each Off/Starting/Building/Ready/Error{output = compiler output tail}, plus the page URL once built.
+    - Frontend states come from the plan's `frontend_log` markers; the backend is ready on its stdout prefix, and an exit is an error.
+    - Each process runs in its own process tree (taskkill /T or a process group), and Drop kills everything. Inherited CARGO/RUSTC/RUSTUP_*/CARGO_HOME/CARGO_TARGET_DIR are removed.
+    - After the agent or user edits files, call `files_changed(paths)`: backend code (the plan's backend_watch) restarts the backend, while the dev server rebuilds the screens itself.
+    - Tests use `ak-preview-fake-tool`; `cargo run -p ak-preview --example preview_live` checks the real thing.
   - `ak-bridge` exposes the app's Tauri commands over a localhost WebSocket in dev builds, so the preview is fully functional.
   - Generated apps call a unified `invoke` wrapper (WebSocket in preview, Tauri IPC in production).
   - Bridge and inspector code is stripped from release bundles. Everything preview-only in `ak-bridge` sits behind its `dev` feature, which generated apps enable only for the preview build; `cargo xtask ci` (step `bridge`) fails if ak-bridge without `dev` pulls in WebSocket crates.
@@ -308,6 +315,7 @@ Prerequisites for developing AgentKnife:
 | Re-pin download checksums after a tool version change | `cargo xtask pin-downloads` |
 | See every ak-ui component (toolchain on PATH, see "Running trunk") | `cd crates/ak-ui-gallery && trunk serve` (http://127.0.0.1:47130) |
 | Real OS keychain round trip (writes and deletes a test entry) | `cargo test -p ak-providers --test credentials -- --ignored` |
+| Live check of the preview manager (new project, real toolchain; minutes) | `cargo run -p ak-preview --example preview_live` |
 | Doctor report for this computer (read-only) | `cargo run -p ak-doctor --example doctor_report` |
 | Install the isolated toolchain for real (several hundred MB) | `cargo run -p ak-doctor --example doctor_install` |
 | Record real Anthropic fixtures (costs cents) | `ANTHROPIC_API_KEY=… cargo run -p ak-providers --example record_anthropic` |

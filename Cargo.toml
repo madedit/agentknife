@@ -51,6 +51,7 @@ js-sys = "0.3.106"
 web-sys = "0.3.106"
 wasm-bindgen-futures = "0.4.79"
 futures-channel = "0.3.34"
+getrandom = "0.3.4"
 
 [workspace.lints.clippy]
 # AGENTS.md §5: unwrap() is banned outside tests (see clippy.toml).

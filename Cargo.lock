@@ -95,9 +95,12 @@ name = "ak-preview"
 version = "0.1.0"
 dependencies = [
  "ak-bridge",
+ "ak-doctor",
  "ak-project",
  "ak-types",
+ "getrandom 0.3.4",
  "tempfile",
+ "tokio",
  "toml 1.1.8+spec-1.1.0",
 ]
 
