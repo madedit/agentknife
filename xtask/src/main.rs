@@ -36,9 +36,13 @@ fn main() -> ExitCode {
             let rest: Vec<String> = std::env::args().skip(2).collect();
             dev::run(&workspace_root(), &rest)
         }
+        Some("build") => {
+            let rest: Vec<String> = std::env::args().skip(2).collect();
+            dev::build(&workspace_root(), &rest)
+        }
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-toolchain|ci|dev|vendor-codemirror|pin-downloads|vendor-kit|check-knowledge>"
+                "usage: cargo xtask <gen-toolchain|ci|dev|build|vendor-codemirror|pin-downloads|vendor-kit|check-knowledge>"
             );
             return ExitCode::FAILURE;
         }

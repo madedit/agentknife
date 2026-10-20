@@ -362,6 +362,7 @@ Prerequisites for developing AgentKnife:
 | Task | Command |
 |---|---|
 | Run AgentKnife (shell + UI, hot reload; uses AgentKnife's toolchain) | `cargo xtask dev` |
+| Build AgentKnife (release, screens built in) → `target/release/agentknife.exe`; run that file | `cargo xtask build` |
 | Run the UI alone in a browser (http://127.0.0.1:47120, toolchain on PATH as for the gallery) | `trunk serve` (from `crates/ak-shell`) |
 | Test one crate | `cargo test -p <crate>` |
 | Full pre-commit gate | `cargo xtask ci` |

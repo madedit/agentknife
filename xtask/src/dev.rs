@@ -1,6 +1,7 @@
-//! `cargo xtask dev`: runs AgentKnife (`cargo tauri dev` in crates/ak-app) with
-//! AgentKnife's own toolchain, so nothing has to be installed or put on PATH
-//! by hand. Arguments after `dev` go to `cargo tauri dev`.
+//! `cargo xtask dev` / `cargo xtask build`: `cargo tauri dev` or a release
+//! `cargo tauri build --no-bundle` in crates/ak-app, with AgentKnife's own
+//! toolchain, so nothing has to be installed or put on PATH by hand. Further
+//! arguments go to `cargo tauri`.
 
 use std::path::Path;
 use std::process::Command;
@@ -13,7 +14,23 @@ use crate::Result;
 /// break trunk (it reads `NO_COLOR` as a true/false flag).
 const REMOVE: &[&str] = &["CARGO", "RUSTC", "RUSTDOC", "RUSTC_WRAPPER", "NO_COLOR"];
 
+/// Runs AgentKnife with hot reload.
 pub fn run(root: &Path, args: &[String]) -> Result<()> {
+    tauri(root, &["dev"], args)
+}
+
+/// Builds `target/release/agentknife(.exe)` (the shell's screens built in).
+pub fn build(root: &Path, args: &[String]) -> Result<()> {
+    tauri(root, &["build", "--no-bundle"], args)?;
+    let exe = root
+        .join("target")
+        .join("release")
+        .join(format!("agentknife{}", std::env::consts::EXE_SUFFIX));
+    println!("built {}", exe.display());
+    Ok(())
+}
+
+fn tauri(root: &Path, command: &[&str], args: &[String]) -> Result<()> {
     let pinned = Pinned::builtin()?;
     let tc = Toolchain::new(Toolchain::default_root(), &pinned);
     let tauri = tc.exe(&tc.cargo_bin(), "cargo-tauri");
@@ -31,7 +48,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<()> {
     ));
     let mut cmd = Command::new(&tauri);
     cmd.arg("tauri")
-        .arg("dev")
+        .args(command)
         .args(args)
         .current_dir(root.join("crates/ak-app"))
         .envs(tc.env())
@@ -41,11 +58,15 @@ pub fn run(root: &Path, args: &[String]) -> Result<()> {
     for k in REMOVE {
         cmd.env_remove(k);
     }
-    println!("==> cargo tauri dev (toolchain: {})", tc.root().display());
+    println!(
+        "==> cargo tauri {} (toolchain: {})",
+        command.join(" "),
+        tc.root().display()
+    );
     let status = cmd.status()?;
     if status.success() {
         Ok(())
     } else {
-        Err(format!("cargo tauri dev exited with {status}").into())
+        Err(format!("cargo tauri {} exited with {status}", command.join(" ")).into())
     }
 }
