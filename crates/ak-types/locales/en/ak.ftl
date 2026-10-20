@@ -59,3 +59,26 @@ confirm-daily-cap = Today's AI spending has reached your daily limit ({ $detail 
 budget-warning = You have used { $spent } of today's { $cap } limit (US dollars).
 usage-free = Free (runs on your computer)
 usage-unknown = Cost unknown for this AI service
+
+## Development tools check (doctor)
+
+doctor-item-rust = Rust
+doctor-item-wasm32-target = Rust for the web (WebAssembly)
+doctor-item-trunk = Trunk (builds the app's screens)
+doctor-item-wasm-bindgen = wasm-bindgen
+doctor-item-tauri-cli = Tauri tools (packages the app)
+doctor-item-tailwind = Tailwind CSS (styles)
+doctor-item-msvc-build-tools = Microsoft C++ Build Tools
+doctor-item-windows-sdk = Windows SDK
+doctor-item-webview2 = Microsoft Edge WebView2
+doctor-item-xcode-clt = Xcode Command Line Tools
+doctor-item-linux-webkit2gtk = WebKitGTK (webkit2gtk-4.1)
+doctor-item-linux-javascriptcore = JavaScriptCore (javascriptcoregtk-4.1)
+doctor-item-linux-libsoup = libsoup 3
+doctor-item-linux-appindicator = Ayatana AppIndicator
+doctor-item-linux-librsvg = librsvg
+doctor-item-linux-c-compiler = C compiler (build-essential)
+doctor-status-ok = Ready
+doctor-status-missing = Not installed
+doctor-status-wrong-version = Different version needed
+doctor-status-error = Could not check

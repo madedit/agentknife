@@ -50,6 +50,14 @@ version = "0.1.0"
 [[package]]
 name = "ak-doctor"
 version = "0.1.0"
+dependencies = [
+ "ak-types",
+ "dirs",
+ "futures-util",
+ "serde",
+ "tokio",
+ "toml",
+]
 
 [[package]]
 name = "ak-preview"

@@ -59,3 +59,26 @@ confirm-daily-cap = 今天的 AI 花費已經達到你設定的每日上限（{ 
 budget-warning = 今天已經用了 { $spent }，每日上限是 { $cap }（美元）。
 usage-free = 免費（在你的電腦上執行）
 usage-unknown = 無法得知這個 AI 服務的費用
+
+## 開發工具檢查（doctor）
+
+doctor-item-rust = Rust
+doctor-item-wasm32-target = Rust 網頁版（WebAssembly）
+doctor-item-trunk = Trunk（建置 App 畫面）
+doctor-item-wasm-bindgen = wasm-bindgen
+doctor-item-tauri-cli = Tauri 工具（打包 App）
+doctor-item-tailwind = Tailwind CSS（樣式）
+doctor-item-msvc-build-tools = Microsoft C++ 建置工具
+doctor-item-windows-sdk = Windows SDK
+doctor-item-webview2 = Microsoft Edge WebView2
+doctor-item-xcode-clt = Xcode 命令列工具
+doctor-item-linux-webkit2gtk = WebKitGTK（webkit2gtk-4.1）
+doctor-item-linux-javascriptcore = JavaScriptCore（javascriptcoregtk-4.1）
+doctor-item-linux-libsoup = libsoup 3
+doctor-item-linux-appindicator = Ayatana AppIndicator
+doctor-item-linux-librsvg = librsvg
+doctor-item-linux-c-compiler = C 編譯器（build-essential）
+doctor-status-ok = 已就緒
+doctor-status-missing = 尚未安裝
+doctor-status-wrong-version = 需要不同的版本
+doctor-status-error = 無法檢查

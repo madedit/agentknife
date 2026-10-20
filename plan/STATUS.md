@@ -96,8 +96,18 @@
   - Daily cap: BudgetWarning once at 80%; at 100%, a DailyCap confirmation once a day; declining ends the turn as OverBudget.
   - Resolved the usage-semantics item: only official endpoints are priced.
   - Tests: unit + 4 integration (mutation-checked); float tolerance on cap checks.
-- P1-AGENT-007 — (hash in next commit) — first greeting and versioned product prompt:
+- P1-AGENT-007 — 4288e66 — first greeting and versioned product prompt:
   - `crates/ak-agent/prompts/system.md` (prompt-version 1), exposed as `prompt::product_prompt()` / `product_prompt_version()`.
   - `Agent::greet` runs once, on a conversation without messages (session notes do not count); takes no lock; asks for the UI language explicitly.
   - Test with the fake LLM.
   - Live (zh-TW and en, real product prompt plus all 8 tools): greeting in the right language, 4 points, proposes the tool check and asks to start, 0 tool calls.
+- P1-DOC-001 — (hash in next commit) — ak-doctor detection:
+  - Isolated Toolchain layout; pinned versions from the embedded versions.toml; probes always set RUSTUP_AUTO_INSTALL=0 and RUSTUP_TOOLCHAIN.
+  - Checks:
+    - rust, wasm32-target, trunk, wasm-bindgen, tauri-cli, tailwind (exact version)
+    - Windows: msvc-build-tools (vswhere), windows-sdk (Windows Kits), webview2 (registry, then folder fallback)
+    - macOS: xcode-clt
+    - Linux: pkg-config packages and cc
+  - DoctorReport DTO in ak-types; fluent names and statuses (en and zh-TW).
+  - Fake-probe tests for all 3 OSes.
+  - Real run on this machine: MSVC 17.14, SDK 10.0.26100, WebView2 155.0 detected. The real rustc 1.99.1 and wasm32 target were detected through junctions into the AgentKnife layout.

@@ -6,6 +6,15 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+ak-types.workspace = true
+dirs.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+tokio = { workspace = true, features = ["process", "time"] }
+toml.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "process", "time"] }
 
 [lints]
 workspace = true

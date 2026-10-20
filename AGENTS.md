@@ -128,6 +128,9 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - At 80% of the cap a `BudgetWarning` is sent once a day. At 100% the user is asked (`ConfirmKind::DailyCap`) once a day; declining ends the turn as `OverBudget`.
   - When prices change, update the table and its date in the same change.
 - **Doctor:** detection and installation are deterministic Rust code, and the AI only narrates. Install Rust, targets, Trunk, wasm-bindgen, tauri-cli, and Tailwind CLI in AgentKnife's own directory (custom `RUSTUP_HOME`/`CARGO_HOME`). For system-level dependencies (MSVC Build Tools, WebView2, Xcode CLT, Linux webkit packages), guide the user step by step. Installs must be idempotent and resumable.
+  - `ak_doctor::Toolchain` lives under `<data_dir>/AgentKnife/toolchain/`, with `rustup/`, `cargo/` and `bin/`. Tools are always called by full path. Pinned versions come from the embedded `versions.toml`.
+  - Anything that runs rustup or cargo must use `Toolchain::env()`, which sets `RUSTUP_AUTO_INSTALL=0` and `RUSTUP_TOOLCHAIN`. Without it, rustup silently installs a missing toolchain.
+  - Detection goes through the `Probe` trait, so it can be tested for all OSes on any host with canned outputs.
 - **Preview:**
   - The center pane is an iframe on the Trunk dev server.
   - `ak-bridge` exposes the app's Tauri commands over a localhost WebSocket in dev builds, so the preview is fully functional.
