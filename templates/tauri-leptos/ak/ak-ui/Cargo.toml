@@ -1,0 +1,13 @@
+# Copied from crates/ak-ui by `cargo xtask vendor-kit`. Do not edit here:
+# change the original and re-run it. AgentKnife refreshes this folder.
+
+[package]
+build = false
+edition = "2024"
+license = "MIT OR Apache-2.0"
+name = "ak-ui"
+publish = false
+version = "0.1.0"
+
+[dependencies.leptos]
+version = "=0.8.22"

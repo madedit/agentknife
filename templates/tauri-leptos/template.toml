@@ -1,0 +1,12 @@
+# How AgentKnife turns this folder into a new project (ak-project).
+[template]
+id = "tauri-leptos"
+
+# Literal values in the template that project creation replaces with the
+# project's own (in Cargo.toml, tauri.conf.json, index.html and src/).
+[replace]
+product_name = "My App"
+identifier = "com.agentknife.myapp"
+
+# Regenerate icons from app-icon.svg: `cargo tauri icon app-icon.svg`
+# (run in src-tauri/; keep only the desktop sizes listed in tauri.conf.json).

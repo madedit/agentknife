@@ -6,6 +6,7 @@ mod bridge;
 mod ci;
 mod downloads;
 mod i18n;
+mod kit;
 mod layering;
 mod nonode;
 mod vendor;
@@ -23,8 +24,11 @@ fn main() -> ExitCode {
         Some("ci") => ci::run(&workspace_root()),
         Some("vendor-codemirror") => vendor::vendor_codemirror(&workspace_root()),
         Some("pin-downloads") => downloads::pin(&workspace_root()),
+        Some("vendor-kit") => kit::vendor(&workspace_root()),
         _ => {
-            eprintln!("usage: cargo xtask <gen-toolchain|ci|vendor-codemirror|pin-downloads>");
+            eprintln!(
+                "usage: cargo xtask <gen-toolchain|ci|vendor-codemirror|pin-downloads|vendor-kit>"
+            );
             return ExitCode::FAILURE;
         }
     };

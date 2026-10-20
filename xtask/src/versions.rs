@@ -15,6 +15,9 @@ pub struct Versions {
     pub knowledge: KnowledgeVersions,
     #[serde(default)]
     pub vendor: VendorVersions,
+    /// Standalone tools (`trunk`, `tailwind-cli`, `rustup`).
+    #[serde(default)]
+    pub tools: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -77,21 +80,13 @@ pub fn check(root: &Path) -> Result<()> {
         true,
     ));
 
-    // Stack-profile templates: any pinned crate they use must match.
+    // Stack-profile templates: pinned crates in every manifest, the tool versions
+    // trunk is told to use, and what the template's lockfile resolved.
     let templates = root.join("templates");
     if templates.is_dir() {
         for entry in std::fs::read_dir(&templates)? {
-            let path = entry?.path().join("Cargo.toml");
-            if !path.is_file() {
-                continue;
-            }
-            let t: toml::Table = toml::from_str(&std::fs::read_to_string(&path)?)?;
-            errors.extend(manifest_drift(
-                &path.display().to_string(),
-                t.get("dependencies"),
-                &versions,
-                false,
-            ));
+            let dir = entry?.path();
+            errors.extend(template_drift(&dir, &versions)?);
         }
     }
 
@@ -120,6 +115,72 @@ pub fn check(root: &Path) -> Result<()> {
 
 /// Compares a `[dependencies]`-style table against the pinned crates.
 /// With `require_all`, every pinned library crate must be present.
+/// Version drift in one template folder (nothing to check if it has no Cargo.toml).
+fn template_drift(dir: &Path, versions: &Versions) -> Result<Vec<String>> {
+    let mut errors = Vec::new();
+    if !dir.join("Cargo.toml").is_file() {
+        return Ok(errors);
+    }
+    for manifest in [
+        dir.join("Cargo.toml"),
+        dir.join("src-tauri").join("Cargo.toml"),
+    ] {
+        if !manifest.is_file() {
+            continue;
+        }
+        let t: toml::Table = toml::from_str(&std::fs::read_to_string(&manifest)?)?;
+        for section in ["dependencies", "build-dependencies"] {
+            errors.extend(manifest_drift(
+                &format!("{} [{section}]", manifest.display()),
+                t.get(section),
+                versions,
+                false,
+            ));
+        }
+    }
+    let trunk = dir.join("Trunk.toml");
+    if trunk.is_file() {
+        let t: toml::Table = toml::from_str(&std::fs::read_to_string(&trunk)?)?;
+        let tools = t.get("tools");
+        let want = [
+            ("wasm_bindgen", versions.crates.get("wasm-bindgen")),
+            ("tailwindcss", versions.tools.get("tailwind-cli")),
+        ];
+        for (key, pinned) in want {
+            let found = tools.and_then(|t| t.get(key)).and_then(|v| v.as_str());
+            if found != pinned.map(String::as_str) {
+                errors.push(format!(
+                    "{}: [tools] {key} is {found:?}, expected {pinned:?}",
+                    trunk.display()
+                ));
+            }
+        }
+    }
+    let lock = dir.join("Cargo.lock");
+    if lock.is_file() {
+        let t: toml::Table = toml::from_str(&std::fs::read_to_string(&lock)?)?;
+        let packages = t.get("package").and_then(|p| p.as_array());
+        for (name, pinned) in &versions.crates {
+            if CLI_ONLY.contains(&name.as_str()) {
+                continue;
+            }
+            let locked: Vec<&str> = packages
+                .into_iter()
+                .flatten()
+                .filter(|p| p.get("name").and_then(|n| n.as_str()) == Some(name.as_str()))
+                .filter_map(|p| p.get("version").and_then(|v| v.as_str()))
+                .collect();
+            if locked.iter().any(|v| v != pinned) {
+                errors.push(format!(
+                    "{}: {name} locked at {locked:?}, expected {pinned}",
+                    lock.display()
+                ));
+            }
+        }
+    }
+    Ok(errors)
+}
+
 fn manifest_drift(
     label: &str,
     deps: Option<&toml::Value>,

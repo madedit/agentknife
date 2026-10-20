@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::{Result, bridge, downloads, i18n, layering, nonode, vendor, versions};
+use crate::{Result, bridge, downloads, i18n, kit, layering, nonode, vendor, versions};
 
 /// Crates that must also build for `wasm32-unknown-unknown`.
 const WASM_CRATES: &[&str] = &[
@@ -15,7 +15,18 @@ const WASM_CRATES: &[&str] = &[
 ];
 
 pub fn run(root: &Path) -> Result<()> {
-    step("fmt", || cargo(root, &["fmt", "--all", "--check"]))?;
+    step("fmt", || {
+        cargo(root, &["fmt", "--all", "--check"])?;
+        // Templates are separate workspaces.
+        for template in kit::TEMPLATES {
+            let manifest = format!("{template}/Cargo.toml");
+            cargo(
+                root,
+                &["fmt", "--manifest-path", &manifest, "--all", "--check"],
+            )?;
+        }
+        Ok(())
+    })?;
     step("clippy", || {
         cargo(
             root,
@@ -52,6 +63,7 @@ pub fn run(root: &Path) -> Result<()> {
     step("versions", || versions::check(root))?;
     step("downloads", || downloads::check(root))?;
     step("bridge", || bridge::check(root))?;
+    step("kit", || kit::check(root))?;
     step("i18n", || i18n::check(root))?;
     step("vendor", || vendor::check(root))?;
     step("no-node", || nonode::check(root))?;

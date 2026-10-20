@@ -1,3 +1,7 @@
 * text=auto eol=lf
 # Vendored files are hashed byte-for-byte; never normalize them.
 crates/ak-shell/vendor/** -text
+# Icons and other binary assets (templates).
+*.png binary
+*.ico binary
+*.icns binary

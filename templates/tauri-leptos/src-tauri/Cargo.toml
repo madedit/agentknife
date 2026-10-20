@@ -1,0 +1,18 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "=2.7.3", features = [] }
+
+[dependencies]
+ak-bridge = { path = "../ak/ak-bridge" }
+serde = { version = "1.0.229", features = ["derive"] }
+tauri = { version = "=2.12.4", features = [] }
+
+[features]
+# AgentKnife's preview only (serves the commands to the preview). Release
+# builds (`cargo tauri build`) never enable it.
+dev = ["ak-bridge/dev"]

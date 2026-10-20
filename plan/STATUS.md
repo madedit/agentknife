@@ -218,7 +218,7 @@
     - Errors were clear for a missing id and for typing into a button.
     - After the backend was killed and restarted, the page reconnected by itself and actions worked without a reload.
     - Found and fixed: the token leaked through the page URL in reports.
-- P1-UI-001 — (hash in next commit) — ak-ui component kit:
+- P1-UI-001 — 74e824a — ak-ui component kit:
   - Components: Button (Primary/Secondary/Danger/Ghost, submit, aria label), Input (bound RwSignal, label, kind), Form (Enter or submit -> on_submit, no reload), List (keyed rows `<id>-<key>`, empty state), Dialog (open signal; Escape, backdrop and × close; role=dialog, aria-modal), Nav (items, active signal, aria-current), Card, Toggle (role=switch, aria-checked), Toast (ToastHost + use_toaster(); info/success/error; role status/alert; auto-dismiss 4 s; `<id>-<n>`).
   - All take `ak_id` and have no fixed strings. Tailwind v4 classes are full literals, with dark: variants.
   - Tests: 8 HTML render tests (ids, derived ids, aria). leptos `ssr` is a dev-dependency only; csr+ssr unify fine.
@@ -226,3 +226,20 @@
   - Checked in Chrome: add via Enter (toast), delete (row ids stay key-based), toggle, dialog (Escape closes; confirm clears; empty state; disabled button), toast auto-dismiss, nav tab switch.
   - Found for P1-PREV-001: `NO_COLOR=1` makes trunk exit (it parses NO_COLOR as a bool), and trunk checks for updates unless TRUNK_SKIP_VERSION_CHECK=true. Both are in AGENTS.md.
   - ci: the wasm step also covers ak-ui and ak-ui-gallery; `**/dist/` is git-ignored.
+- P1-TPL-001 — (hash in next commit) — tauri-leptos template:
+  - templates/tauri-leptos:
+    - Frontend `app-ui`: Leptos CSR, ak-ui and ak-bridge; a "Say hello" screen with a Card, Form, Input, Button, Toast and data-ak-ids, calling the backend `greet` command via `ak_bridge::invoke`.
+    - Backend `src-tauri`: the `greet` command, `ak_bridge::init()`, window hidden until shown by setup.
+    - Configuration: tauri.conf.json (NSIS/app/dmg/AppImage/deb), capabilities, desktop icons from app-icon.svg, Trunk.toml (pinned tools), Tailwind `@source` for ak-ui, template.toml and a committed Cargo.lock.
+  - `cargo xtask vendor-kit` + ci step `kit`: ak/ copies must be current, and the template lockfile must pass `cargo tree --locked`.
+  - The versions check now covers the template's src-tauri manifest (tauri, tauri-build), Trunk.toml [tools] and Cargo.lock.
+  - Fresh copy, built with the isolated toolchain only:
+    - `trunk build` OK.
+    - `cargo tauri build` OK, giving `My App_0.1.0_x64-setup.exe` (1.92 MiB).
+    - The release app.exe and wasm contain no bridge, inspector or control-channel strings.
+  - Preview on the real wry runtime:
+    - The backend ran with `--features dev` and AK_BRIDGE_*. It printed `AK_BRIDGE_READY {"port":N}`; its "My App" window stayed hidden (Win32 IsWindowVisible=false).
+    - With `trunk serve --features dev` open in Chrome, greet returned the backend's text, and the backend's error showed as an alert toast.
+    - Control-channel type, click, Enter and dom_summary worked; the token was stripped from the reported URL.
+  - For P1-BUNDLE-001: NSIS came from %LOCALAPPDATA%\tauri\NSIS, which already existed (2026-10-19). On a clean machine tauri-bundler downloads NSIS there on the first bundle; decide whether the doctor provisions it or AgentKnife asks first.
+  - For P1-TPL-002 / project creation: substitute template.toml [replace] values, rename gitignore to .gitignore, and run vendor-kit's output when AgentKnife updates.

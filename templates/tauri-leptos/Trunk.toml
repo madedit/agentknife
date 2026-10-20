@@ -1,0 +1,16 @@
+# Built by AgentKnife's own toolchain (pinned versions, nothing downloaded).
+[build]
+target = "index.html"
+
+[watch]
+# The backend has its own build; changes there do not rebuild the frontend.
+ignore = ["src-tauri"]
+
+[serve]
+addresses = ["127.0.0.1"]
+port = 1420
+open = false
+
+[tools]
+wasm_bindgen = "0.2.129"
+tailwindcss = "4.3.3"
