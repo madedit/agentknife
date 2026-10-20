@@ -44,7 +44,17 @@ pub mod cmd {
     pub const STUCK_CHOICE: &str = "stuck_choice";
     /// [`InterruptionChoice`](super::InterruptionChoice) → `()`
     pub const RESOLVE_INTERRUPTION: &str = "resolve_interruption";
+    /// `()` → [`PreviewStatus`](crate::preview::PreviewStatus) of the open
+    /// project; changes then arrive as [`PREVIEW_EVENT`](super::PREVIEW_EVENT).
+    pub const PREVIEW_STATUS: &str = "preview_status";
+    /// `()` → `()`: starts the open project's app in its own window (not the
+    /// preview), for a last check.
+    pub const RUN_APP: &str = "run_app";
 }
+
+/// Tauri event carrying the open project's
+/// [`PreviewStatus`](crate::preview::PreviewStatus) whenever it changes.
+pub const PREVIEW_EVENT: &str = "preview-status";
 
 /// Tauri event carrying each [`AgentEvent`](crate::agent::AgentEvent) of the
 /// open project's running turn.

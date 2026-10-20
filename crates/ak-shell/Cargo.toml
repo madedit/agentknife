@@ -17,11 +17,14 @@ wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 web-sys = { workspace = true, features = [
     "Element",
+    "HtmlIFrameElement",
     "KeyboardEvent",
     "Location",
+    "MessageEvent",
     "MouseEvent",
     "Navigator",
     "PointerEvent",
+    "ResizeObserver",
     "Storage",
     "Window",
 ] }

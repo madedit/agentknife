@@ -177,9 +177,12 @@ fn literal_text(source: &str) -> Vec<(usize, String)> {
     let (Ok(alone), Ok(between)) = (alone, between) else {
         return Vec::new();
     };
+    // A word that starts with a capital ("Save"), or any non-ASCII letter ("儲存").
+    // Code inside a word (`translateX`) does not count.
     let wordy = |t: &str| {
-        t.chars()
-            .any(|c| c.is_uppercase() || (c.is_alphabetic() && !c.is_ascii()))
+        t.split(|c: char| !c.is_alphabetic())
+            .any(|w| w.chars().next().is_some_and(char::is_uppercase))
+            || t.chars().any(|c| c.is_alphabetic() && !c.is_ascii())
     };
     let mut out = Vec::new();
     for (n, line) in source.lines().enumerate() {
@@ -217,6 +220,9 @@ view! {
     <div class=move || {
         if on() {
             "rounded-md bg-white px-3 dark:hover:text-white"
+        }
+        let css = move || {
+            "position:absolute;transform:translateX(-50%) scale(1)"
         } else {
             "rounded-md px-3"
         }

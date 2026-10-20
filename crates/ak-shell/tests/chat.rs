@@ -236,6 +236,23 @@ fn an_interrupted_turn_asks_to_continue_or_go_back() {
 }
 
 #[test]
+fn the_chip_names_the_element_briefly() {
+    let mut p = picked();
+    assert_eq!(selection_label(&p), "<button> “Greet”");
+    p.tag = "main".into();
+    p.ak_id = Some("home-screen".into());
+    p.text = Some("Bundle Check Say hello Your name Greet and more".into());
+    assert_eq!(selection_label(&p), "<main> home-screen");
+    p.ak_id = None;
+    assert_eq!(
+        selection_label(&p),
+        "<main> “Bundle Check Say hello Your na…”"
+    );
+    p.text = None;
+    assert_eq!(selection_label(&p), "<main>");
+}
+
+#[test]
 fn usage_reads_free_unknown_or_cost() {
     assert_eq!(
         usage_text(&usage(None, true), &usage(None, true)).0,

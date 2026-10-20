@@ -178,7 +178,6 @@ shell-timeline-empty = 每次修改都會記在這裡，隨時可以回到之前
 shell-tab-preview = 預覽
 shell-tab-code = 程式碼
 shell-preview-empty = 你的 App 會顯示在這裡
-shell-preview-empty-hint = 打開或建立一個專案，再告訴 AI 你想做什麼。
 shell-code-empty = 在左邊選一個檔案，就能看到它的程式碼。
 shell-chat = 與 AI 對話
 shell-chat-placeholder = 說說你想做什麼…
@@ -290,3 +289,28 @@ chat-interrupted-go-back = 回到上一個檢查點
 chat-usage = 這次 US${ $session } · 今天 US${ $today }
 chat-usage-at-least = 這次至少 US${ $session } · 今天至少 US${ $today }
 chat-expired = 不需要再回答了：AI 在你回答之前就停下來了。
+
+## 預覽面板
+preview-device = 畫面大小
+preview-device-computer = 電腦
+preview-device-tablet = 平板
+preview-device-phone = 手機
+preview-pick = 點選要改的地方
+preview-pick-hint = 在預覽裡點一個元素，告訴 AI 要改哪裡
+preview-picking = 請點一下 App 裡你想改的地方。按 Esc 結束。
+preview-reload = 重新整理
+preview-run-app = 用真正的視窗執行
+preview-run-app-hint = 用 App 自己的視窗開啟，和安裝後執行的樣子一樣
+preview-opening-window = 正在用 App 自己的視窗開啟…
+preview-frame-title = 你的 App 預覽
+preview-off = 打開專案後，預覽就會啟動。
+preview-first-build = 正在準備預覽…
+preview-first-build-hint = 第一次要幾分鐘，因為所有東西都要先建置一次。之後的修改幾秒內就會出現。
+preview-rebuilding = 更新中…
+preview-error-screens = App 的畫面目前無法建置。
+preview-error-backend = App 的背景程式出錯停止了。
+preview-error-hint = AI 修改時會順便修好。如果是你自己改的，可以請 AI 修正。
+preview-error-ai-working = AI 正在處理。
+preview-fix = 請 AI 修正
+# 以使用者的身分傳給 AI
+preview-fix-message = 預覽顯示錯誤：App 無法建置了，請幫我修正。

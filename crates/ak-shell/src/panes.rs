@@ -1,5 +1,5 @@
-//! The panes' contents. Placeholders until their tasks fill them: preview
-//! (P1-SHELL-004), files, timeline and code (P1-SHELL-005).
+//! The panes' contents. Placeholders until their task fills them: files,
+//! timeline and code (P1-SHELL-005).
 
 use leptos::prelude::*;
 
@@ -41,20 +41,6 @@ pub fn TimelinePane() -> impl IntoView {
             <Heading text="shell-timeline" />
             <Empty text="shell-timeline-empty" />
         </section>
-    }
-}
-
-#[component]
-pub fn PreviewPane() -> impl IntoView {
-    view! {
-        <div data-pane="preview" class="flex min-h-0 flex-1 items-center justify-center p-6">
-            <div class="max-w-sm text-center">
-                <p class="text-base font-medium">{t("shell-preview-empty")}</p>
-                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                    {t("shell-preview-empty-hint")}
-                </p>
-            </div>
-        </div>
     }
 }
 

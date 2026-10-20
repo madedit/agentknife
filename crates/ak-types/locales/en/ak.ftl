@@ -178,7 +178,6 @@ shell-timeline-empty = Every change is saved here, so you can always go back.
 shell-tab-preview = Preview
 shell-tab-code = Code
 shell-preview-empty = Your app will appear here
-shell-preview-empty-hint = Open or create a project, then tell the AI what you want to build.
 shell-code-empty = Pick a file on the left to see its code.
 shell-chat = Chat with the AI
 shell-chat-placeholder = Describe what you want…
@@ -290,3 +289,28 @@ chat-interrupted-go-back = Go back to the last checkpoint
 chat-usage = This session US${ $session } · today US${ $today }
 chat-usage-at-least = This session at least US${ $session } · today at least US${ $today }
 chat-expired = This is no longer needed: the AI stopped before you answered.
+
+## Preview pane
+preview-device = Screen size
+preview-device-computer = Computer
+preview-device-tablet = Tablet
+preview-device-phone = Phone
+preview-pick = Point at something
+preview-pick-hint = Click an element in the preview to tell the AI what to change
+preview-picking = Click the part of your app you want to change. Press Esc to stop.
+preview-reload = Reload
+preview-run-app = Run in a real window
+preview-run-app-hint = Opens your app in its own window, the way it will run once installed
+preview-opening-window = Opening your app in its own window…
+preview-frame-title = Preview of your app
+preview-off = The preview starts when the project opens.
+preview-first-build = Getting the preview ready…
+preview-first-build-hint = The first time takes a few minutes, because everything is built once. Later changes show up in seconds.
+preview-rebuilding = Updating…
+preview-error-screens = Your app’s screens cannot be built right now.
+preview-error-backend = Your app’s background part stopped with an error.
+preview-error-hint = The AI fixes this when it makes changes. If you changed something yourself, ask it to fix it.
+preview-error-ai-working = The AI is working on it.
+preview-fix = Ask the AI to fix it
+# Sent to the AI as the user's message
+preview-fix-message = The preview shows an error: the app no longer builds. Please fix it.

@@ -21,6 +21,48 @@ pub enum CenterTab {
     Code,
 }
 
+/// The size the preview shows the app at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Device {
+    /// The whole preview area.
+    #[default]
+    Computer,
+    Tablet,
+    Phone,
+}
+
+impl Device {
+    pub const ALL: [Device; 3] = [Device::Computer, Device::Tablet, Device::Phone];
+
+    /// The page's CSS size; `None` fills the preview area.
+    pub fn size(self) -> Option<(f64, f64)> {
+        match self {
+            Device::Computer => None,
+            Device::Tablet => Some((820.0, 1180.0)),
+            Device::Phone => Some((390.0, 844.0)),
+        }
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Device::Computer => "computer",
+            Device::Tablet => "tablet",
+            Device::Phone => "phone",
+        }
+    }
+}
+
+/// How much a device frame of `size` must shrink to fit in `area` (never grows).
+pub fn fit_scale(size: (f64, f64), area: (f64, f64)) -> f64 {
+    let (w, h) = size;
+    let (aw, ah) = area;
+    if w <= 0.0 || h <= 0.0 || aw <= 0.0 || ah <= 0.0 {
+        return 1.0;
+    }
+    (aw / w).min(ah / h).min(1.0)
+}
+
 /// Pixel limits of a resizable pane.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Bounds {
@@ -61,6 +103,7 @@ pub const STORAGE_KEY: &str = "agentknife.layout.v1";
 pub struct Layout {
     pub mode: Mode,
     pub tab: CenterTab,
+    pub device: Device,
     /// Widths in CSS pixels.
     pub left: f64,
     pub chat: f64,
@@ -71,6 +114,7 @@ impl Default for Layout {
         Layout {
             mode: Mode::Simple,
             tab: CenterTab::Preview,
+            device: Device::Computer,
             left: LEFT.default,
             chat: CHAT.default,
         }
@@ -140,6 +184,7 @@ mod tests {
         let l = Layout {
             mode: Mode::Full,
             tab: CenterTab::Code,
+            device: Device::Phone,
             left: 300.0,
             chat: 500.0,
         };
@@ -151,5 +196,19 @@ mod tests {
         // Unknown values fall back as a whole, never half-applied.
         assert_eq!(Layout::from_json(r#"{"mode":"tiny"}"#), Layout::default());
         assert_eq!(LEFT.clamp(f64::NAN), LEFT.default);
+        // Saved before devices existed: the computer view.
+        assert_eq!(
+            Layout::from_json(r#"{"mode":"full"}"#).device,
+            Device::Computer
+        );
+    }
+
+    #[test]
+    fn device_frames_shrink_to_fit_but_never_grow() {
+        let phone = Device::Phone.size().unwrap_or_default();
+        assert_eq!(fit_scale(phone, (1000.0, 2000.0)), 1.0);
+        assert!((fit_scale(phone, (390.0, 422.0)) - 0.5).abs() < 1e-9);
+        assert_eq!(fit_scale(phone, (0.0, 0.0)), 1.0);
+        assert!(Device::Computer.size().is_none());
     }
 }

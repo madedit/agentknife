@@ -6,7 +6,8 @@ use leptos::prelude::*;
 use crate::chat::ChatPane;
 use crate::i18n::t;
 use crate::layout::{self, CHAT, CenterTab, LEFT, Layout, Mode};
-use crate::panes::{CodePane, FilesPane, PreviewPane, TimelinePane};
+use crate::panes::{CodePane, FilesPane, TimelinePane};
+use crate::preview::PreviewPane;
 use crate::splitter::{Grows, Splitter};
 
 #[component]
@@ -96,7 +97,7 @@ fn Center(layout: RwSignal<Layout>) -> impl IntoView {
         </Show>
         <Show
             when=move || showing(CenterTab::Code)
-            fallback=|| view! { <PreviewPane /> }
+            fallback=move || view! { <PreviewPane layout /> }
         >
             <CodePane />
         </Show>

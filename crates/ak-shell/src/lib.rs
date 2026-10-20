@@ -15,6 +15,7 @@ pub mod home;
 pub mod i18n;
 pub mod layout;
 mod panes;
+pub mod preview;
 pub mod shell;
 mod splitter;
 

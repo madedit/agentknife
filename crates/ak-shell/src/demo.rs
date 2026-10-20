@@ -2,7 +2,9 @@
 //! (`trunk serve`). Connecting: keys containing `bad` are refused, addresses
 //! containing `nothing` do not answer, models with `3b` cannot use tools.
 //! Chat: a scripted turn; words in the message pick what it shows (`plan`,
-//! `delete`, `ask`, `stuck`, `long`, `fail`).
+//! `delete`, `ask`, `stuck`, `long`, `fail`). Preview: a static demo page after
+//! a short start, or a real preview given as `?preview=<url>` (for trying
+//! point-and-select against `cargo run -p ak-preview --example preview_live`).
 // xtask-i18n: demo data (the AI's words, not UI text)
 
 use std::sync::{Arc, Mutex};
@@ -16,11 +18,45 @@ use ak_types::ipc::{
     ConnectError, ConnectRequest, HomeState, ModelCheck, ModelChoice, OpenedProject, ProjectRow,
     SendMessage, cmd,
 };
+use ak_types::preview::{PreviewStatus, ServerState};
 use ak_types::settings::AiConnection;
 use futures_channel::oneshot;
 use serde_json::{Value, json};
 
-use crate::backend::{Listener, now, sleep};
+use crate::backend::{Listener, PreviewListener, now, sleep};
+
+/// The preview URL that stands for [`DEMO_PAGE`].
+pub const DEMO_URL: &str = "about:srcdoc";
+
+/// A tiny app for the demo preview (no inspector: try point-and-select with a
+/// real preview through `?preview=`).
+pub const DEMO_PAGE: &str = r#"<!doctype html><html><head><meta charset="utf-8"><style>
+body{font-family:system-ui,sans-serif;margin:0;background:#f8fafc;color:#0f172a}
+main{max-width:28rem;margin:4rem auto;padding:1.5rem;display:flex;flex-direction:column;gap:1rem}
+h1{font-size:1.75rem;margin:0}.card{background:#fff;border:1px solid #e2e8f0;border-radius:.75rem;padding:1rem}
+input{width:100%;box-sizing:border-box;padding:.5rem;border:1px solid #cbd5e1;border-radius:.5rem}
+button{margin-top:.75rem;background:#2563eb;color:#fff;border:0;border-radius:.5rem;padding:.5rem 1rem}
+</style></head><body><main data-ak-id="home-screen"><h1 data-ak-id="home-title">My App</h1>
+<div class="card" data-ak-id="greet-card"><label>Your name<input data-ak-id="name-input" placeholder="Ada"></label>
+<button data-ak-id="greet-button">Greet</button></div></main></body></html>"#;
+
+/// The preview page: `?preview=<url>` in the shell's address, else the demo page.
+fn preview_url() -> String {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let search = web_sys::window()
+            .and_then(|w| w.location().search().ok())
+            .unwrap_or_default();
+        for pair in search.trim_start_matches('?').split('&') {
+            if let Some(v) = pair.strip_prefix("preview=")
+                && let Ok(url) = js_sys::decode_uri_component(v)
+            {
+                return url.into();
+            }
+        }
+    }
+    DEMO_URL.to_owned()
+}
 
 const DEMO_FOLDER: &str = "~/AgentKnife/Projects";
 
@@ -29,6 +65,8 @@ pub struct Demo {
     ai: Option<AiConnection>,
     next: u32,
     pub(crate) listener: Option<Listener>,
+    pub(crate) preview_listener: Option<PreviewListener>,
+    preview: PreviewStatus,
     /// The scripted turn waits here for a card's answer.
     waiting: Option<oneshot::Sender<Value>>,
     running: bool,
@@ -63,6 +101,8 @@ impl Demo {
             ai: None,
             next: 3,
             listener: None,
+            preview_listener: None,
+            preview: PreviewStatus::default(),
             waiting: None,
             running: false,
         }
@@ -126,6 +166,8 @@ impl Demo {
                 };
                 d.next += 1;
                 d.projects.push(row.clone());
+                drop(d);
+                start_preview(demo.clone());
                 Ok(json!(Demo::opened(row)))
             }
             cmd::OPEN_PROJECT => {
@@ -136,9 +178,14 @@ impl Demo {
                     .find(|p| p.id == id)
                     .ok_or_else(|| text(format!("no project {id}")))?;
                 row.last_opened_at = now();
-                Ok(json!(Demo::opened(row.clone())))
+                let opened = Demo::opened(row.clone());
+                drop(d);
+                start_preview(demo.clone());
+                Ok(json!(opened))
             }
             cmd::OPEN_FOLDER => Ok(Value::Null),
+            cmd::PREVIEW_STATUS => Ok(json!(d.preview)),
+            cmd::RUN_APP => Ok(Value::Null),
             cmd::LIST_MODELS | cmd::CHECK_MODEL => {
                 let r: ConnectRequest =
                     serde_json::from_value(req).map_err(|e| text(e.to_string()))?;
@@ -225,6 +272,74 @@ fn play(demo: Arc<Mutex<Demo>>, text: String) {
     leptos::task::spawn_local(turn(demo, text));
     #[cfg(not(target_arch = "wasm32"))]
     let _ = (demo, text, turn);
+}
+
+fn set_preview(demo: &Arc<Mutex<Demo>>, status: PreviewStatus) {
+    let listener = demo.lock().ok().and_then(|mut d| {
+        d.preview = status.clone();
+        d.preview_listener.clone()
+    });
+    if let Some(l) = listener {
+        l(status);
+    }
+}
+
+/// Starting → first build → ready, like a real preview (shortened).
+fn start_preview(demo: Arc<Mutex<Demo>>) {
+    set_preview(
+        &demo,
+        PreviewStatus {
+            frontend: ServerState::Starting,
+            backend: ServerState::Starting,
+            url: None,
+        },
+    );
+    #[cfg(target_arch = "wasm32")]
+    leptos::task::spawn_local(async move {
+        sleep(800).await;
+        set_preview(
+            &demo,
+            PreviewStatus {
+                frontend: ServerState::Building,
+                backend: ServerState::Building,
+                url: None,
+            },
+        );
+        sleep(2_500).await;
+        set_preview(&demo, ready());
+    });
+}
+
+fn ready() -> PreviewStatus {
+    PreviewStatus {
+        frontend: ServerState::Ready,
+        backend: ServerState::Ready,
+        url: Some(preview_url()),
+    }
+}
+
+/// A rebuild after the AI changed something: the page stays while it builds.
+async fn rebuild(demo: &Arc<Mutex<Demo>>, error: Option<&str>) {
+    set_preview(
+        demo,
+        PreviewStatus {
+            frontend: ServerState::Building,
+            ..ready()
+        },
+    );
+    sleep(1_200).await;
+    set_preview(
+        demo,
+        match error {
+            Some(output) => PreviewStatus {
+                frontend: ServerState::Error {
+                    output: output.to_owned(),
+                },
+                ..ready()
+            },
+            None => ready(),
+        },
+    );
 }
 
 fn emit(demo: &Arc<Mutex<Demo>>, event: AgentEvent) {
@@ -438,6 +553,10 @@ async fn turn(demo: Arc<Mutex<Demo>>, text: String) {
             true,
         )
         .await;
+        let broken = has(&["stuck", "壞"]).then_some(
+            "error[E0308]: mismatched types\n --> src/main.rs:42:9\n   |\n42 |         \"blue\"\n   |         ^^^^^^ expected `bool`, found `&str`",
+        );
+        rebuild(&demo, broken).await;
         if has(&["long", "長"]) {
             break 'turn TurnOutcome::StepLimit;
         }

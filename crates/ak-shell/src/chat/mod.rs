@@ -30,18 +30,21 @@ impl Chat {
     }
 }
 
-/// The chip's words for a picked element: its text, else its id, else its tag.
+/// The chip's words for a picked element: its own short text (`<button>
+/// “Greet”`), else its id for big containers whose text is everything inside
+/// (`<main> home-screen`), else the start of its text, else just its tag.
 pub fn selection_label(p: &Picked) -> String {
-    p.text
-        .as_deref()
-        .map(str::trim)
-        .filter(|t| !t.is_empty())
-        .map(|t| {
-            let short: String = t.chars().take(40).collect();
-            format!("<{}> “{short}”", p.tag)
-        })
-        .or_else(|| p.ak_id.clone())
-        .unwrap_or_else(|| format!("<{}>", p.tag))
+    const SHORT: usize = 30;
+    let text = p.text.as_deref().map(str::trim).filter(|t| !t.is_empty());
+    match (text, &p.ak_id) {
+        (Some(t), _) if t.chars().count() <= SHORT => format!("<{}> “{t}”", p.tag),
+        (_, Some(id)) => format!("<{}> {id}", p.tag),
+        (Some(t), None) => {
+            let short: String = t.chars().take(SHORT).collect();
+            format!("<{}> “{short}…”", p.tag)
+        }
+        (None, None) => format!("<{}>", p.tag),
+    }
 }
 
 fn money(usd: f64) -> String {
@@ -100,6 +103,21 @@ where
 const PRIMARY: &str = "rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50";
 const SECONDARY: &str = "rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800";
 const CARD: &str = "rounded-xl border border-gray-200 bg-white p-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900";
+
+/// Sends `message` (with the current selection) and shows it at once.
+pub fn send_message(chat: Chat, message: String) {
+    let selection = chat.selection.get_untracked();
+    chat.log
+        .update(|l| l.user_sent(&message, selection.as_ref().map(selection_label)));
+    chat.selection.set(None);
+    call(chat.log, move |b| async move {
+        b.send_message(&SendMessage {
+            text: message,
+            selection,
+        })
+        .await
+    });
+}
 
 #[component]
 pub fn ChatPane() -> impl IntoView {
@@ -561,19 +579,8 @@ fn Composer() -> impl IntoView {
         if !can_send() {
             return;
         }
-        let message = text.get_untracked().trim().to_owned();
-        let selection = chat.selection.get_untracked();
-        chat.log
-            .update(|l| l.user_sent(&message, selection.as_ref().map(selection_label)));
+        send_message(chat, text.get_untracked().trim().to_owned());
         text.set(String::new());
-        chat.selection.set(None);
-        call(chat.log, move |b| async move {
-            b.send_message(&SendMessage {
-                text: message,
-                selection,
-            })
-            .await
-        });
     };
     let stop = move |_| call(chat.log, |b| async move { b.cancel_turn().await });
     view! {

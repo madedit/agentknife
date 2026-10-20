@@ -14,6 +14,7 @@ use crate::connect::ConnectWizard;
 use crate::home::HomeScreen;
 use crate::i18n::{self, t, t_with, tr};
 use crate::layout::{self, Layout, Mode};
+use crate::preview::Preview;
 use crate::shell::{Workspace, change};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38,6 +39,9 @@ pub fn App() -> impl IntoView {
     let chat = Chat::new(ChatLog::default());
     provide_context(chat);
     backend.listen(Arc::new(move |event| chat.log.update(|l| l.apply(event))));
+    let preview = Preview::new();
+    provide_context(preview);
+    backend.listen_preview(Arc::new(move |status| preview.status.set(status)));
     let home = RwSignal::new(HomeState::default());
     let screen = RwSignal::new(Screen::Loading);
     reload(&backend, home, screen, true);
@@ -80,6 +84,11 @@ pub fn AppView(
         provide_context(c);
         c
     });
+    let preview = use_context::<Preview>().unwrap_or_else(|| {
+        let p = Preview::new();
+        provide_context(p);
+        p
+    });
     // Where "Cancel" in the wizard goes back to.
     let before_connect = StoredValue::new(Screen::Home);
 
@@ -104,12 +113,22 @@ pub fn AppView(
         }
         screen.set(Screen::Connect { back: true });
     });
-    let open = Callback::new(move |o: OpenedProject| {
-        chat.log
-            .set(ChatLog::from_history(&o.history, o.interrupted));
-        chat.selection.set(None);
-        screen.set(Screen::Workspace(o.project));
-    });
+    let open = {
+        let backend = backend.clone();
+        Callback::new(move |o: OpenedProject| {
+            chat.log
+                .set(ChatLog::from_history(&o.history, o.interrupted));
+            chat.selection.set(None);
+            preview.picking.set(false);
+            let backend = backend.clone();
+            leptos::task::spawn_local(async move {
+                if let Ok(status) = backend.preview_status().await {
+                    preview.status.set(status);
+                }
+            });
+            screen.set(Screen::Workspace(o.project));
+        })
+    };
 
     view! {
         <div class="flex h-screen flex-col bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">

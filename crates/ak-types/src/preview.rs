@@ -214,9 +214,71 @@ pub struct Picked {
     pub canvas: Option<CanvasPoint>,
 }
 
+// ---- Point-and-select (same JSON as `ak_bridge::protocol`'s inspector) ----
+//
+// AgentKnife shows the preview in an iframe and talks to it with `postMessage`.
+// Every message is a JSON string `{"ak_inspector": …}`.
+
+/// The key that marks inspector messages.
+pub const INSPECTOR_KEY: &str = "ak_inspector";
+
+/// From AgentKnife to the preview page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "cmd", rename_all = "snake_case")]
+pub enum InspectorCommand {
+    /// Highlight on hover; clicks select instead of acting.
+    Enable,
+    Disable,
+}
+
+/// From the preview page to AgentKnife.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum InspectorEvent {
+    /// The inspector is listening (sent once, when the page starts).
+    Ready,
+    Hover {
+        target: Picked,
+    },
+    Select {
+        target: Picked,
+    },
+    /// The user pressed Escape in the page.
+    Cancel,
+}
+
+impl InspectorCommand {
+    /// The string to `postMessage` to the page.
+    pub fn message(self) -> String {
+        serde_json::json!({ INSPECTOR_KEY: self }).to_string()
+    }
+}
+
+impl InspectorEvent {
+    /// Reads a message from the page; `None` for anything else.
+    pub fn parse(message: &str) -> Option<InspectorEvent> {
+        let v: serde_json::Value = serde_json::from_str(message).ok()?;
+        serde_json::from_value(v.get(INSPECTOR_KEY)?.clone()).ok()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inspector_messages_round_trip() {
+        assert_eq!(
+            InspectorCommand::Enable.message(),
+            r#"{"ak_inspector":{"cmd":"enable"}}"#
+        );
+        assert_eq!(
+            InspectorEvent::parse(r#"{"ak_inspector":{"kind":"cancel"}}"#),
+            Some(InspectorEvent::Cancel)
+        );
+        assert_eq!(InspectorEvent::parse(r#"{"other":1}"#), None);
+        assert_eq!(InspectorEvent::parse("not json"), None);
+    }
 
     #[test]
     fn readiness_and_errors() {

@@ -7,8 +7,9 @@ use std::sync::{Arc, Mutex};
 use ak_types::agent::{AgentEvent, PlanDecision};
 use ak_types::ipc::{
     AGENT_EVENT, Answer, ConnectError, ConnectRequest, HomeState, InterruptionChoice, ModelCheck,
-    ModelChoice, NewProject, OpenedProject, SendMessage, StuckChoice, cmd,
+    ModelChoice, NewProject, OpenedProject, PREVIEW_EVENT, SendMessage, StuckChoice, cmd,
 };
+use ak_types::preview::PreviewStatus;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -30,6 +31,8 @@ impl From<ConnectError> for CallError {
 
 /// Receives the agent's events for the open project.
 pub type Listener = Arc<dyn Fn(AgentEvent) + Send + Sync>;
+/// Receives the open project's preview status whenever it changes.
+pub type PreviewListener = Arc<dyn Fn(PreviewStatus) + Send + Sync>;
 
 #[derive(Clone)]
 pub enum Backend {
@@ -74,6 +77,35 @@ impl Backend {
                 }
             }
         }
+    }
+
+    /// Sends every preview status change to `listener` from now on.
+    pub fn listen_preview(&self, listener: PreviewListener) {
+        match self {
+            #[cfg(target_arch = "wasm32")]
+            Backend::Tauri => tauri::listen(PREVIEW_EVENT, move |payload| {
+                if let Ok(status) = serde_json::from_value::<PreviewStatus>(payload) {
+                    listener(status);
+                }
+            }),
+            #[cfg(not(target_arch = "wasm32"))]
+            Backend::Tauri => {
+                let _ = (PREVIEW_EVENT, listener);
+            }
+            Backend::Demo(demo) => {
+                if let Ok(mut d) = demo.lock() {
+                    d.preview_listener = Some(listener);
+                }
+            }
+        }
+    }
+
+    pub async fn preview_status(&self) -> Result<PreviewStatus, CallError> {
+        self.call(cmd::PREVIEW_STATUS, None::<()>).await
+    }
+
+    pub async fn run_app(&self) -> Result<(), CallError> {
+        self.call(cmd::RUN_APP, None::<()>).await
     }
 
     pub async fn home_state(&self) -> Result<HomeState, CallError> {

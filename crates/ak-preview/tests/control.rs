@@ -78,7 +78,7 @@ fn protocol_copies_match_ak_bridge() {
         viewport: size,
         device_pixel_ratio: 2.0,
     });
-    let _: ours::Picked = same_json(&bridge::Picked {
+    let picked = bridge::Picked {
         ak_id: Some("p".into()),
         exact: false,
         path: "main > p".into(),
@@ -91,7 +91,35 @@ fn protocol_copies_match_ak_bridge() {
             y: 2.0,
             hit: Some(json!({ "shape": "a" })),
         }),
-    });
+    };
+    let _: ours::Picked = same_json(&picked);
+    // Point-and-select messages, both ways.
+    assert_eq!(ours::INSPECTOR_KEY, bridge::INSPECTOR_KEY);
+    for (b, o) in [
+        (
+            bridge::InspectorCommand::Enable,
+            ours::InspectorCommand::Enable,
+        ),
+        (
+            bridge::InspectorCommand::Disable,
+            ours::InspectorCommand::Disable,
+        ),
+    ] {
+        assert_eq!(
+            serde_json::to_value(&b).unwrap(),
+            serde_json::to_value(o).unwrap()
+        );
+    }
+    for event in [
+        bridge::InspectorEvent::Ready,
+        bridge::InspectorEvent::Hover {
+            target: picked.clone(),
+        },
+        bridge::InspectorEvent::Select { target: picked },
+        bridge::InspectorEvent::Cancel,
+    ] {
+        let _: ours::InspectorEvent = same_json(&event);
+    }
     let mut storage = serde_json::Map::new();
     storage.insert("k".into(), json!([1]));
     let _: ours::AppState = same_json(&bridge::AppState {
