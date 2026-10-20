@@ -8,7 +8,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use ak_types::preview::{PreviewStatus, ServerState};
 use ak_types::stack::{PreviewPlan, ReadySignal};
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
@@ -16,6 +15,9 @@ use crate::log::{BuildTracker, Tail};
 use crate::process::{
     Tools, encode_query_value, free_port, kill_tree, kill_tree_now, random_token,
 };
+
+/// After a process exits, how long to wait for the rest of its output.
+const DRAIN: std::time::Duration = std::time::Duration::from_millis(500);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Side {
@@ -179,18 +181,18 @@ impl Preview {
         };
         let values = self.values();
         let refs: Vec<(&str, &str)> = values.iter().map(|(k, v)| (*k, v.as_str())).collect();
-        let mut child = self.tools.command(spec, &self.root, &refs).spawn()?;
+        // stdout and stderr share one pipe, so lines arrive in the order they were
+        // written (compiler errors on stderr, build markers on stdout).
+        let (reader, writer) = std::io::pipe()?;
+        let mut cmd = self.tools.command(spec, &self.root, &refs);
+        cmd.stdout(writer.try_clone()?).stderr(writer);
+        let child = cmd.spawn()?;
+        // Our copies of the write end must close, or the reader never ends.
+        drop(cmd);
         let pid = child.id();
         set(&self.status, side, ServerState::Starting, None);
-
-        // stdout and stderr, line by line, into one stream.
         let (tx, rx) = mpsc::unbounded_channel::<String>();
-        if let Some(out) = child.stdout.take() {
-            pipe(out, tx.clone());
-        }
-        if let Some(err) = child.stderr.take() {
-            pipe(err, tx);
-        }
+        read_lines(reader, tx);
         let stopping = Arc::new(AtomicBool::new(false));
         let watcher = Watcher {
             side,
@@ -223,15 +225,22 @@ impl Drop for Preview {
     }
 }
 
-fn pipe<R>(reader: R, tx: mpsc::UnboundedSender<String>)
-where
-    R: tokio::io::AsyncRead + Unpin + Send + 'static,
-{
-    tokio::spawn(async move {
-        let mut lines = BufReader::new(reader).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            if tx.send(line).is_err() {
-                break;
+/// Sends the process's output, line by line (a blocking read on its own thread).
+fn read_lines(reader: std::io::PipeReader, tx: mpsc::UnboundedSender<String>) {
+    std::thread::spawn(move || {
+        let mut reader = std::io::BufReader::new(reader);
+        let mut buf = Vec::new();
+        loop {
+            buf.clear();
+            match std::io::BufRead::read_until(&mut reader, b'\n', &mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {
+                    let line = String::from_utf8_lossy(&buf);
+                    let line = line.trim_end_matches(['\n', '\r']).to_owned();
+                    if tx.send(line).is_err() {
+                        break;
+                    }
+                }
             }
         }
     });
@@ -304,8 +313,11 @@ impl Watcher {
                     }
                 }
                 status = child.wait() => {
-                    // Read what is left of the output first.
-                    while let Ok(line) = rx.try_recv() {
+                    // Read what is left of the output first (the reader may lag
+                    // behind the exit).
+                    while let Ok(Some(line)) =
+                        tokio::time::timeout(DRAIN, rx.recv()).await
+                    {
                         tail.push(&line);
                     }
                     self.exited(status.ok().and_then(|s| s.code()), &tail, ready);

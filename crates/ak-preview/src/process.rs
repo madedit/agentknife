@@ -53,7 +53,7 @@ impl Tools {
     }
 
     /// A ready-to-spawn command for `spec` in `root`, with `values` filled into
-    /// its `{placeholders}`.
+    /// its `{placeholders}`. The caller sets stdout/stderr.
     pub fn command(
         &self,
         spec: &CommandSpec,
@@ -64,8 +64,6 @@ impl Tools {
         cmd.args(spec.args.iter().map(|a| fill(a, values)))
             .current_dir(root.join(spec.cwd))
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
             .kill_on_drop(true);
         for k in INHERITED
             .iter()

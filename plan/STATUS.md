@@ -274,7 +274,7 @@
     - The to-do example ran in the preview on the real runtime: add/check/delete/filter via the control channel; it survived a reload (todos.json in app data, then deleted).
     - Live agent (local model) calls read_knowledge on its own with relevant topics. Found and fixed: the policy asked for confirmation on every read_knowledge; the docs used use_toaster() inside async blocks.
   - Fixed in ak-bridge (control channel): dom_summary dropped text in non-reported children (a row's label in a <span>); containers now include text outside reported children.
-- P1-PREV-001 — (hash in next commit) — dev-server manager:
+- P1-PREV-001 — 6aa71c4 + output-order fix (hash in next commit) — dev-server manager:
   - ak_types::preview: PreviewStatus {frontend, backend: ServerState Off/Starting/Building/Ready/Error{output}, url}, plus ready() and error().
   - ak_types::stack changes: PreviewPlan.frontend_log (LogMarkers) replaces frontend_ready, and ReadySignal is StdoutPrefix only. The tauri-leptos markers come from real trunk 0.21.14 output: "INFO starting build" / "INFO success" / "ERROR error".
   - ak_preview::Preview:
@@ -290,3 +290,7 @@
     - Both sides ready in 87 s (cold build). A broken screen became an error with error[E0308] in 0.86 s; fixed, ready in 3 s. A backend change restarted the backend, ready in 3 s.
     - Stop: no processes left.
   - Note: each preview run of a project leaves the app's WebView2 data in %LOCALAPPDATA%\<identifier> (the generated app's own data).
+  - Follow-up fix: 6aa71c4 was committed while `cargo xtask ci` was failing (a flaky test; the commit was chained after ci without checking its result).
+    - Cause: stdout and stderr were read from separate pipes, so a compiler error on stderr could arrive before the build-start line on stdout and be dropped, or arrive after the failure line. An agent could have read an error without the compiler message.
+    - Fix: both streams share one OS pipe (std::io::pipe), so lines keep the order the process wrote them; after an exit the output is drained for up to 500 ms.
+    - The test passed 15/15 runs, and preview_live passed again.
