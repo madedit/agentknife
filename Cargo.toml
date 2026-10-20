@@ -11,6 +11,7 @@ publish = false
 [workspace.dependencies]
 # Internal crates
 ak-types = { path = "crates/ak-types" }
+ak-providers = { path = "crates/ak-providers" }
 
 # Pinned stack — must match versions.toml exactly (checked by `cargo xtask ci`).
 tauri = "=2.12.4"
@@ -22,6 +23,7 @@ wasm-bindgen = "=0.2.129"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 tokio = "1.54.0"
+tokio-util = "0.7.20"
 futures-util = "0.3.34"
 reqwest = { version = "0.13.5", features = ["stream"] }
 thiserror = "2.0.21"

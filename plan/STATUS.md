@@ -15,4 +15,14 @@
 - P1-PROV-001 — aaf8e6e — Provider trait + StreamEvent contract, neutral chat types (ak_types::chat), SSE decoder, MessageAssembler, fixture replay harness
 - P1-PROV-002 — 7e90826 — Anthropic provider (adaptive thinking + effort, verbatim replay, drop_block safety net, refusal + server fallbacks, eager tool streaming, prompt caching, models API caps), ReqwestTransport, RecordingTransport + record_anthropic example, synthetic fixtures; PROV-001 contract revised (effort, ProviderReplay, Fallback, Refusal, invalid tool args)
 - P1-PROV-003 — 44d4e46 — OpenAI-compatible Chat Completions provider with flavors (OpenAI, Ollama, LM Studio, OpenRouter, generic): per-flavor fields, reasoning from reasoning/reasoning_content/reasoning_details/<think> tags, whole or fragmented tool calls, verbatim replay (Ollama reasoning, OpenRouter reasoning_details), tool-result images moved to a user message, capability probes (Ollama /api/show, LM Studio /api/v1/models, OpenRouter /models) that flag models without tools; synthetic fixtures + record_openai_compat example. OpenAI agent support: P1-PROV-005 (owner decision 2026-10-20).
-- P1-PROV-VERIFY — (hash in next commit) — live check against the owner's local server (127.0.0.1:8080, qwen3.8-flash-next-gptq-nvfp4) through both adapters. Real recordings committed under tests/fixtures/*/recorded/. Fixed: the recorder lost exchanges whose body was not fully drained (it now writes on drop); the Anthropic adapter now falls back to defaults when a compatible server lacks GET /v1/models/{id}; generic servers read context/vision from /models (meta.n_ctx, input_modalities).
+- P1-PROV-VERIFY — 362071a — live check against the owner's local server (127.0.0.1:8080, qwen3.8-flash-next-gptq-nvfp4) through both adapters. Real recordings committed under tests/fixtures/*/recorded/. Fixed: the recorder lost exchanges whose body was not fully drained (it now writes on drop); the Anthropic adapter now falls back to defaults when a compatible server lacks GET /v1/models/{id}; generic servers read context/vision from /models (meta.n_ctx, input_modalities).
+- P1-AGENT-001 — (hash in next commit) — ak-agent turn loop:
+  - model → tools → model; AI-written step labels via an injected `label` argument.
+  - PermissionGate + Confirmer hooks.
+  - Cancellation: the stream is dropped, and remaining tool calls get "cancelled" results so history stays well-formed.
+  - Outcomes: refusal discards partial output; also step limit, max tokens, failure.
+  - turn.lock lifecycle + Checkpointer hook (no-op until PROJ-003).
+  - ScriptedProvider fake LLM.
+  - ak-types: append-only `Conversation` (schema_version 1, checkpoint entries, migration guard), `AgentEvent`, `TurnOutcome`.
+  - Cross-provider test (Anthropic history → Ollama).
+  - Live run OK through both protocols on the owner's local server (`agent_live` example).

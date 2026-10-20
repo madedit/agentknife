@@ -20,6 +20,16 @@ dependencies = [
 [[package]]
 name = "ak-agent"
 version = "0.1.0"
+dependencies = [
+ "ak-providers",
+ "ak-types",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
 
 [[package]]
 name = "ak-app"

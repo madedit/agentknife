@@ -2,5 +2,6 @@
 
 #![forbid(unsafe_code)]
 
+pub mod agent;
 pub mod chat;
 pub mod i18n;

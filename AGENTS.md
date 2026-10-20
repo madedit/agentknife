@@ -108,7 +108,8 @@ plan/            STATUS.md and execution-plan.md (format in §8).
 - **Permissions:** reads, writes, builds, and runs inside the project folder are automatic. Downloads or installs, access outside the project, and deletions need a plain-language confirmation.
 - **Plan-before-big-change:** small edits are applied directly. Large features first get a 3–5 bullet plan with a time and cost estimate, and wait for the user to click "Start". This is configurable.
 - **Auto-fix:** on a build or run error, the agent retries up to 3 times (configurable). After that it stops and offers: try another approach, roll back to a checkpoint, or show technical details.
-- **Progress display:** every step shows a plain-language label. Labels for deterministic steps (doctor, bundle, checkpoint) come from fluent, and labels for agent tool calls are AI-generated (see §5). Raw commands and output go under "Details". Thinking is collapsed by default.
+- **Progress display:** every step shows a plain-language label. Labels for deterministic steps (doctor, bundle, checkpoint) come from fluent, and labels for agent tool calls are AI-generated (see §5).
+  - The agent loop adds a required `label` argument to every tool schema and strips it before the tool runs. Tools must never define their own `label` argument. Raw commands and output go under "Details". Thinking is collapsed by default.
 - **Usage:** show token and cost estimates for cloud providers, with an optional daily cap and a warning before it is reached.
 - **Doctor:** detection and installation are deterministic Rust code, and the AI only narrates. Install Rust, targets, Trunk, wasm-bindgen, tauri-cli, and Tailwind CLI in AgentKnife's own directory (custom `RUSTUP_HOME`/`CARGO_HOME`). For system-level dependencies (MSVC Build Tools, WebView2, Xcode CLT, Linux webkit packages), guide the user step by step. Installs must be idempotent and resumable.
 - **Preview:**
@@ -198,6 +199,7 @@ Prerequisites for developing AgentKnife:
 
 | Record real Anthropic fixtures (costs cents) | `ANTHROPIC_API_KEY=… cargo run -p ak-providers --example record_anthropic` |
 | Record real Chat Completions fixtures (free with local Ollama) | `AK_MODEL=qwen3:8b cargo run -p ak-providers --example record_openai_compat` |
+| Run one live agent turn (manual check) | `AK_BASE_URL=http://127.0.0.1:8080/v1 AK_MODEL=… cargo run -p ak-agent --example agent_live` |
 | Regenerate `rust-toolchain.toml` | `cargo xtask gen-toolchain` (never edit it by hand) |
 
 **Windows gotcha:** run cargo from PowerShell or cmd, not Git Bash. Git Bash's `/usr/bin/link` shadows MSVC `link.exe`, and every build fails with `link: extra operand`.
