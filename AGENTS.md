@@ -131,7 +131,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Message kinds: user, assistant text, thinking, tool call, tool result, checkpoint marker.
   - The format carries `schema_version`, with migrations for older versions.
   - Provider adapters convert to and from the neutral schema.
-  - Thinking is display-only and never sent back to a model, because providers reject each other's thinking and signatures.
+  - Thinking blocks carry `origin` (provider id) and an opaque `signature`. Adapters replay thinking **only to its origin provider**, because Anthropic extended thinking with tool use *requires* the signed blocks back. Every other provider drops it, since providers reject each other's thinking. To the user it is display-only.
   - Switching providers mid-project must keep working.
 - **Interrupted turns:** at turn start, the agent writes `.agentknife/turn.lock`, holding the request, the files touched so far, and the current step. The lock is deleted only after the turn's checkpoint is created.
   - On project open, a leftover lock or un-checkpointed changes trigger a plain-language prompt: "Last time I stopped halfway (doing: …). **Continue**, or **go back to the last checkpoint**?"

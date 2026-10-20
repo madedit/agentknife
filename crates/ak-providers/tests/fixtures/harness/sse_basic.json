@@ -1,0 +1,16 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/v1/chat",
+    "body": { "model": "m", "stream": true }
+  },
+  "response": {
+    "status": 200,
+    "headers": [["content-type", "text/event-stream"]],
+    "chunks": [
+      ": keep-alive\n\nevent: start\ndata: {\"id\":\"msg_1\"}\n\n",
+      "event: delta\ndata: {\"text\":\"你",
+      "好\"}\n\nevent: stop\ndata: {}\n\n"
+    ]
+  }
+}

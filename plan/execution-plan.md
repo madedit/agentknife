@@ -126,7 +126,8 @@ APP and E2E integrate all tracks.
   - Calls can be cancelled.
   - A scripted fake-LLM provider exists and is used by the tests.
   - The provider-neutral chat schema lives in `ak-types`, with `schema_version`.
-  - Provider adapters convert to and from it, and thinking is never sent back to a model.
+  - Provider adapters convert to and from it. Thinking is replayed only to its `origin` provider and dropped for others.
+  - The message types already exist in `ak_types::chat` (from P1-PROV-001). This task adds the persisted history wrapper (`schema_version`, checkpoint markers).
   - Test: a history recorded with the Anthropic adapter continues correctly with the OpenAI-compatible adapter.
   - At turn start the loop writes `.agentknife/turn.lock` (request, touched files, current step), and removes it after the turn's checkpoint.
 
