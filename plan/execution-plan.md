@@ -71,7 +71,7 @@ APP and E2E integrate all tracks.
   - CI verifies the hashes and fails if a single byte changes.
 
 ### P1-I18N-001 — Fluent infrastructure
-- Crate(s): new shared module (in a DTO/common crate chosen in P1-CORE-001), ak-shell
+- Crate(s): ak-types, ak-shell
 - Owner: unassigned
 - Depends on: P1-CORE-001
 - Acceptance:
@@ -304,7 +304,7 @@ APP and E2E integrate all tracks.
   - Versions match `versions.toml` (checked by xtask).
 
 ### P1-TPL-002 — StackProfile trait
-- Crate(s): ak-preview or a shared crate (decided in P1-CORE-001)
+- Crate(s): ak-types (trait), ak-preview (tauri-leptos impl)
 - Owner: unassigned
 - Depends on: P1-TPL-001
 - Acceptance:
