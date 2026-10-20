@@ -1,0 +1,4 @@
+# Not part of checkpoints: the chat is append-only and must never be rewound.
+chat/
+turn.lock
+*.tmp

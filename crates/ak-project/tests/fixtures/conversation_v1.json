@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "entry": "message",
+      "kind": "user",
+      "content": [{ "type": "text", "text": "做一個待辦清單" }]
+    },
+    {
+      "entry": "message",
+      "kind": "assistant",
+      "thinking": [{ "text": "Plan the list page.", "origin": "anthropic" }],
+      "text": "好的，我先建立畫面。",
+      "tool_calls": [
+        { "id": "c1", "name": "write_file", "arguments": { "path": "src/app.rs", "content": "fn main() {}" } },
+        { "id": "c2", "name": "write_file", "arguments": null, "invalid_arguments": "{\"path\": \"src/cut" }
+      ],
+      "replay": {
+        "origin": "anthropic",
+        "content": [
+          { "type": "thinking", "thinking": "Plan the list page.", "signature": "sig-1" },
+          { "type": "text", "text": "好的，我先建立畫面。" }
+        ]
+      }
+    },
+    {
+      "entry": "message",
+      "kind": "tool_result",
+      "call_id": "c1",
+      "content": [{ "type": "text", "text": "Wrote src/app.rs (1 lines)." }],
+      "is_error": false
+    },
+    {
+      "entry": "message",
+      "kind": "tool_result",
+      "call_id": "c2",
+      "content": [{ "type": "image", "media_type": "image/png", "data_base64": "iVBORw0KGgo=" }],
+      "is_error": true
+    },
+    { "entry": "checkpoint", "id": "cp-1", "label": "建立待辦清單畫面" }
+  ]
+}

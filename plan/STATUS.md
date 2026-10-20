@@ -33,10 +33,21 @@
   - run_command runs in the project dir with a toolchain PATH prefix and env; it has a timeout, kills the whole process tree on timeout/cancel, and passes quotes verbatim on Windows (raw_arg).
   - Fixed in the AGENT-001 loop: cancel vs tool-finish race (biased select + post-check).
   - Live: "make the Add button blue" on a scratch Leptos file succeeded through both protocols (list → read → edit), with Chinese step labels written by the model.
-- P1-AGENT-003 — (hash in next commit) — ak_agent::policy::ProjectPolicy, now the default gate:
+- P1-AGENT-003 — 3444b14 — ak_agent::policy::ProjectPolicy, now the default gate:
   - File tools: allowed inside the project; path escapes and writes into .git are refused.
   - run_command: parsed into quote-aware segments, the strictest segment wins. Downloads/installs, deletions, out-of-project paths, sudo and encoded PowerShell ask. format/diskpart/mkfs/shutdown/`rm -rf /`/reg delete are refused. `cargo build` stays automatic.
   - PermissionMode::AskEveryChange.
   - Structured ConfirmReason {kind, detail} in ak-types, localized via 9 new fluent messages (en + zh-TW).
   - 50-case decision table (mutation-checked) and a default-policy end-to-end test.
   - Live: the model's own `del notes\old.txt` was caught, the zh-TW reason shown, and the file deleted after approval.
+- P1-PROJ-001 + P1-PROJ-002 — (hash in next commit) — ak-project:
+  - Registry (`<data_dir>/AgentKnife/projects.json`):
+    - create under `~/AgentKnife/Projects` or a chosen folder; safe, unique folder names (CJK kept, Windows-reserved names avoided).
+    - open (adopts plain folders), rename (display name), forget (keeps files).
+    - recent first, with ties broken by real open order; missing folders flagged.
+  - Project:
+    - `.agentknife/` skeleton from `templates/agentknife` (localized PROJECT.md; STATUS/tasks; .gitignore excluding chat/ and turn.lock); idempotent and never overwrites.
+    - Per-project `AiOverride` merged over the global `AiConnection` (ak-types::settings).
+    - Atomic chat history save/load. Damaged files are moved aside; files from a newer version are refused and left untouched.
+    - Frozen v1 golden fixture test.
+  - `new_id` / `unix_now` moved to ak-types::ids (native only).

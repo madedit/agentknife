@@ -84,7 +84,9 @@ crates/
   ak-ui/         Component kit used by generated apps (Leptos + Tailwind).
   ak-bridge/     Crate embedded in generated apps: WebSocket invoke, inspector, control channel.
 templates/
-  tauri-leptos/  MVP stack-profile template (includes .agentknife/plan/ templates).
+  agentknife/    Stack-independent .agentknife/ skeleton (PROJECT.<locale>.md, STATUS.md, tasks.md,
+                 gitignore). Embedded by ak-project with include_str.
+  tauri-leptos/  MVP stack-profile template.
 knowledge/       Version-pinned docs/examples the agent reads on demand (Leptos, Tauri 2, ak-ui).
 xtask/           `cargo xtask ci`, `vendor-codemirror`, and other dev tasks.
 versions.toml    Single source of truth for pinned versions.

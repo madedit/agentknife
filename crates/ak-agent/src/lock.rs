@@ -3,7 +3,6 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -31,10 +30,7 @@ impl TurnLock {
             path: project_dir.join(LOCK_FILE),
             data: TurnLockData {
                 turn_id: turn_id.to_owned(),
-                started_at_unix: SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or_default(),
+                started_at_unix: ak_types::ids::unix_now(),
                 request: request.to_owned(),
                 touched_files: Vec::new(),
                 step: 0,

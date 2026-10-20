@@ -324,7 +324,7 @@ APP and E2E integrate all tracks.
 - Depends on: P1-BRIDGE-001, P1-BRIDGE-002, P1-UI-001
 - Acceptance:
   - A fresh copy builds with the doctor-installed toolchain: `trunk serve` works and `cargo tauri build` works.
-  - Includes ak-bridge (dev only), ak-ui, the Tailwind standalone config, the `.agentknife/` templates, and one sample screen.
+  - Includes ak-bridge (dev only), ak-ui, the Tailwind standalone config, and one sample screen. The `.agentknife/` skeleton comes from `templates/agentknife/` via ak-project (P1-PROJ-002).
   - Versions match `versions.toml` (checked by xtask).
 
 ### P1-TPL-002 — StackProfile trait
