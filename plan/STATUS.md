@@ -454,9 +454,12 @@
   - Live (cargo xtask dev, test-project):
     - The Log tab lists the screens' and the background part's output.
     - With a build error only the real window sees (cfg(not(feature = "dev"))), "Run in a real window" shows the red notice after 5.6 s, with the compiler error under Details, and nothing is left behind.
-- P1-SHELL-002 (follow-up) — (hash in next commit) — a "Delete" button on every home-screen project (user request; the user chose to offer both ways).
+- P1-SHELL-002 (follow-up) — 73479e3 — a "Delete" button on every home-screen project (user request; the user chose to offer both ways).
   - The button opens an in-row confirmation with "Remove from list only" (Registry::forget, folder kept) and "Move the folder to the trash too" (trash crate 5.2.9, then forget). The trash option is offered only when the folder exists. The OS name of the trash comes from a fluent `$os` select (macOS: 垃圾桶 / Trash).
   - cmd::DELETE_PROJECT `DeleteProject {id, folder}` → HomeState. If that project is open (the preview keeps running after going home), it is closed first. Trashing retries briefly while Windows still holds the stopped processes' files.
   - Tests: ak-app tests/home.rs (mock runtime: forget keeps the folder, the saved list agrees, an unknown id fails; the trash itself is not run in tests, it would fill the real Recycle Bin); render.rs (a Delete button per row, no dialog before a click).
   - Live (cargo xtask dev): created 刪除測試A and 刪除測試B (B left open in the background). A → "Remove from list only": off the list, folder kept. B → "Move the folder to the Recycle Bin too": off the list after 1.6 s, the open project was closed first, and the folder is in the Recycle Bin. The leftover A folder was then sent to the Recycle Bin by hand.
-
+- P1-APP-001 (follow-up) — (hash in next commit) — a build log window over the preview while something builds, so the user sees it moving and can tell roughly when it is done (user request).
+  - logs::BuildLog: a dark panel on top of the preview stage (bottom, up to half its height) with the newest 200 lines of the building sources, following the bottom. It appears when the preview builds (first build or a rebuild: screens and backend lines) or while "Run in a real window" builds (window lines), and goes away when that ends. A failed build leaves the error cover, which already has Details.
+  - Header: what is building, "Make small" / "Show more" (small shows only the newest line), and "Full log" to the Log tab in full mode. A new build opens it big again.
+  - Tests: last_lines (sources, newest N); tests/preview.rs (shown with the build's lines and not the AI's while building; gone when ready).

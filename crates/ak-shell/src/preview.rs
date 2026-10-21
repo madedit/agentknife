@@ -2,6 +2,7 @@
 //! phone), point-and-select, and plain-language states while it builds or when
 //! it fails.
 
+use ak_types::log::LogSource;
 use ak_types::preview::{PreviewStatus, ServerState};
 use leptos::prelude::*;
 
@@ -9,7 +10,8 @@ use crate::backend::{Backend, CallError};
 use crate::chat::{Chat, send_message};
 use crate::demo::{DEMO_PAGE, DEMO_URL};
 use crate::i18n::t;
-use crate::layout::{Device, Layout, fit_scale};
+use crate::layout::{CenterTab, Device, Layout, Mode, fit_scale};
+use crate::logs::BuildLog;
 use crate::shell::change;
 
 /// The demo page's URL (tests show the pane with it).
@@ -138,6 +140,39 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
     };
     let devices = Device::ALL.map(device_button);
 
+    // The build log window: while the preview builds and while the real window
+    // is being built.
+    let building = Memo::new(move |_| {
+        matches!(
+            preview.status.with(cover),
+            Cover::FirstBuild | Cover::Rebuilding
+        )
+    });
+    let build_sources = Signal::derive(move || {
+        let mut sources = Vec::new();
+        if building.get() {
+            sources.extend([LogSource::Screens, LogSource::Backend]);
+        }
+        if opening.get() {
+            sources.push(LogSource::Window);
+        }
+        sources
+    });
+    let build_title = Signal::derive(move || {
+        if opening.get() {
+            t("build-log-window")()
+        } else if preview.status.with(|s| s.url.is_none()) {
+            t("preview-first-build")()
+        } else {
+            t("preview-rebuilding")()
+        }
+    });
+    let open_log = Signal::derive(move || {
+        layout
+            .with(|l| l.mode == Mode::Full)
+            .then(|| Callback::new(move |()| change(layout, |l| l.tab = CenterTab::Log)))
+    });
+
     // The frame: the whole stage on a computer, else the device's size scaled to fit.
     let frame_style = move || match device().size() {
         None => "position:absolute;inset:0;width:100%;height:100%".to_owned(),
@@ -260,6 +295,7 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
                     {highlight}
                 </div>
                 <CoverView chat />
+                <BuildLog sources=build_sources title=build_title open_log />
             </div>
         </div>
     }

@@ -208,9 +208,155 @@ pub fn LogPane() -> impl IntoView {
     }
 }
 
+/// Lines the build log window shows (the Log tab has them all).
+const BUILD_LINES: usize = 200;
+
+/// The newest `max` lines from `sources`.
+pub fn last_lines(lines: &[LogLine], sources: &[LogSource], max: usize) -> Vec<LogLine> {
+    let mut out: Vec<LogLine> = lines
+        .iter()
+        .rev()
+        .filter(|l| sources.contains(&l.source))
+        .take(max)
+        .cloned()
+        .collect();
+    out.reverse();
+    out
+}
+
+/// The window over the preview while something builds: what the build prints,
+/// as it prints it, so the user sees it moving and roughly where it is. It
+/// comes and goes with the build; it can be made small.
+#[component]
+pub fn BuildLog(
+    /// The sources to show; empty: nothing builds and the window is gone.
+    sources: Signal<Vec<LogSource>>,
+    /// What is building, in words.
+    title: Signal<String>,
+    /// Opens the Log tab; `None` while there is no such tab (simple mode).
+    open_log: Signal<Option<Callback<()>>>,
+) -> impl IntoView {
+    let log = expect_context::<ProjectLog>();
+    let small = RwSignal::new(false);
+    let follow = RwSignal::new(true);
+    let list = NodeRef::<leptos::html::Div>::new();
+    let shown = Memo::new(move |_| {
+        let sources = sources.get();
+        log.lines.with(|l| last_lines(l, &sources, BUILD_LINES))
+    });
+    // A new build opens it big again.
+    #[cfg(target_arch = "wasm32")]
+    Effect::new(move |was: Option<bool>| {
+        let on = sources.with(|s| !s.is_empty());
+        if on && was == Some(false) {
+            small.set(false);
+            follow.set(true);
+        }
+        on
+    });
+    #[cfg(target_arch = "wasm32")]
+    Effect::new(move |_| {
+        shown.track();
+        small.track();
+        if follow.get_untracked()
+            && let Some(el) = list.get_untracked()
+        {
+            let el = el.clone();
+            leptos::task::spawn_local(async move {
+                crate::backend::sleep(0).await;
+                el.set_scroll_top(el.scroll_height());
+            });
+        }
+    });
+    let on_scroll = move |_| {
+        if let Some(el) = list.get_untracked() {
+            follow.set(el.scroll_top() + el.client_height() >= el.scroll_height() - 24);
+        }
+    };
+    let row = move |l: LogLine| {
+        let class = if l.is_error() {
+            "whitespace-pre-wrap break-all text-red-300"
+        } else {
+            "whitespace-pre-wrap break-all"
+        };
+        view! { <div data-log-line=l.seq data-source=l.source.key() class=class>{l.text}</div> }
+    };
+    let latest = move || shown.with(|l| l.last().map(|l| l.text.clone()).unwrap_or_default());
+    let button = "rounded px-2 py-0.5 text-xs text-gray-300 hover:bg-white/10";
+
+    view! {
+        <Show when=move || sources.with(|s| !s.is_empty())>
+            <section
+                data-window="build-log"
+                role="log"
+                aria-label=move || title.get()
+                class="absolute right-3 bottom-3 left-3 z-30 flex max-h-[50%] flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900/95 text-gray-100 shadow-2xl"
+            >
+                <header class="flex shrink-0 items-center gap-2 border-b border-gray-700 px-3 py-1.5">
+                    <span class="h-2 w-2 shrink-0 animate-pulse rounded-full bg-blue-400"></span>
+                    <span class="shrink-0 text-sm font-medium">{move || title.get()}</span>
+                    <span data-build-latest="" class="min-w-0 flex-1 truncate font-mono text-xs text-gray-400">
+                        {move || small.get().then(latest)}
+                    </span>
+                    {move || open_log.get().map(|open| view! {
+                        <button type="button" data-action="open-log" class=button on:click=move |_| open.run(())>
+                            {t("build-log-all")}
+                        </button>
+                    })}
+                    <button
+                        type="button"
+                        data-action="toggle-build-log"
+                        aria-expanded=move || (!small.get()).to_string()
+                        class=button
+                        on:click=move |_| small.update(|s| *s = !*s)
+                    >
+                        {move || if small.get() { t("build-log-expand")() } else { t("build-log-shrink")() }}
+                    </button>
+                </header>
+                <Show when=move || !small.get()>
+                    <div
+                        node_ref=list
+                        data-log="build"
+                        class="min-h-24 flex-1 overflow-auto px-3 py-2 font-mono text-xs leading-5"
+                        on:scroll=on_scroll
+                    >
+                        <Show
+                            when=move || shown.with(|l| !l.is_empty())
+                            fallback=|| view! { <p class="text-gray-400">{t("build-log-waiting")}</p> }
+                        >
+                            <For each=move || shown.get() key=|l| l.seq children=row />
+                        </Show>
+                    </div>
+                </Show>
+            </section>
+        </Show>
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_build_window_keeps_the_newest_lines_of_its_sources() {
+        let lines: Vec<LogLine> = (1..=6)
+            .map(|n| {
+                let source = if n % 2 == 0 {
+                    LogSource::Ai
+                } else {
+                    LogSource::Screens
+                };
+                line(n, source, "x")
+            })
+            .collect();
+        let seqs = |v: Vec<LogLine>| v.iter().map(|l| l.seq).collect::<Vec<_>>();
+        assert_eq!(seqs(last_lines(&lines, &[LogSource::Screens], 2)), [3, 5]);
+        assert_eq!(
+            seqs(last_lines(&lines, &[LogSource::Screens, LogSource::Ai], 10)),
+            [1, 2, 3, 4, 5, 6]
+        );
+        assert!(last_lines(&lines, &[LogSource::Window], 10).is_empty());
+    }
 
     fn line(seq: u64, source: LogSource, text: &str) -> LogLine {
         LogLine {

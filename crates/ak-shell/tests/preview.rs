@@ -11,8 +11,10 @@ use ak_shell::chat::Chat;
 use ak_shell::chat::log::ChatLog;
 use ak_shell::i18n;
 use ak_shell::layout::{Device, Layout};
+use ak_shell::logs::ProjectLog;
 use ak_shell::preview::{Preview, PreviewPane};
 use ak_types::i18n::Locale;
+use ak_types::log::{LogLine, LogSource};
 use ak_types::preview::{Picked, PreviewStatus, Rect, ServerState, Size};
 use leptos::prelude::*;
 
@@ -29,6 +31,23 @@ fn render(locale: Locale, status: PreviewStatus, device: Device, picked: Option<
         let preview = Preview::new();
         preview.status.set(status);
         provide_context(preview);
+        let log = ProjectLog::new();
+        log.append(
+            [
+                (LogSource::Screens, "Compiling serde v1.0.0"),
+                (LogSource::Ai, "> Writing main.rs"),
+            ]
+            .into_iter()
+            .zip(1..)
+            .map(|((source, text), seq)| LogLine {
+                seq,
+                at_ms: 0,
+                source,
+                text: text.into(),
+            })
+            .collect(),
+        );
+        provide_context(log);
         let layout = RwSignal::new(Layout {
             device,
             ..Layout::default()
@@ -178,4 +197,32 @@ fn the_picked_element_is_outlined() {
         html.contains("left:10px;top:20px;width:80px;height:30px"),
         "{html}"
     );
+}
+
+#[test]
+fn a_build_shows_its_log_in_a_window_over_the_preview() {
+    let first = render(
+        Locale::ZhTw,
+        status(ServerState::Building, None),
+        Device::Computer,
+        None,
+    );
+    assert!(first.contains(r#"data-window="build-log""#), "{first}");
+    assert!(first.contains("Compiling serde"), "the build's lines");
+    assert!(!first.contains("Writing main.rs"), "not the AI's steps");
+    assert!(first.contains(r#"data-action="toggle-build-log""#) && first.contains("縮小"));
+    let rebuild = render(
+        Locale::En,
+        status(ServerState::Building, Some(URL)),
+        Device::Computer,
+        None,
+    );
+    assert!(rebuild.contains(r#"data-window="build-log""#) && rebuild.contains("Updating"));
+    let ready = render(
+        Locale::En,
+        status(ServerState::Ready, Some(URL)),
+        Device::Computer,
+        None,
+    );
+    assert!(!ready.contains("build-log"), "{ready}");
 }
