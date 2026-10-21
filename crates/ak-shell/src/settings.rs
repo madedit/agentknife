@@ -1,5 +1,6 @@
-//! The settings page: language, AI, permissions, plans, automatic fixes,
-//! version history, daily limit, privacy and crash reports.
+//! The settings page: language, AI, permissions, folders the AI may read,
+//! plans, automatic fixes, version history, daily limit, privacy and crash
+//! reports.
 
 use ak_types::i18n::Locale;
 use ak_types::ipc::CrashReports;
@@ -186,6 +187,57 @@ pub fn SettingsScreen(
                         value=Signal::derive(move || s.with(|s| s.permissions))
                         set=Callback::new(move |v| change(Box::new(move |s| s.permissions = v)))
                     />
+                </Section>
+
+                <Section title="settings-read" about="settings-read-about">
+                    {move || {
+                        let folders = s.with(|s| s.read_folders.clone());
+                        if folders.is_empty() {
+                            return view! { <p data-read-none="" class="text-sm text-gray-500">{t("settings-read-none")}</p> }.into_any();
+                        }
+                        view! {
+                            <ul class="text-sm">
+                                {folders.into_iter().map(|f| {
+                                    let (gone, attr, title) = (f.clone(), f.clone(), f.clone());
+                                    view! {
+                                        <li data-read-folder=attr class="flex items-center justify-between gap-2 py-1">
+                                            <span class="min-w-0 truncate font-mono text-xs" title=title>{f}</span>
+                                            <button
+                                                type="button"
+                                                data-action="remove-read-folder"
+                                                class="shrink-0 text-blue-700 hover:underline dark:text-blue-300"
+                                                on:click=move |_| {
+                                                    let gone = gone.clone();
+                                                    change(Box::new(move |s| s.read_folders.retain(|x| *x != gone)));
+                                                }
+                                            >
+                                                {t("settings-read-remove")}
+                                            </button>
+                                        </li>
+                                    }
+                                }).collect_view()}
+                            </ul>
+                        }.into_any()
+                    }}
+                    <button
+                        type="button"
+                        data-action="add-read-folder"
+                        class="mt-2 rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+                        on:click=move |_| {
+                            let b = backend.get_value();
+                            leptos::task::spawn_local(async move {
+                                if let Ok(Some(f)) = b.pick_folder().await {
+                                    change(Box::new(move |s| {
+                                        if !s.read_folders.contains(&f) {
+                                            s.read_folders.push(f);
+                                        }
+                                    }));
+                                }
+                            });
+                        }
+                    >
+                        {t("settings-read-add")}
+                    </button>
                 </Section>
 
                 <Section title="settings-plans" about="settings-plans-about">

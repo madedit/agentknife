@@ -1,6 +1,6 @@
 //! Project-relative paths. Every tool resolves paths here, so nothing outside the
 //! project can be written, whatever the permission policy says. Reading also
-//! reaches the reference folders (library sources in AgentKnife's toolchain).
+//! reaches the reference folders (library sources in AgentKnife's toolchain, folders the user allowed).
 
 use std::path::{Component, Path, PathBuf};
 

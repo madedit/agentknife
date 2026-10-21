@@ -76,6 +76,7 @@ const COMMANDS: &[&str] = &[
     "get_settings",
     "save_settings",
     "crash_reports",
+    "pick_folder",
 ];
 
 /// The app's state and commands on `builder` (plugins are the caller's).
@@ -115,6 +116,7 @@ pub fn with_commands<R: Runtime>(builder: Builder<R>, state: state::AppState) ->
             settings::get_settings,
             settings::save_settings,
             settings::crash_reports,
+            settings::pick_folder,
         ])
 }
 

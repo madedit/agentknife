@@ -189,6 +189,11 @@ impl Backend {
         self.call(cmd::CRASH_REPORTS, None::<()>).await
     }
 
+    /// A folder the user chooses; `None` when cancelled.
+    pub async fn pick_folder(&self) -> Result<Option<String>, CallError> {
+        self.call(cmd::PICK_FOLDER, None::<()>).await
+    }
+
     pub async fn reveal(&self, path: &str) -> Result<(), CallError> {
         self.call(cmd::REVEAL, Some(path)).await
     }

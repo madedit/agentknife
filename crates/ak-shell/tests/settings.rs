@@ -91,3 +91,32 @@ fn crash_reports_can_be_copied_and_the_page_follows_the_language() {
     );
     assert!(!html.contains(">settings-"), "raw fluent id in {html}");
 }
+
+#[test]
+fn folders_the_ai_may_read_are_listed_with_remove_and_add() {
+    let none = render(
+        Locale::ZhTw,
+        AppSettings::default(),
+        CrashReports::default(),
+    );
+    assert!(none.contains("data-read-none") && none.contains("還沒有加入資料夾"));
+    assert!(none.contains(r#"data-action="add-read-folder""#) && none.contains("加入資料夾…"));
+
+    let s = AppSettings {
+        read_folders: vec![r"D:\docs".into(), "/home/ada/notes".into()],
+        ..AppSettings::default()
+    };
+    let html = render(Locale::En, s, CrashReports::default());
+    assert!(!html.contains("data-read-none"));
+    for f in [r"D:\docs", "/home/ada/notes"] {
+        assert!(
+            html.contains(&format!(r#"data-read-folder="{f}""#)),
+            "{html}"
+        );
+    }
+    assert_eq!(
+        html.matches(r#"data-action="remove-read-folder""#).count(),
+        2
+    );
+    assert!(html.contains("Folders the AI may read"));
+}

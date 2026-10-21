@@ -34,7 +34,7 @@ impl Tool for ReadFile {
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "Project-relative path, e.g. src/app.rs (or an absolute path to a library source)" },
+                    "path": { "type": "string", "description": "Project-relative path, e.g. src/app.rs (or an absolute path in a library source or a folder the user allowed)" },
                     "offset": { "type": "integer", "description": "First line to return (1-based). Default 1." },
                     "limit": { "type": "integer", "description": "Maximum number of lines. Default 2000." },
                 },

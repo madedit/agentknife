@@ -1,6 +1,6 @@
 //! The default permission policy (SPEC §5, AGENTS.md §4 "Permissions"):
 //! - work inside the project runs automatically;
-//! - reading the reference folders (library sources in AgentKnife's toolchain) too,
+//! - reading the reference folders (library sources, folders the user allowed) too,
 //!   with the read tools or with commands that only read;
 //! - downloads/installs, anything outside the project, and deletions ask the user;
 //! - path escapes, edits to `.git`, and commands that could damage the computer are
@@ -32,7 +32,7 @@ pub enum PermissionMode {
 
 pub struct ProjectPolicy {
     mode: PermissionMode,
-    /// Read-only folders outside the project (library sources).
+    /// Read-only folders outside the project (library sources, folders the user allowed).
     references: Vec<PathBuf>,
 }
 
@@ -248,7 +248,7 @@ fn classify_segment(tokens: &[String], root: &Path, refs: &[PathBuf], depth: u8)
     let sub = lower.first().map(String::as_str).unwrap_or("");
     let full = tokens.join(" ");
 
-    // Reading library sources needs no OK; anything else outside the project does.
+    // Reading reference folders needs no OK; anything else outside the project does.
     let reads_references = READERS.contains(&word.as_str())
         && !tokens.iter().any(|t| is_redirect(t))
         && outside_paths(tokens, root)

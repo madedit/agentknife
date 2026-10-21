@@ -281,7 +281,7 @@ impl Demo {
                 start_preview(demo.clone());
                 Ok(json!(opened))
             }
-            cmd::OPEN_FOLDER => Ok(Value::Null),
+            cmd::OPEN_FOLDER | cmd::PICK_FOLDER => Ok(Value::Null),
             cmd::PREVIEW_STATUS => Ok(json!(d.preview)),
             cmd::RUN_APP | cmd::REVEAL => Ok(Value::Null),
             cmd::GET_SETTINGS => {

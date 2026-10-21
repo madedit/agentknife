@@ -156,8 +156,14 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
         &effective.model,
     );
 
-    // Library sources the AI may read without asking (no keys or user data there).
+    // Library sources the AI may read without asking (no keys or user data
+    // there), and the folders the user allowed in the settings.
     config.reference_dirs = reference_dirs(&state.toolchain);
+    let allowed = allowed_folders(&settings.read_folders);
+    if let (Some(system), Some(note)) = (config.system.as_mut(), folders_note(&allowed)) {
+        system.push_str(&note);
+    }
+    config.reference_dirs.extend(allowed);
     let config_refs = config.reference_dirs.clone();
     let bridge = Arc::new(UiBridge(state.pending.clone()));
     let env = ToolEnv {
@@ -192,6 +198,32 @@ pub fn reference_dirs(tc: &ak_doctor::Toolchain) -> Vec<PathBuf> {
         tc.cargo_home().join("git"),
         tc.rustup_home().join("toolchains"),
     ]
+}
+
+/// The settings' readable folders that exist (absolute paths only).
+pub fn allowed_folders(folders: &[String]) -> Vec<PathBuf> {
+    folders
+        .iter()
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute() && p.is_dir())
+        .collect()
+}
+
+/// Tells the AI about the folders the user allowed (English: for the model).
+pub fn folders_note(folders: &[PathBuf]) -> Option<String> {
+    if folders.is_empty() {
+        return None;
+    }
+    let list: Vec<String> = folders
+        .iter()
+        .map(|f| format!("- {}", f.display()))
+        .collect();
+    Some(format!(
+        "\n\nThe user allows you to read files in these folders without asking \
+         (read_file, list_files and search_files take absolute paths there). They are \
+         for reading only: never change anything in them.\n{}",
+        list.join("\n")
+    ))
 }
 
 /// What a turn starts from.
@@ -541,6 +573,24 @@ mod tests {
     use ak_types::preview::{Rect, Size};
 
     use super::*;
+
+    #[test]
+    fn allowed_folders_are_existing_absolute_folders_and_the_ai_hears_of_them() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let file = dir.path().join("a.txt");
+        std::fs::write(&file, "x").unwrap_or_else(|e| panic!("{e}"));
+        let given = [
+            dir.path().display().to_string(),
+            "relative/folder".to_owned(),
+            dir.path().join("missing").display().to_string(),
+            file.display().to_string(),
+        ];
+        let allowed = allowed_folders(&given);
+        assert_eq!(allowed, [dir.path().to_path_buf()]);
+        let note = folders_note(&allowed).unwrap_or_default();
+        assert!(note.contains(&dir.path().display().to_string()) && note.contains("never change"));
+        assert_eq!(folders_note(&[]), None);
+    }
 
     #[test]
     fn the_selection_note_names_the_element_for_the_ai() {

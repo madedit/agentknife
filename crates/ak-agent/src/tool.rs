@@ -21,7 +21,7 @@ pub struct ToolContext {
     pub cancel: CancellationToken,
     /// For tools that talk to the UI (e.g. `ask_user`).
     pub events: Option<UnboundedSender<AgentEvent>>,
-    /// Folders the read tools may also read, by absolute path (library sources).
+    /// Folders the read tools may also read, by absolute path (library sources, folders the user allowed).
     pub reference_dirs: Vec<PathBuf>,
 }
 

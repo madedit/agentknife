@@ -90,6 +90,9 @@ pub struct AppSettings {
     pub keep_turns: u32,
     /// Daily AI spending limit in US dollars, across all projects.
     pub daily_cap_usd: Option<f64>,
+    /// Folders (absolute paths) whose files the AI reads without asking, like
+    /// the toolchain's library sources. Never written to.
+    pub read_folders: Vec<String>,
 }
 
 impl AppSettings {
@@ -105,6 +108,14 @@ impl AppSettings {
             .keep_turns
             .clamp(*Self::KEEP_TURNS.start(), *Self::KEEP_TURNS.end());
         self.daily_cap_usd = self.daily_cap_usd.filter(|c| c.is_finite() && *c > 0.0);
+        let mut folders: Vec<String> = Vec::new();
+        for f in self.read_folders.drain(..) {
+            let f = f.trim().to_owned();
+            if !f.is_empty() && !folders.contains(&f) {
+                folders.push(f);
+            }
+        }
+        self.read_folders = folders;
         self
     }
 }
@@ -119,6 +130,7 @@ impl Default for AppSettings {
             max_fix_attempts: 3,
             keep_turns: 50,
             daily_cap_usd: None,
+            read_folders: Vec::new(),
         }
     }
 }
@@ -136,16 +148,24 @@ mod tests {
         assert_eq!(old.keep_turns, 50);
         assert_eq!(old.permissions, Permissions::Standard);
         assert!(old.ai.is_some() && old.language.is_none());
+        assert!(old.read_folders.is_empty());
 
         let wild = AppSettings {
             max_fix_attempts: 0,
             keep_turns: 100_000,
             daily_cap_usd: Some(-1.0),
+            read_folders: vec![
+                " D:\\docs ".into(),
+                String::new(),
+                "D:\\docs".into(),
+                "/srv/a".into(),
+            ],
             ..AppSettings::default()
         }
         .clamped();
         assert_eq!((wild.max_fix_attempts, wild.keep_turns), (1, 500));
         assert_eq!(wild.daily_cap_usd, None);
+        assert_eq!(wild.read_folders, ["D:\\docs", "/srv/a"]);
         let json = serde_json::to_string(&AppSettings {
             language: Some(crate::i18n::Locale::ZhTw),
             ..AppSettings::default()

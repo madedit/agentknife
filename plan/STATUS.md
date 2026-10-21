@@ -421,10 +421,15 @@
 - P1-PREVIEW (bug) — e8b452f — reopening a project showed "127.0.0.1 refused to connect" in the preview. trunk prints `INFO success` before its server listens; with a cached (fast) build the page was shown in that gap and the frame never retried. The dev-server watcher now waits (≤15 s, 100 ms polls) until the frontend port accepts a connection before reporting ready with the page URL.
   - Test: fake_tool FAKE_LISTEN_DELAY (reports success, listens later); dev_server `the_page_is_shown_only_once_its_server_answers` (fails without the wait).
   - Live (cargo xtask dev): open 待辦清單 → preview → 專案 → reopen: the page loads.
-- P1-E2E-001 — (hash in next commit) — fake-LLM acceptance test through AgentKnife's real commands.
+- P1-E2E-001 — 4a9aed1 — fake-LLM acceptance test through AgentKnife's real commands.
   - ak-app is now a library (src/lib.rs: modules, `with_commands`, `on_event`, `close_project`) plus src/main.rs (plugins, crash hook, window). Commands taking the app handle are generic over `tauri::Runtime`. `AppState::new(state_dir, registry, toolchain_root)`; `AppState::provider` replaces the connection's AI.
   - build.rs: Tauri's Windows manifest (Common Controls v6) is embedded in every binary of the crate (`/MANIFESTINPUT`), else test binaries do not start (0xc0000139).
   - tests/e2e.rs (ignored; `cargo xtask e2e`): mock runtime + ScriptedProvider; save_connection → home_state; doctor_check (AK_E2E_PROVISION=1 → doctor_install); create_project → greeting turn, preview ready and answering; to-do turn (write src/main.rs from tests/fixtures/todo/main.rs, add serde_json + web-sys to Cargo.toml) → build check ok, timeline entry; selected add-button → the AI's request carries the selection note, button green, build ok; bundle → file in the project, OS, install steps, bundle-progress events. Stops the preview on drop.
   - Local run (Windows, toolchain present): passes in 213 s.
   - CI: job `e2e` on the three OSes (Linux Tauri packages, toolchain folder cached by versions.toml, AK_E2E_PROVISION=1); not run yet: no GitHub remote (same as P1-CORE-003).
+- P1-APP-002 (follow-up) — (hash in next commit) — folders the AI may read without asking (user request after the per-file "outside the project" prompts).
+  - `AppSettings::read_folders` (clamped: trimmed, no empties or duplicates); `cmd::PICK_FOLDER` (`pick_folder`, folder dialog). save_settings keeps absolute paths only.
+  - ak-app turn: `allowed_folders` (existing absolute folders) join the toolchain's reference folders (read tools + ProjectPolicy read-only commands); `folders_note` lists them in the system prompt as read-only. Writes there still ask/deny as before.
+  - Settings page: section "AI 可以直接讀取的資料夾" with each folder, Remove, and "加入資料夾…"; demo answers no folder.
+  - Tests: settings clamp, allowed_folders/folders_note, the settings page list. Live (cargo xtask dev, local model): with C:\devgentknife\docs allowed, "read docs\SPEC.md, tell me its first heading" → read with no confirmation card, right answer. The native folder dialog itself was not driven by script.
 - P1-APP-001 (follow-up) — needs: nothing urgent — if AgentKnife is killed instead of closed, the open project's preview processes (trunk, the app backend) keep running until the user ends them. On start, AgentKnife could stop leftovers it recorded (pids in the data folder).

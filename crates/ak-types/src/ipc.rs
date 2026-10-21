@@ -90,6 +90,9 @@ pub mod cmd {
     pub const SAVE_SETTINGS: &str = "save_settings";
     /// `()` → [`CrashReports`](super::CrashReports)
     pub const CRASH_REPORTS: &str = "crash_reports";
+    /// Lets the user choose a folder (the settings' readable folders): its
+    /// absolute path, or `None` when cancelled.
+    pub const PICK_FOLDER: &str = "pick_folder";
 
     /// Every command, for checking that the app handles them all.
     pub const ALL: &[&str] = &[
@@ -125,6 +128,7 @@ pub mod cmd {
         GET_SETTINGS,
         SAVE_SETTINGS,
         CRASH_REPORTS,
+        PICK_FOLDER,
     ];
 }
 
