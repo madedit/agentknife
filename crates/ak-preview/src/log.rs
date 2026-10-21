@@ -1,10 +1,14 @@
 //! Reading a dev server's output: which state it is in, and the compiler output
-//! of the current build (shown to the agent when the build fails).
+//! of the current build (shown to the agent when the build fails). And the
+//! project's log of everything printed ([`LogBook`]).
 
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
+use ak_types::log::{LogLine, LogSource};
 use ak_types::preview::ServerState;
 use ak_types::stack::LogMarkers;
+use tokio::sync::mpsc;
 
 /// Lines kept per build (compiler errors come before the failure line).
 const MAX_LINES: usize = 400;
@@ -134,9 +138,136 @@ impl Tail {
     }
 }
 
+/// Lines a project's log keeps (the oldest go first).
+const BOOK_LINES: usize = 5_000;
+
+/// The open project's log: the output of all its programs, shared by whoever
+/// prints (preview, real window, packaging, the AI's steps) and read by the
+/// Log tab. Cloning shares it.
+#[derive(Clone, Default)]
+pub struct LogBook {
+    inner: Arc<Mutex<Book>>,
+}
+
+#[derive(Default)]
+struct Book {
+    lines: VecDeque<LogLine>,
+    next_seq: u64,
+    listener: Option<mpsc::UnboundedSender<LogLine>>,
+}
+
+/// cargo's progress bar (`Building [===> ] 12/360: tauri`), redrawn with `\r`.
+fn is_progress(line: &str) -> bool {
+    line.trim_start().starts_with("Building [")
+}
+
+impl LogBook {
+    /// Adds what a program printed, one entry per line. One read may hold
+    /// several `\r`-separated redraws: progress bars and blank lines are
+    /// skipped, colors removed.
+    pub fn push(&self, source: LogSource, raw: &str) {
+        let Ok(mut book) = self.inner.lock() else {
+            return;
+        };
+        let at_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
+        for part in raw.split(['\r', '\n']) {
+            let text = strip_ansi(part);
+            if text.trim().is_empty() || is_progress(&text) {
+                continue;
+            }
+            book.next_seq += 1;
+            let line = LogLine {
+                seq: book.next_seq,
+                at_ms,
+                source,
+                text,
+            };
+            if let Some(tx) = &book.listener
+                && tx.send(line.clone()).is_err()
+            {
+                book.listener = None;
+            }
+            book.lines.push_back(line);
+            if book.lines.len() > BOOK_LINES {
+                book.lines.pop_front();
+            }
+        }
+    }
+
+    /// Every line kept, oldest first.
+    pub fn lines(&self) -> Vec<LogLine> {
+        self.inner
+            .lock()
+            .map(|b| b.lines.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    pub fn clear(&self) {
+        if let Ok(mut b) = self.inner.lock() {
+            b.lines.clear();
+        }
+    }
+
+    /// New lines from now on (one listener: a new one replaces the old).
+    pub fn subscribe(&self) -> mpsc::UnboundedReceiver<LogLine> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        if let Ok(mut b) = self.inner.lock() {
+            b.listener = Some(tx);
+        }
+        rx
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_book_keeps_clean_lines_and_tells_the_listener() {
+        let book = LogBook::default();
+        let mut rx = book.subscribe();
+        book.push(
+            LogSource::Window,
+            "    \u{1b}[96mBuilding\u{1b}[0m [==> ] 1/9: tauri\r   \u{1b}[92mCompiling\u{1b}[0m app v0.1.0\r",
+        );
+        book.push(LogSource::Ai, "");
+        book.push(LogSource::Backend, "Hello");
+        let lines = book.lines();
+        let texts: Vec<_> = lines
+            .iter()
+            .map(|l| (l.seq, l.source, l.text.as_str()))
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                (1, LogSource::Window, "   Compiling app v0.1.0"),
+                (2, LogSource::Backend, "Hello")
+            ]
+        );
+        assert_eq!(rx.try_recv().map(|l| l.seq).ok(), Some(1));
+        assert_eq!(rx.try_recv().map(|l| l.seq).ok(), Some(2));
+        book.clear();
+        assert!(book.lines().is_empty());
+        book.push(LogSource::Ai, "next");
+        assert_eq!(
+            book.lines()[0].seq,
+            3,
+            "numbers keep counting after a clear"
+        );
+    }
+
+    #[test]
+    fn the_book_drops_the_oldest_lines() {
+        let book = LogBook::default();
+        for i in 0..BOOK_LINES + 2 {
+            book.push(LogSource::Screens, &format!("line {i}"));
+        }
+        let lines = book.lines();
+        assert_eq!(lines.len(), BOOK_LINES);
+        assert_eq!(lines[0].text, "line 2");
+    }
 
     const TRUNK: LogMarkers = LogMarkers {
         building: &["INFO starting build"],

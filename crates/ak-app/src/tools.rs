@@ -13,6 +13,7 @@ use ak_types::doctor::SystemAction;
 use ak_types::ipc::{
     BUNDLE_EVENT, BundleFailure, BundleProgress, BundleResult, DOCTOR_EVENT, DoctorCheck,
 };
+use ak_types::log::LogSource;
 use ak_types::stack::HostOs;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_opener::OpenerExt;
@@ -106,7 +107,7 @@ pub async fn bundle<R: Runtime>(
     state: State<'_, AppState>,
 ) -> Result<BundleResult, serde_json::Value> {
     let as_value = |f: BundleFailure| serde_json::to_value(f).unwrap_or(serde_json::Value::Null);
-    let (root, profile) = {
+    let (root, profile, log) = {
         let inner = state.inner.lock().await;
         let open = inner.open.as_ref().ok_or_else(|| {
             as_value(BundleFailure {
@@ -119,7 +120,7 @@ pub async fn bundle<R: Runtime>(
             .lock()
             .map(|p| crate::home::profile_of(&p))
             .map_err(|_| as_value(failure(BundleError::Cancelled)))?;
-        (open.root.clone(), profile)
+        (open.root.clone(), profile, open.log.clone())
     };
     let os = HostOs::current().ok_or_else(|| as_value(failure(BundleError::UnsupportedHost)))?;
     let bundler = Bundler::new(&root, profile.bundle(), state.tools.clone());
@@ -129,10 +130,16 @@ pub async fn bundle<R: Runtime>(
         tauri::async_runtime::spawn(async move {
             while let Some(e) = rx.recv().await {
                 let p = match e {
-                    BundleEvent::Stage(s) => BundleProgress::Stage {
-                        message: s.message_id().into(),
-                    },
-                    BundleEvent::Output(line) => BundleProgress::Output { line },
+                    BundleEvent::Stage(s) => {
+                        log.push(LogSource::Bundle, &format!("> {}", s.message_id()));
+                        BundleProgress::Stage {
+                            message: s.message_id().into(),
+                        }
+                    }
+                    BundleEvent::Output(line) => {
+                        log.push(LogSource::Bundle, &line);
+                        BundleProgress::Output { line }
+                    }
                 };
                 let _ = app.emit(BUNDLE_EVENT, p);
             }

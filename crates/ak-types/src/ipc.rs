@@ -93,6 +93,11 @@ pub mod cmd {
     /// Lets the user choose a folder (the settings' readable folders): its
     /// absolute path, or `None` when cancelled.
     pub const PICK_FOLDER: &str = "pick_folder";
+    /// `()` → `Vec<LogLine>`: the open project's log so far; new lines then
+    /// arrive as [`LOG_EVENT`](super::LOG_EVENT).
+    pub const GET_LOG: &str = "get_log";
+    /// `()` → `()`: empties the open project's log.
+    pub const CLEAR_LOG: &str = "clear_log";
 
     /// Every command, for checking that the app handles them all.
     pub const ALL: &[&str] = &[
@@ -129,6 +134,8 @@ pub mod cmd {
         SAVE_SETTINGS,
         CRASH_REPORTS,
         PICK_FOLDER,
+        GET_LOG,
+        CLEAR_LOG,
     ];
 }
 
@@ -183,6 +190,9 @@ pub struct BundleFailure {
 /// Tauri event carrying the open project's
 /// [`PreviewStatus`](crate::preview::PreviewStatus) whenever it changes.
 pub const PREVIEW_EVENT: &str = "preview-status";
+/// Tauri event carrying new lines of the open project's log
+/// (`Vec<`[`LogLine`](crate::log::LogLine)`>`).
+pub const LOG_EVENT: &str = "project-log";
 
 /// A file or folder of the open project.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

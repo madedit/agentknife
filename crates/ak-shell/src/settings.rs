@@ -8,6 +8,7 @@ use ak_types::settings::{AiConnection, AppSettings, Permissions, Plans};
 use leptos::prelude::*;
 
 use crate::backend::Backend;
+use crate::chat::tools::copy;
 use crate::files::ago;
 use crate::i18n::{self, t, t_count, t_with, tr};
 
@@ -375,14 +376,4 @@ pub fn SettingsScreen(
             </div>
         </div>
     }
-}
-
-/// Copies `text` to the clipboard (browser only).
-fn copy(text: &str) {
-    #[cfg(target_arch = "wasm32")]
-    if let Some(w) = web_sys::window() {
-        let _ = w.navigator().clipboard().write_text(text);
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    let _ = text;
 }

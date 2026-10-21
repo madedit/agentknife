@@ -9,6 +9,7 @@ use ak_preview::log::{strip_ansi, tail};
 use ak_preview::process::{kill_tree, read_lines};
 use ak_project::{CheckpointKind, Timeline};
 use ak_types::ipc::{FileEntry, FileText, MarkVersion, SaveFile, TimelineRow};
+use ak_types::log::{LogLine, LogSource};
 use ak_types::preview::PreviewStatus;
 use ak_types::stack::{CommandSpec, Tool};
 use tauri::State;
@@ -194,6 +195,27 @@ pub async fn preview_status(state: State<'_, AppState>) -> Res<PreviewStatus> {
         .unwrap_or_default())
 }
 
+/// The open project's log so far (the Log tab); new lines follow as `LOG_EVENT`.
+#[tauri::command]
+pub async fn get_log(state: State<'_, AppState>) -> Res<Vec<LogLine>> {
+    Ok(state
+        .inner
+        .lock()
+        .await
+        .open
+        .as_ref()
+        .map(|o| o.log.lines())
+        .unwrap_or_default())
+}
+
+#[tauri::command]
+pub async fn clear_log(state: State<'_, AppState>) -> Res<()> {
+    if let Some(o) = state.inner.lock().await.open.as_ref() {
+        o.log.clear();
+    }
+    Ok(())
+}
+
 /// Where "Run in a real window" builds the app, under the project's `target/`.
 /// Not `target/debug`: the preview runs its own `app.exe` from there, and Windows
 /// cannot replace a running program.
@@ -252,8 +274,19 @@ pub async fn run_app(state: State<'_, AppState>) -> Res<()> {
         let child = cmd.spawn().map_err(fail)?;
         // Our copies of the write end must close, or the reader never ends.
         drop(cmd);
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, mut raw) = mpsc::unbounded_channel();
         read_lines(reader, tx);
+        // Read for as long as the app runs (into the log), not only until this
+        // command returns: a closed pipe would break `cargo tauri dev`.
+        let log = open.log.clone();
+        log.push(LogSource::Window, "> cargo tauri dev");
+        let (tx, rx) = mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            while let Some(line) = raw.recv().await {
+                log.push(LogSource::Window, &line);
+                let _ = tx.send(line);
+            }
+        });
         let pid = child.id();
         open.app_window = Some(child);
         (pid, rx)
@@ -266,16 +299,22 @@ pub async fn run_app(state: State<'_, AppState>) -> Res<()> {
         tokio::select! {
             line = lines.recv(), if !lines.is_closed() => {
                 let Some(line) = line else { continue };
-                let line = strip_ansi(&line);
-                if started.is_none() && app_started(&line) {
-                    started = Some(Instant::now());
-                }
-                if failed.is_none() && build_failed(&line) {
-                    failed = Some(Instant::now());
-                }
-                output.push_back(line);
-                if output.len() > WINDOW_LINES {
-                    output.pop_front();
+                // cargo redraws its progress bar with CR: one read may hold the
+                // bar and then the line that matters.
+                for part in line.split('\r').map(strip_ansi) {
+                    if part.trim().is_empty() || part.trim_start().starts_with("Building [") {
+                        continue;
+                    }
+                    if started.is_none() && app_started(&part) {
+                        started = Some(Instant::now());
+                    }
+                    if failed.is_none() && build_failed(&part) {
+                        failed = Some(Instant::now());
+                    }
+                    output.push_back(part);
+                    if output.len() > WINDOW_LINES {
+                        output.pop_front();
+                    }
                 }
             }
             _ = tick.tick() => {

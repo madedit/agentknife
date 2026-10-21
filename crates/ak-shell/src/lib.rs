@@ -15,6 +15,7 @@ pub mod files;
 pub mod home;
 pub mod i18n;
 pub mod layout;
+pub mod logs;
 // CodeMirror glue: the one module allowed unsafe (wasm-bindgen imports).
 #[cfg(target_arch = "wasm32")]
 #[allow(unsafe_code)]

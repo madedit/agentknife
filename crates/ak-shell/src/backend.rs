@@ -9,9 +9,11 @@ use ak_types::doctor::SystemAction;
 use ak_types::ipc::CrashReports;
 use ak_types::ipc::{
     AGENT_EVENT, Answer, BundleFailure, BundleResult, ConnectError, ConnectRequest, DoctorCheck,
-    FileEntry, FileText, HomeState, InterruptionChoice, MarkVersion, ModelCheck, ModelChoice,
-    NewProject, OpenedProject, PREVIEW_EVENT, SaveFile, SendMessage, StuckChoice, TimelineRow, cmd,
+    FileEntry, FileText, HomeState, InterruptionChoice, LOG_EVENT, MarkVersion, ModelCheck,
+    ModelChoice, NewProject, OpenedProject, PREVIEW_EVENT, SaveFile, SendMessage, StuckChoice,
+    TimelineRow, cmd,
 };
+use ak_types::log::LogLine;
 use ak_types::preview::PreviewStatus;
 use ak_types::settings::AppSettings;
 use serde::Serialize;
@@ -106,6 +108,19 @@ impl Backend {
 
     pub async fn run_app(&self) -> Result<(), CallError> {
         self.call(cmd::RUN_APP, None::<()>).await
+    }
+
+    /// New lines of the open project's log, a batch at a time.
+    pub fn listen_log(&self, f: impl Fn(Vec<LogLine>) + Send + Sync + 'static) {
+        self.on(LOG_EVENT, f);
+    }
+
+    pub async fn get_log(&self) -> Result<Vec<LogLine>, CallError> {
+        self.call(cmd::GET_LOG, None::<()>).await
+    }
+
+    pub async fn clear_log(&self) -> Result<(), CallError> {
+        self.call(cmd::CLEAR_LOG, None::<()>).await
     }
 
     pub async fn list_files(&self) -> Result<Vec<FileEntry>, CallError> {

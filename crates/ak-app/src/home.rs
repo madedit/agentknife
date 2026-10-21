@@ -4,9 +4,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use ak_preview::log::LogBook;
 use ak_preview::{Preview, PreviewSession, profiles};
 use ak_project::{Project, RecentProject, Timeline};
-use ak_types::ipc::{HomeState, NewProject, OpenedProject, PREVIEW_EVENT, ProjectRow};
+use ak_types::ipc::{HomeState, LOG_EVENT, NewProject, OpenedProject, PREVIEW_EVENT, ProjectRow};
 use ak_types::stack::StackProfile;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
@@ -14,6 +15,9 @@ use tokio::sync::Mutex;
 
 use crate::state::{AppState, OpenProject};
 use crate::{Res, fail, ui_locale};
+
+/// New log lines are sent to the window at most this often.
+const LOG_BATCH: Duration = Duration::from_millis(200);
 
 fn row(r: &RecentProject) -> ProjectRow {
     ProjectRow {
@@ -136,6 +140,8 @@ async fn open<R: Runtime>(
     close(previous).await;
 
     let preview = Preview::new(&root, profile.preview(), state.tools.clone()).map_err(fail)?;
+    let log = preview.log();
+    forward_log(app.clone(), log.clone());
     let session = Arc::new(PreviewSession::new(preview, None));
     session.start().await.map_err(fail)?;
     forward_status(app.clone(), session.clone());
@@ -170,6 +176,7 @@ async fn open<R: Runtime>(
             cancel: None,
             before_turn: None,
             app_window: None,
+            log,
         });
     }
     // The project notes for the AI, and a greeting in a brand-new chat (after
@@ -184,6 +191,23 @@ async fn open<R: Runtime>(
         interrupted,
         history: entries,
     })
+}
+
+/// Sends new log lines to the window, a batch at a time.
+fn forward_log<R: Runtime>(app: AppHandle<R>, log: LogBook) {
+    let mut rx = log.subscribe();
+    tauri::async_runtime::spawn(async move {
+        while let Some(first) = rx.recv().await {
+            tokio::time::sleep(LOG_BATCH).await;
+            let mut batch = vec![first];
+            while let Ok(line) = rx.try_recv() {
+                batch.push(line);
+            }
+            if app.emit(LOG_EVENT, batch).is_err() {
+                break;
+            }
+        }
+    });
 }
 
 /// Sends every status change of the preview to the window.

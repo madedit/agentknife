@@ -118,6 +118,14 @@ fn full_mode_adds_files_timeline_and_the_code_tab() {
         },
     );
     assert!(pane(&code, "code") && !pane(&code, "preview"));
+    let log = workspace(
+        Locale::En,
+        Layout {
+            tab: CenterTab::Log,
+            ..full
+        },
+    );
+    assert!(pane(&log, "log") && !pane(&log, "preview") && log.contains(">Log<"));
     // The saved code tab does not leak into simple mode.
     let simple = workspace(
         Locale::En,

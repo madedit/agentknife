@@ -433,7 +433,7 @@
   - Settings page: section "AI 可以直接讀取的資料夾" with each folder, Remove, and "加入資料夾…"; demo answers no folder.
   - Tests: settings clamp, allowed_folders/folders_note, the settings page list. Live (cargo xtask dev, local model): with C:\dev\agentknife\docs allowed, "read docs\SPEC.md, tell me its first heading" → read with no confirmation card, right answer. The native folder dialog itself was not driven by script.
 - P1-APP-001 (follow-up) — needs: nothing urgent — if AgentKnife is killed instead of closed, the open project's preview processes (trunk, the app backend) keep running until the user ends them. On start, AgentKnife could stop leftovers it recorded (pids in the data folder).
-- P1-APP-001 (bug) — (hash in next commit) — "Run in a real window" showed "Opening…" and nothing happened.
+- P1-APP-001 (bug) — 3c86647 — "Run in a real window" showed "Opening…" and nothing happened.
   - Cause: `cargo tauri dev` rebuilt target/debug/app.exe, which the preview runs. Windows refused ("failed to remove file … os error 5"), and the output was discarded.
   - Fix:
     - `cargo tauri dev -- --target-dir <project>/target/ak-window`.
@@ -442,4 +442,15 @@
     - The pane shows the output in a red notice with Details.
     - kill_tree is used when replacing the window and when closing the project.
   - Tests: app_started / build_failed line checks.
-  - Live: test-project's window opens in 52 s, and a second click replaces it with nothing left behind. The failed-build notice was not seen live: the test was stopped by the user.
+  - Live: test-project's window opens in 52 s, and a second click replaces it with nothing left behind. The failed-build notice is verified in the log commit below.
+- P1-APP-001 (follow-up) — (hash in next commit) — a "Log" tab (full mode, next to Preview / Code) with all output of the open project (user request).
+  - Sources: screens (trunk), app backend (cargo run), real window (cargo tauri dev), packaging, AI steps (tool + detail, then output).
+  - ak_types::log: LogSource, LogLine {seq, at_ms, source, text}. Commands get_log and clear_log; LOG_EVENT carries batches of new lines.
+  - ak_preview::log::LogBook: shared ring buffer (5000 lines per project, in memory), ANSI stripped, progress bars and blank lines skipped, plus a live listener. Preview owns one; the Watchers push into it; run_app and the turn's events push too.
+  - ak-app forwards new lines to the window every 200 ms.
+  - ak-shell: a ProjectLog context collects the live lines; the tab loads the whole log (get_log) when it opens, and batches skip lines already shown (by seq). LogPane has source filters, "Copy all", "Clear", follows the bottom while scrolled there, and shows error lines in red.
+  - Also in this change: run_app keeps reading the window's output into the log after it returns, so the pipe stays open for `cargo tauri dev`. Failure detection now checks each CR-separated part of a read: cargo's "error: could not compile" came after a progress-bar redraw on the same line, and was missed.
+  - Tests: LogBook (clean lines, listener, clear, cap), LogLine::is_error, ProjectLog::append (overlap), as_text, the LogPane rendering, the Log tab in render.rs.
+  - Live (cargo xtask dev, test-project):
+    - The Log tab lists the screens' and the background part's output.
+    - With a build error only the real window sees (cfg(not(feature = "dev"))), "Run in a real window" shows the red notice after 5.6 s, with the compiler error under Details, and nothing is left behind.

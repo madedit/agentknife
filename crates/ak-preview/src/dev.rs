@@ -6,12 +6,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use ak_types::log::LogSource;
 use ak_types::preview::{PreviewStatus, ServerState};
 use ak_types::stack::{PreviewPlan, ReadySignal};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
-use crate::log::{BuildTracker, Tail};
+use crate::log::{BuildTracker, LogBook, Tail};
 use crate::process::{
     Tools, encode_query_value, free_port, kill_tree, kill_tree_now, random_token, read_lines,
 };
@@ -40,6 +41,8 @@ pub struct Preview {
     bridge_port: u16,
     token: String,
     status: watch::Sender<PreviewStatus>,
+    /// Everything the two processes print.
+    log: LogBook,
     frontend: Option<Running>,
     backend: Option<Running>,
 }
@@ -58,6 +61,7 @@ impl Preview {
             bridge_port: free_port()?,
             token: random_token()?,
             status,
+            log: LogBook::default(),
             frontend: None,
             backend: None,
         })
@@ -70,6 +74,11 @@ impl Preview {
 
     pub fn status(&self) -> PreviewStatus {
         self.status.borrow().clone()
+    }
+
+    /// The project's log; the preview writes its processes' output there.
+    pub fn log(&self) -> LogBook {
+        self.log.clone()
     }
 
     fn origin(&self) -> String {
@@ -201,6 +210,7 @@ impl Preview {
             page_url: self.page_url(),
             port: self.port,
             stopping: stopping.clone(),
+            log: self.log.clone(),
         };
         let task = tokio::spawn(watcher.run(child, rx));
         Ok(Running {
@@ -278,6 +288,7 @@ struct Watcher {
     /// The dev server's port (frontend).
     port: u16,
     stopping: Arc<AtomicBool>,
+    log: LogBook,
 }
 
 impl Watcher {
@@ -296,6 +307,7 @@ impl Watcher {
                         self.exited(code, &tail, ready);
                         return;
                     };
+                    self.log.push(self.source(), &line);
                     let clean = tail.push(&line);
                     match self.side {
                         Side::Frontend => {
@@ -324,12 +336,20 @@ impl Watcher {
                     while let Ok(Some(line)) =
                         tokio::time::timeout(DRAIN, rx.recv()).await
                     {
+                        self.log.push(self.source(), &line);
                         tail.push(&line);
                     }
                     self.exited(status.ok().and_then(|s| s.code()), &tail, ready);
                     return;
                 }
             }
+        }
+    }
+
+    fn source(&self) -> LogSource {
+        match self.side {
+            Side::Frontend => LogSource::Screens,
+            Side::Backend => LogSource::Backend,
         }
     }
 
@@ -343,6 +363,7 @@ impl Watcher {
             (Side::Frontend, _) => "The preview server stopped",
         };
         let code = code.map_or_else(|| "no exit code".to_owned(), |c| format!("exit code {c}"));
+        self.log.push(self.source(), &format!("{what} ({code})."));
         set(
             &self.status,
             self.side,

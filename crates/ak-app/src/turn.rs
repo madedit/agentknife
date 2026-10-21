@@ -11,11 +11,13 @@ use ak_agent::policy::{PermissionMode, ProjectPolicy};
 use ak_agent::prompt::PlanMode;
 use ak_agent::tools::{Asker, Question, ToolEnv, project_tools, with_preview_tools};
 use ak_agent::{Agent, AgentConfig, Checkpointer, ConversationStore, TurnSummary, prompt, usage};
+use ak_preview::log::LogBook;
 use ak_project::{CheckpointKind, Project, Timeline};
 use ak_types::agent::{AgentEvent, PlanDecision, PlanProposal, TurnOutcome};
 use ak_types::chat::{Conversation, Message};
 use ak_types::i18n::I18n;
 use ak_types::ipc::{AGENT_EVENT, Answer, InterruptionChoice, SendMessage, StuckChoice};
+use ak_types::log::LogSource;
 use ak_types::preview::Picked;
 use ak_types::settings::{Permissions, Plans};
 use futures_util::future::BoxFuture;
@@ -101,6 +103,7 @@ struct Parts {
     preview: Arc<ak_preview::PreviewSession>,
     conversation: Arc<tokio::sync::Mutex<Conversation>>,
     cancel: CancellationToken,
+    log: LogBook,
 }
 
 /// The agent for the open project with the current AI connection.
@@ -254,7 +257,30 @@ async fn claim(state: &AppState) -> Option<Parts> {
         preview: open.preview.clone(),
         conversation: open.conversation.clone(),
         cancel,
+        log: open.log.clone(),
     })
+}
+
+/// The AI's steps in the project's log: what runs, then what it printed.
+fn log_step(log: &LogBook, event: &AgentEvent) {
+    match event {
+        AgentEvent::StepStarted {
+            tool,
+            label,
+            detail,
+            ..
+        } => {
+            log.push(LogSource::Ai, &format!("> {label}"));
+            log.push(LogSource::Ai, &format!("  {tool}: {detail}"));
+        }
+        AgentEvent::StepFinished { ok, output, .. } => {
+            log.push(LogSource::Ai, output);
+            if !ok {
+                log.push(LogSource::Ai, "(this step failed)");
+            }
+        }
+        _ => {}
+    }
 }
 
 fn emit<R: Runtime>(app: &AppHandle<R>, event: AgentEvent) {
@@ -282,8 +308,10 @@ fn spawn<R: Runtime>(app: AppHandle<R>, start: Start) {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let forward = {
             let app = app.clone();
+            let log = parts.log.clone();
             tauri::async_runtime::spawn(async move {
                 while let Some(e) = rx.recv().await {
+                    log_step(&log, &e);
                     emit(&app, e);
                 }
             })

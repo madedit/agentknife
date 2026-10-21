@@ -7,6 +7,7 @@ use crate::chat::ChatPane;
 use crate::files::{CodePane, FilesPane, TimelinePane};
 use crate::i18n::t;
 use crate::layout::{self, CHAT, CenterTab, LEFT, Layout, Mode};
+use crate::logs::LogPane;
 use crate::preview::PreviewPane;
 use crate::splitter::{Grows, Splitter};
 
@@ -60,11 +61,18 @@ pub fn change(layout: RwSignal<Layout>, f: impl FnOnce(&mut Layout)) {
     layout.with_untracked(layout::save);
 }
 
-/// The preview, plus the code tab in full mode.
+/// The preview, plus the code and log tabs in full mode.
 #[component]
 fn Center(layout: RwSignal<Layout>) -> impl IntoView {
     let full = move || layout.with(|l| l.mode == Mode::Full);
-    let showing = move |tab: CenterTab| full() && layout.with(|l| l.tab == tab);
+    // Memoized: other layout changes (a splitter drag) must not rebuild the pane.
+    let current = Memo::new(move |_| {
+        if full() {
+            layout.with(|l| l.tab)
+        } else {
+            CenterTab::Preview
+        }
+    });
     let tab = move |which: CenterTab, text: &'static str| {
         let on = move || layout.with(|l| l.tab == which);
         view! {
@@ -93,13 +101,13 @@ fn Center(layout: RwSignal<Layout>) -> impl IntoView {
             >
                 {tab(CenterTab::Preview, "shell-tab-preview")}
                 {tab(CenterTab::Code, "shell-tab-code")}
+                {tab(CenterTab::Log, "shell-tab-log")}
             </div>
         </Show>
-        <Show
-            when=move || showing(CenterTab::Code)
-            fallback=move || view! { <PreviewPane layout /> }
-        >
-            <CodePane />
-        </Show>
+        {move || match current.get() {
+            CenterTab::Code => view! { <CodePane /> }.into_any(),
+            CenterTab::Log => view! { <LogPane /> }.into_any(),
+            CenterTab::Preview => view! { <PreviewPane layout /> }.into_any(),
+        }}
     }
 }

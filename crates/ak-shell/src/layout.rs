@@ -19,6 +19,7 @@ pub enum CenterTab {
     #[default]
     Preview,
     Code,
+    Log,
 }
 
 /// The size the preview shows the app at.

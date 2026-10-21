@@ -181,6 +181,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
     - Apps may expose state with `ak_bridge::set_state_reader`.
   - Crates that link Tauri and have tests need the Windows Common-Controls manifest for their test binaries (see `crates/ak-bridge/build.rs`); otherwise the tests fail to start with STATUS_ENTRYPOINT_NOT_FOUND.
   - A "Run in real window" button runs `cargo tauri dev -- --target-dir <project>/target/ak-window`. It needs its own target folder: the preview runs its `app.exe` from `target/debug`, and Windows cannot replace a running program. The command waits until the app has run for a moment and returns the output if it could not start. Stop it with `kill_tree`, because tauri leaves trunk and the app behind.
+  - The project's log (`ak_preview::log::LogBook`, owned by `Preview`, shared via `OpenProject::log`) gets every line any project program prints: the preview's processes, the real window, packaging and the AI's steps. Anything new that runs a project program must push its output there too. The Log tab (full mode) shows it; see `get_log` / `LOG_EVENT`.
 - **ak-ui:**
   - Every component takes `ak_id` and renders `data-ak-id`. Parts get derived ids via `ak_ui::part_id` (`<id>-<key>` rows, `<id>-close`, numbered toasts).
   - No fixed UI strings: labels such as `close_label` are props, in the app's language.

@@ -2,7 +2,7 @@
 //! input with the selected-element chip.
 
 pub mod log;
-mod tools;
+pub(crate) mod tools;
 
 pub use tools::{bundle, check_tools, check_tools_quietly};
 

@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ak_agent::usage::UsageLedger;
+use ak_preview::log::LogBook;
 use ak_preview::{PreviewSession, Tools};
 use ak_project::{Project, Registry};
 use ak_providers::Provider;
@@ -62,6 +63,8 @@ pub struct OpenProject {
     pub before_turn: Option<String>,
     /// `cargo tauri dev` for "Run in a real window".
     pub app_window: Option<tokio::process::Child>,
+    /// Everything the project's programs printed (the Log tab).
+    pub log: LogBook,
 }
 
 pub struct Inner {

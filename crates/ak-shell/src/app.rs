@@ -13,6 +13,7 @@ use crate::files::Files;
 use crate::home::HomeScreen;
 use crate::i18n::{self, t, t_with, tr};
 use crate::layout::{self, Layout, Mode};
+use crate::logs::ProjectLog;
 use crate::preview::Preview;
 use crate::shell::{Workspace, change};
 
@@ -52,6 +53,9 @@ pub fn App() -> impl IntoView {
     let preview = Preview::new();
     provide_context(preview);
     backend.listen_preview(move |status| preview.status.set(status));
+    let project_log = ProjectLog::new();
+    provide_context(project_log);
+    backend.listen_log(move |batch| project_log.append(batch));
     backend.on(ak_types::ipc::DOCTOR_EVENT, move |p| {
         chat.log.update(|l| l.doctor_progress(p));
     });
@@ -122,6 +126,9 @@ pub fn AppView(
         provide_context(p);
         p
     });
+    if use_context::<ProjectLog>().is_none() {
+        provide_context(ProjectLog::new());
+    }
     // Where "Cancel" in the wizard goes back to.
     let before_connect = StoredValue::new(Screen::Home);
 

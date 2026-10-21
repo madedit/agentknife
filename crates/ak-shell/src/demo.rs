@@ -84,6 +84,31 @@ pub struct Demo {
     timeline: Vec<TimelineRow>,
 }
 
+/// What the preview printed while it started.
+fn demo_log() -> Vec<ak_types::log::LogLine> {
+    use ak_types::log::LogSource::{Backend, Screens};
+    [
+        (Screens, "INFO starting build"),
+        (Screens, "   Compiling app-ui v0.1.0"),
+        (Screens, "INFO success"),
+        (Backend, "   Compiling app v0.1.0 (src-tauri)"),
+        (
+            Backend,
+            "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.20s",
+        ),
+        (Backend, "ak-bridge listening"),
+    ]
+    .into_iter()
+    .zip(1..)
+    .map(|((source, text), seq)| ak_types::log::LogLine {
+        seq,
+        at_ms: 0,
+        source,
+        text: text.into(),
+    })
+    .collect()
+}
+
 /// A small project like the template's.
 fn demo_files() -> BTreeMap<String, String> {
     [
@@ -283,7 +308,8 @@ impl Demo {
             }
             cmd::OPEN_FOLDER | cmd::PICK_FOLDER => Ok(Value::Null),
             cmd::PREVIEW_STATUS => Ok(json!(d.preview)),
-            cmd::RUN_APP | cmd::REVEAL => Ok(Value::Null),
+            cmd::RUN_APP | cmd::REVEAL | cmd::CLEAR_LOG => Ok(Value::Null),
+            cmd::GET_LOG => Ok(json!(demo_log())),
             cmd::GET_SETTINGS => {
                 let mut s = d.settings.clone();
                 s.ai = d.ai.clone();

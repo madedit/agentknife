@@ -97,7 +97,7 @@ fn status_key(s: CheckStatus) -> &'static str {
 }
 
 /// Copies `text` to the clipboard (browser only).
-fn copy(text: &str) {
+pub(crate) fn copy(text: &str) {
     #[cfg(target_arch = "wasm32")]
     if let Some(w) = web_sys::window() {
         let _ = w.navigator().clipboard().write_text(text);
