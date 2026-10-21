@@ -278,6 +278,7 @@ fn TopBar(
                 <span class="font-semibold">{t("app-name")}</span>
                 <Show when=in_workspace>
                     <button
+                        title=t("shell-projects-tip")
                         type="button"
                         data-action="home"
                         class="text-sm text-blue-700 hover:underline dark:text-blue-300"
@@ -298,6 +299,7 @@ fn TopBar(
             <div class="flex shrink-0 items-center gap-3">
                 <Show when=move || !matches!(screen.get(), Screen::Connect { .. } | Screen::Settings)>
                     <button
+                        title=t("settings-tip")
                         type="button"
                         data-action="settings"
                         class="text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"

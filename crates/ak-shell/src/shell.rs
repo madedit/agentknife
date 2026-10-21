@@ -5,7 +5,7 @@ use leptos::prelude::*;
 
 use crate::chat::ChatPane;
 use crate::files::{CodePane, FilesPane, TimelinePane};
-use crate::i18n::t;
+use crate::i18n::{t, tr};
 use crate::layout::{self, CHAT, CenterTab, LEFT, Layout, Mode};
 use crate::logs::LogPane;
 use crate::preview::PreviewPane;
@@ -77,6 +77,7 @@ fn Center(layout: RwSignal<Layout>) -> impl IntoView {
         let on = move || layout.with(|l| l.tab == which);
         view! {
             <button
+                title=tr(format!("{text}-tip"))
                 type="button"
                 role="tab"
                 aria-selected=move || on().to_string()

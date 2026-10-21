@@ -120,6 +120,7 @@ fn Step(step: GuideStep, #[prop(optional)] args: Vec<(&'static str, String)>) ->
                     <div class="mt-1 flex items-center gap-2">
                         <code data-command="" class="min-w-0 flex-1 overflow-auto rounded bg-gray-100 px-2 py-1 text-xs whitespace-pre dark:bg-gray-800">{c}</code>
                         <button
+                            title=t("doctor-copy-tip")
                             type="button"
                             data-action="copy"
                             class="shrink-0 text-xs text-blue-700 hover:underline dark:text-blue-300"
@@ -238,7 +239,7 @@ pub fn DoctorCardView(card: DoctorCard) -> impl IntoView {
                                 fallback=move || {
                                     let a = a3.clone();
                                     view! {
-                                        <button type="button" data-action="system-action" class=format!("mt-3 {PRIMARY}") on:click=move |_| confirming.set(Some(a.clone()))>
+                                        <button title=t("doctor-action-tip") type="button" data-action="system-action" class=format!("mt-3 {PRIMARY}") on:click=move |_| confirming.set(Some(a.clone()))>
                                             {tr(format!("doctor-action-{key}"))}
                                         </button>
                                     }
@@ -251,6 +252,7 @@ pub fn DoctorCardView(card: DoctorCard) -> impl IntoView {
                                             <p>{tr(format!("doctor-confirm-{key}"))}</p>
                                             <div class="mt-2 flex gap-2">
                                                 <button
+                                                    title=t("doctor-confirm-yes-tip")
                                                     type="button"
                                                     data-action="confirm-system-action"
                                                     class=PRIMARY
@@ -270,7 +272,7 @@ pub fn DoctorCardView(card: DoctorCard) -> impl IntoView {
                                                 >
                                                     {t("doctor-confirm-yes")}
                                                 </button>
-                                                <button type="button" class=SECONDARY on:click=move |_| confirming.set(None)>
+                                                <button title=t("common-cancel-tip") type="button" class=SECONDARY on:click=move |_| confirming.set(None)>
                                                     {t("common-cancel")}
                                                 </button>
                                             </div>
@@ -296,14 +298,14 @@ pub fn DoctorCardView(card: DoctorCard) -> impl IntoView {
             {ready.then(|| view! { <p data-ready="" class="mt-3 text-green-700 dark:text-green-400">{t("doctor-ready")}</p> })}
             {(missing_isolated && !busy).then(|| view! {
                 <p class="mt-3 text-gray-600 dark:text-gray-400">{t("doctor-isolated-note")}</p>
-                <button type="button" data-action="install-tools" class=format!("mt-2 {PRIMARY}") on:click=move |_| install_tools(chat, backend.get_value())>
+                <button title=t("doctor-install-tip") type="button" data-action="install-tools" class=format!("mt-2 {PRIMARY}") on:click=move |_| install_tools(chat, backend.get_value())>
                     {t("doctor-install-button")}
                 </button>
             })}
             {has_guides.then(|| view! { <p class="mt-3 text-gray-600 dark:text-gray-400">{t("doctor-system-intro")}</p> })}
             {guide_views}
             {(has_guides && !busy).then(|| view! {
-                <button type="button" data-action="check-again" class=format!("mt-3 {SECONDARY}") on:click=move |_| check_tools(chat, backend.get_value(), false)>
+                <button title=t("doctor-check-again-tip") type="button" data-action="check-again" class=format!("mt-3 {SECONDARY}") on:click=move |_| check_tools(chat, backend.get_value(), false)>
                     {t("doctor-check-again")}
                 </button>
             })}
@@ -342,7 +344,7 @@ pub fn BundleCardView(card: BundleCard) -> impl IntoView {
             view! {
                 <p class="mt-2 text-red-800 dark:text-red-200">{tr(format!("bundle-error-{}", f.kind))}</p>
                 {(f.kind == "build-failed" || f.kind == "preview-code").then(|| view! {
-                    <button type="button" data-action="fix-bundle" class=format!("mt-3 {PRIMARY}") on:click=ask>
+                    <button title=t("preview-fix-tip") type="button" data-action="fix-bundle" class=format!("mt-3 {PRIMARY}") on:click=ask>
                         {t("preview-fix")}
                     </button>
                 })}
@@ -381,7 +383,7 @@ fn BundleDone(result: BundleResult) -> impl IntoView {
         .filter(|os| *os != host)
         .map(|os| {
             view! {
-                <button type="button" data-os=os class="text-xs text-blue-700 hover:underline dark:text-blue-300" on:click=move |_| other.set(Some(os))>
+                <button title=t("bundle-other-os-tip") type="button" data-os=os class="text-xs text-blue-700 hover:underline dark:text-blue-300" on:click=move |_| other.set(Some(os))>
                     {tr(format!("os-{os}"))}
                 </button>
             }
@@ -393,6 +395,7 @@ fn BundleDone(result: BundleResult) -> impl IntoView {
         <p class="mt-3 font-medium">{t("bundle-steps-title")}</p>
         <ol class="mt-2 list-decimal space-y-2 pl-5 text-gray-700 dark:text-gray-300">{steps}</ol>
         <button
+            title=t("bundle-open-folder-tip")
             type="button"
             data-action="reveal"
             class=format!("mt-3 {SECONDARY}")

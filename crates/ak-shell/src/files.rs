@@ -364,6 +364,7 @@ pub fn FilesPane(layout: RwSignal<Layout>) -> impl IntoView {
                             view! {
                                 <li role="treeitem" aria-expanded=row.dir.then(|| row.expanded.to_string())>
                                     <button
+                                        title=t("files-row-tip")
                                         type="button"
                                         data-file=row.path.clone()
                                         class=move || if current() {
@@ -436,6 +437,7 @@ pub fn TimelinePane() -> impl IntoView {
         <section data-pane="timeline" class="flex min-h-0 flex-1 flex-col border-t border-gray-200 dark:border-gray-800">
             <Heading text="shell-timeline">
                 <button
+                    title=t("timeline-mark-tip")
                     type="button"
                     data-action="mark"
                     class="rounded px-2 py-0.5 text-xs text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950"
@@ -456,6 +458,7 @@ pub fn TimelinePane() -> impl IntoView {
                         on:keydown=move |e| if e.key() == "Enter" { mark.run(()) }
                     />
                     <button
+                        title=t("timeline-mark-save-tip")
                         type="button"
                         data-action="save-mark"
                         disabled=move || name.with(|n| n.trim().is_empty())
@@ -501,6 +504,7 @@ pub fn TimelinePane() -> impl IntoView {
                                                     let id = id2.clone();
                                                     view! {
                                                         <button
+                                                            title=t("timeline-restore-tip")
                                                             type="button"
                                                             data-action="restore"
                                                             class="mt-1 text-xs text-blue-700 hover:underline dark:text-blue-300"
@@ -517,10 +521,10 @@ pub fn TimelinePane() -> impl IntoView {
                                                         <div data-confirm="restore" class="mt-1 rounded bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
                                                             <p>{t("timeline-restore-confirm")}</p>
                                                             <div class="mt-1 flex gap-2">
-                                                                <button type="button" data-action="confirm-restore" class="rounded bg-blue-600 px-2 py-0.5 text-white" on:click=move |_| restore.run(id.clone())>
+                                                                <button title=t("timeline-restore-yes-tip") type="button" data-action="confirm-restore" class="rounded bg-blue-600 px-2 py-0.5 text-white" on:click=move |_| restore.run(id.clone())>
                                                                     {t("timeline-restore-yes")}
                                                                 </button>
-                                                                <button type="button" class="rounded px-2 py-0.5 hover:bg-amber-100 dark:hover:bg-amber-900" on:click=move |_| confirming.set(None)>
+                                                                <button title=t("common-cancel-tip") type="button" class="rounded px-2 py-0.5 hover:bg-amber-100 dark:hover:bg-amber-900" on:click=move |_| confirming.set(None)>
                                                                     {t("common-cancel")}
                                                                 </button>
                                                             </div>
@@ -561,7 +565,7 @@ pub fn CodePane() -> impl IntoView {
                         <p>{t("files-error")}</p>
                         <details class="text-xs"><summary class="cursor-pointer">{t("common-details")}</summary><pre class="whitespace-pre-wrap">{e}</pre></details>
                     </div>
-                    <button type="button" class="text-xs underline" on:click=move |_| files.error.set(None)>{t("common-ok")}</button>
+                    <button title=t("common-ok-tip") type="button" class="text-xs underline" on:click=move |_| files.error.set(None)>{t("common-ok")}</button>
                 </div>
             })}
             <Show
@@ -591,6 +595,7 @@ pub fn CodePane() -> impl IntoView {
                     <div data-notice="changed-outside" class="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
                         <span class="flex-1">{t("files-changed-outside")}</span>
                         <button
+                            title=t("files-reload-tip")
                             type="button"
                             data-action="reload-file"
                             class="rounded bg-amber-600 px-2 py-0.5 text-xs text-white"
@@ -598,7 +603,7 @@ pub fn CodePane() -> impl IntoView {
                         >
                             {t("files-reload")}
                         </button>
-                        <button type="button" class="text-xs underline" on:click=move |_| files.changed_outside.set(false)>
+                        <button title=t("files-keep-mine-tip") type="button" class="text-xs underline" on:click=move |_| files.changed_outside.set(false)>
                             {t("files-keep-mine")}
                         </button>
                     </div>

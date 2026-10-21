@@ -134,6 +134,7 @@ pub fn HomeScreen(
                     <li data-project-row=row.id.clone()>
                         <div class="flex items-center">
                             <button
+                                title=t("home-open-project-tip")
                                 type="button"
                                 data-project=row.id.clone()
                                 disabled=!exists
@@ -151,6 +152,7 @@ pub fn HomeScreen(
                                 </span>
                             </button>
                             <button
+                                title=t("home-delete-tip")
                                 type="button"
                                 data-action="delete-project"
                                 data-for=row.id.clone()
@@ -170,14 +172,14 @@ pub fn HomeScreen(
                                     {t_with("home-delete-about", [("os", host_os().to_owned())])}
                                 </p>
                                 <div class="mt-3 flex flex-wrap gap-2">
-                                    <button type="button" data-action="cancel-delete" class=SECONDARY on:click=move |_| deleting.set(None)>
+                                    <button title=t("common-cancel-tip") type="button" data-action="cancel-delete" class=SECONDARY on:click=move |_| deleting.set(None)>
                                         {t("common-cancel")}
                                     </button>
-                                    <button type="button" data-action="forget-project" class=SECONDARY on:click=forget.clone()>
+                                    <button title=t("home-delete-forget-tip") type="button" data-action="forget-project" class=SECONDARY on:click=forget.clone()>
                                         {t("home-delete-forget")}
                                     </button>
                                     {exists.then(|| view! {
-                                        <button type="button" data-action="trash-project" class=DANGER on:click=trash.clone()>
+                                        <button title=t_with("home-delete-trash-tip", [("os", host_os().to_owned())]) type="button" data-action="trash-project" class=DANGER on:click=trash.clone()>
                                             {t_with("home-delete-trash", [("os", host_os().to_owned())])}
                                         </button>
                                     })}
@@ -197,10 +199,11 @@ pub fn HomeScreen(
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <h1 class="text-2xl font-semibold">{t("home-title")}</h1>
                     <div class="flex gap-2">
-                        <button type="button" data-action="open-folder" class=SECONDARY on:click=open_folder>
+                        <button title=t("home-open-folder-tip") type="button" data-action="open-folder" class=SECONDARY on:click=open_folder>
                             {t("home-open-folder")}
                         </button>
                         <button
+                            title=t("home-new-tip")
                             type="button"
                             data-action="new"
                             class=PRIMARY
@@ -232,10 +235,11 @@ pub fn HomeScreen(
                             {move || t_with("home-new-where", [("folder", home.with(|h| h.projects_folder.clone()))])()}
                         </p>
                         <div class="mt-3 flex gap-2">
-                            <button type="button" class=SECONDARY on:click=move |_| creating.set(false)>
+                            <button title=t("common-cancel-tip") type="button" class=SECONDARY on:click=move |_| creating.set(false)>
                                 {t("common-cancel")}
                             </button>
                             <button
+                                title=t("home-create-tip")
                                 type="button"
                                 data-action="create"
                                 class=PRIMARY

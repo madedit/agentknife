@@ -161,6 +161,7 @@ pub fn ChatPane() -> impl IntoView {
         </div>
         <div class="flex gap-2 px-3 pb-2">
             <button
+                title=t("chat-check-tools-tip")
                 type="button"
                 data-action="check-tools"
                 class="rounded-full border border-gray-300 px-3 py-0.5 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
@@ -315,10 +316,10 @@ fn ConfirmCard(
                 None if expired => view! { <Expired /> }.into_any(),
                 None => view! {
                     <div class="mt-3 flex gap-2">
-                        <button type="button" data-action="allow" class=PRIMARY on:click=move |_| answer(true)>
+                        <button title=t("chat-allow-tip") type="button" data-action="allow" class=PRIMARY on:click=move |_| answer(true)>
                             {t("chat-allow")}
                         </button>
-                        <button type="button" data-action="deny" class=SECONDARY on:click=move |_| deny(false)>
+                        <button title=t("chat-deny-tip") type="button" data-action="deny" class=SECONDARY on:click=move |_| deny(false)>
                             {t("chat-deny")}
                         </button>
                     </div>
@@ -371,13 +372,13 @@ fn PlanCard(
                             let (start, cancel) = (start.clone(), cancel.clone());
                             view! {
                                 <div class="mt-3 flex flex-wrap gap-2">
-                                    <button type="button" data-action="start" class=PRIMARY on:click=move |_| start(PlanDecision::Start)>
+                                    <button title=t("plan-start-tip") type="button" data-action="start" class=PRIMARY on:click=move |_| start(PlanDecision::Start)>
                                         {t("plan-start")}
                                     </button>
-                                    <button type="button" data-action="revise" class=SECONDARY on:click=move |_| revising.set(true)>
+                                    <button title=t("plan-revise-tip") type="button" data-action="revise" class=SECONDARY on:click=move |_| revising.set(true)>
                                         {t("plan-revise")}
                                     </button>
-                                    <button type="button" data-action="cancel-plan" class=SECONDARY on:click=move |_| cancel(PlanDecision::Cancel)>
+                                    <button title=t("plan-cancel-tip") type="button" data-action="cancel-plan" class=SECONDARY on:click=move |_| cancel(PlanDecision::Cancel)>
                                         {t("plan-cancel")}
                                     </button>
                                 </div>
@@ -393,6 +394,7 @@ fn PlanCard(
                             on:input=move |e| feedback.set(event_target_value(&e))
                         ></textarea>
                         <button
+                            title=t("plan-send-revision-tip")
                             type="button"
                             data-action="send-revision"
                             class=format!("mt-2 {PRIMARY}")
@@ -442,7 +444,7 @@ fn QuestionCard(
                     let reply = reply.clone();
                     let label = o.clone();
                     view! {
-                        <button type="button" data-option="" class=SECONDARY on:click=move |_| reply(o.clone())>
+                        <button title=t("chat-option-tip") type="button" data-option="" class=SECONDARY on:click=move |_| reply(o.clone())>
                             {label}
                         </button>
                     }
@@ -462,6 +464,7 @@ fn QuestionCard(
                             on:input=move |e| other.set(event_target_value(&e))
                         />
                         <button
+                            title=t("chat-other-send-tip")
                             type="button"
                             class=PRIMARY
                             disabled=move || other.with(|o| o.trim().is_empty())
@@ -516,7 +519,7 @@ fn OutcomeCard(outcome: TurnOutcome, handled: bool) -> impl IntoView {
     let continue_button = move |label: &'static str| {
         (!handled).then(|| view! {
             <div class="mt-3">
-                <button type="button" data-action="continue" class=PRIMARY on:click=move |_| go_on(None)>
+                <button title=t("chat-continue-tip") type="button" data-action="continue" class=PRIMARY on:click=move |_| go_on(None)>
                     {t(label)}
                 </button>
             </div>
@@ -528,10 +531,10 @@ fn OutcomeCard(outcome: TurnOutcome, handled: bool) -> impl IntoView {
             <p class="font-medium">{t_with("stuck-title", [("attempts", attempts.to_string())])}</p>
             {(!handled).then(|| view! {
                 <div class="mt-3 flex flex-wrap gap-2">
-                    <button type="button" data-action="try-another" class=PRIMARY on:click=move |_| go_on(Some(StuckChoice::TryAnotherWay))>
+                    <button title=t("stuck-try-another-tip") type="button" data-action="try-another" class=PRIMARY on:click=move |_| go_on(Some(StuckChoice::TryAnotherWay))>
                         {t("stuck-try-another")}
                     </button>
-                    <button type="button" data-action="roll-back" class=SECONDARY on:click=move |_| go_on(Some(StuckChoice::RollBack))>
+                    <button title=t("stuck-roll-back-tip") type="button" data-action="roll-back" class=SECONDARY on:click=move |_| go_on(Some(StuckChoice::RollBack))>
                         {t("stuck-roll-back")}
                     </button>
                 </div>
@@ -560,7 +563,7 @@ fn OutcomeCard(outcome: TurnOutcome, handled: bool) -> impl IntoView {
             <p>{t("chat-failed")}</p>
             {(retryable && !handled).then(|| view! {
                 <div class="mt-3">
-                    <button type="button" data-action="retry" class=PRIMARY on:click=move |_| go_on(None)>
+                    <button title=t("chat-retry-tip") type="button" data-action="retry" class=PRIMARY on:click=move |_| go_on(None)>
                         {t("common-retry")}
                     </button>
                 </div>
@@ -600,10 +603,10 @@ fn Interrupted(request: String) -> impl IntoView {
         <div data-card="interrupted" role="alert" class=format!("{CARD} border-amber-300 dark:border-amber-700")>
             <p>{t_with("chat-interrupted", [("request", request)])}</p>
             <div class="mt-3 flex flex-wrap gap-2">
-                <button type="button" data-action="resume" class=PRIMARY on:click=move |_| choose(InterruptionChoice::Continue)>
+                <button title=t("chat-interrupted-continue-tip") type="button" data-action="resume" class=PRIMARY on:click=move |_| choose(InterruptionChoice::Continue)>
                     {t("chat-interrupted-continue")}
                 </button>
-                <button type="button" data-action="go-back" class=SECONDARY on:click=move |_| back(InterruptionChoice::GoBack)>
+                <button title=t("stuck-roll-back-tip") type="button" data-action="go-back" class=SECONDARY on:click=move |_| back(InterruptionChoice::GoBack)>
                     {t("chat-interrupted-go-back")}
                 </button>
             </div>
@@ -663,12 +666,12 @@ fn Composer() -> impl IntoView {
                 <Show
                     when=move || chat.log.with(|l| l.running)
                     fallback=move || view! {
-                        <button type="button" data-action="send" class=PRIMARY disabled=move || !can_send() on:click=move |_| send()>
+                        <button title=t("chat-send-tip") type="button" data-action="send" class=PRIMARY disabled=move || !can_send() on:click=move |_| send()>
                             {t("chat-send")}
                         </button>
                     }
                 >
-                    <button type="button" data-action="stop" class=SECONDARY on:click=stop>
+                    <button title=t("chat-stop-tip") type="button" data-action="stop" class=SECONDARY on:click=stop>
                         {t("chat-stop")}
                     </button>
                 </Show>

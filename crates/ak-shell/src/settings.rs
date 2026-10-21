@@ -140,7 +140,7 @@ pub fn SettingsScreen(
             <div class="flex w-full max-w-2xl flex-col gap-4">
                 <div class="flex items-center justify-between gap-3">
                     <h1 class="text-2xl font-semibold">{t("settings-title")}</h1>
-                    <button type="button" data-action="close-settings" class="text-sm text-blue-700 hover:underline dark:text-blue-300" on:click=move |_| on_close.run(())>
+                    <button title=t("settings-close-tip") type="button" data-action="close-settings" class="text-sm text-blue-700 hover:underline dark:text-blue-300" on:click=move |_| on_close.run(())>
                         {t("connect-back")}
                     </button>
                 </div>
@@ -172,7 +172,7 @@ pub fn SettingsScreen(
                                 None => t("shell-ai-none")(),
                             }}
                         </span>
-                        <button type="button" data-action="settings-change-ai" class="rounded-lg border border-gray-300 px-3 py-1 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800" on:click=move |_| change_ai.run(())>
+                        <button title=t("settings-change-ai-tip") type="button" data-action="settings-change-ai" class="rounded-lg border border-gray-300 px-3 py-1 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800" on:click=move |_| change_ai.run(())>
                             {t("shell-ai-change")}
                         </button>
                     </div>
@@ -204,6 +204,7 @@ pub fn SettingsScreen(
                                         <li data-read-folder=attr class="flex items-center justify-between gap-2 py-1">
                                             <span class="min-w-0 truncate font-mono text-xs" title=title>{f}</span>
                                             <button
+                                                title=t("settings-read-remove-tip")
                                                 type="button"
                                                 data-action="remove-read-folder"
                                                 class="shrink-0 text-blue-700 hover:underline dark:text-blue-300"
@@ -221,6 +222,7 @@ pub fn SettingsScreen(
                         }.into_any()
                     }}
                     <button
+                        title=t("settings-read-add-tip")
                         type="button"
                         data-action="add-read-folder"
                         class="mt-2 rounded-lg border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
@@ -327,6 +329,7 @@ pub fn SettingsScreen(
                                 <li data-crash="" class="flex items-center justify-between gap-2 py-1">
                                     <span class="text-gray-600 dark:text-gray-400">{t_count(id, "n", n)}</span>
                                     <button
+                                        title=t("settings-crash-copy-tip")
                                         type="button"
                                         data-action="copy-crash"
                                         class="text-blue-700 hover:underline dark:text-blue-300"
@@ -348,6 +351,7 @@ pub fn SettingsScreen(
                                 view! { <ul class="mt-2 text-sm">{list}</ul> }.into_any()
                             }}
                             <button
+                                title=t("settings-crash-folder-tip")
                                 type="button"
                                 data-action="show-crash-folder"
                                 class="mt-2 text-sm text-blue-700 hover:underline dark:text-blue-300"
@@ -369,7 +373,7 @@ pub fn SettingsScreen(
                         <span data-saved="" class="text-sm text-green-700 dark:text-green-400">{t("settings-saved")}</span>
                     </Show>
                     {move || error.get().map(|e| view! { <span role="alert" class="text-sm text-red-700">{t("home-error")}" "{e}</span> })}
-                    <button type="button" data-action="save-settings" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" on:click=save>
+                    <button title=t("settings-save-tip") type="button" data-action="save-settings" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" on:click=save>
                         {t("settings-save")}
                     </button>
                 </div>

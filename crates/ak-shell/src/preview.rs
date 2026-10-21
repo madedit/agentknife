@@ -124,6 +124,7 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
         let on = move || device() == d;
         view! {
             <button
+                title=t("preview-device-tip")
                 type="button"
                 data-device=d.key()
                 aria-pressed=move || on().to_string()
@@ -231,6 +232,7 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
                     {t("preview-pick")}
                 </button>
                 <button
+                    title=t("preview-reload-tip")
                     type="button"
                     data-action="reload"
                     disabled=move || url().is_none()
@@ -259,6 +261,7 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
                     <div class="flex items-start gap-2">
                         <p class="flex-1">{t("preview-window-failed")}</p>
                         <button
+                            title=t("common-ok-tip")
                             type="button"
                             data-action="dismiss-window-error"
                             class="text-xs underline"
@@ -346,6 +349,7 @@ fn CoverView(chat: Chat) -> impl IntoView {
                             {move || if busy() { t("preview-error-ai-working")() } else { t("preview-error-hint")() }}
                         </p>
                         <button
+                            title=t("preview-fix-tip")
                             type="button"
                             data-action="fix"
                             disabled=busy

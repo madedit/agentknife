@@ -244,6 +244,7 @@ fn ChooseStep(w: RwSignal<Wizard>, on_cancel: Option<Callback<()>>) -> impl Into
             .map(|p| {
                 view! {
                     <button
+                        title=t("connect-preset-tip")
                         type="button"
                         data-preset=p.id
                         class="rounded-xl border border-gray-200 bg-white p-4 text-left hover:border-blue-500 hover:shadow-sm dark:border-gray-700 dark:bg-gray-950"
@@ -270,7 +271,7 @@ fn ChooseStep(w: RwSignal<Wizard>, on_cancel: Option<Callback<()>>) -> impl Into
         {group(PresetKind::Local, "connect-local", "connect-local-about")}
         {on_cancel.map(|cancel| view! {
             <div class="mt-6">
-                <button type="button" class=SECONDARY on:click=move |_| cancel.run(())>
+                <button title=t("common-cancel-tip") type="button" class=SECONDARY on:click=move |_| cancel.run(())>
                     {t("common-cancel")}
                 </button>
             </div>
@@ -351,10 +352,11 @@ fn DetailsStep(
             })}
             <ErrorBox w />
             <div class="mt-5 flex gap-2">
-                <button type="button" class=SECONDARY on:click=move |_| w.update(Wizard::back)>
+                <button title=t("connect-back-tip") type="button" class=SECONDARY on:click=move |_| w.update(Wizard::back)>
                     {t("connect-back")}
                 </button>
                 <button
+                    title=t("connect-test-tip")
                     type="button"
                     data-action="test"
                     class=PRIMARY
@@ -407,10 +409,11 @@ fn ModelStep(
             }}
             <ErrorBox w />
             <div class="mt-5 flex gap-2">
-                <button type="button" class=SECONDARY on:click=move |_| w.update(Wizard::back)>
+                <button title=t("connect-back-tip") type="button" class=SECONDARY on:click=move |_| w.update(Wizard::back)>
                     {t("connect-back")}
                 </button>
                 <button
+                    title=t("connect-save-tip")
                     type="button"
                     data-action="save"
                     class=PRIMARY

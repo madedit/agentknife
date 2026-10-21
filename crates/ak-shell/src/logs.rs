@@ -127,6 +127,7 @@ pub fn LogPane() -> impl IntoView {
         let key = which.map_or("all", LogSource::key);
         view! {
             <button
+                title=t("log-filter-tip")
                 type="button"
                 data-log-filter=key
                 aria-pressed=move || on().to_string()
@@ -180,10 +181,10 @@ pub fn LogPane() -> impl IntoView {
             <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-gray-200 px-2 py-1 dark:border-gray-800">
                 <div role="group" aria-label=t("log-sources") class="flex flex-wrap gap-0.5">{chips}</div>
                 <span class="flex-1"></span>
-                <button type="button" data-action="copy-log" class=CHIP on:click=copy_all>
+                <button title=t("log-copy-tip") type="button" data-action="copy-log" class=CHIP on:click=copy_all>
                     {move || if copied.get() { copied_label() } else { copy_label() }}
                 </button>
-                <button type="button" data-action="clear-log" class=CHIP on:click=clear>
+                <button title=t("log-clear-tip") type="button" data-action="clear-log" class=CHIP on:click=clear>
                     {t("log-clear")}
                 </button>
             </div>
@@ -299,11 +300,12 @@ pub fn BuildLog(
                         {move || small.get().then(latest)}
                     </span>
                     {move || open_log.get().map(|open| view! {
-                        <button type="button" data-action="open-log" class=button on:click=move |_| open.run(())>
+                        <button title=t("build-log-all-tip") type="button" data-action="open-log" class=button on:click=move |_| open.run(())>
                             {t("build-log-all")}
                         </button>
                     })}
                     <button
+                        title=t("build-log-toggle-tip")
                         type="button"
                         data-action="toggle-build-log"
                         aria-expanded=move || (!small.get()).to_string()
