@@ -251,3 +251,39 @@ fn every_text_exists_in_every_language() {
     }
     assert!(!zh.contains(">shell-") && !zh.contains(">home-") && !zh.contains(">connect-"));
 }
+
+#[test]
+fn the_wizard_marks_the_ai_in_use_and_the_ones_set_up_before() {
+    let saved = |provider: &str, model: &str, current: bool| ak_types::ipc::SavedConnection {
+        connection: ak_types::settings::AiConnection {
+            provider: provider.into(),
+            base_url: None,
+            model: model.into(),
+            effort: None,
+        },
+        has_key: true,
+        current,
+    };
+    let w = Wizard {
+        saved: vec![
+            saved("anthropic", "claude-opus-5-5", true),
+            saved("openai", "gpt-5.2", false),
+        ],
+        ..Wizard::default()
+    };
+    let html = wizard(Locale::ZhTw, w);
+    assert!(html.contains("data-current-ai"), "{html}");
+    assert!(html.contains("目前使用：") && html.contains("claude-opus-5-5"));
+    assert!(
+        html.contains(r#"data-preset="anthropic" data-state="current""#),
+        "{html}"
+    );
+    assert!(html.contains(r#"data-preset="openai" data-state="saved""#));
+    assert!(html.contains(r#"data-preset="ollama" data-state="new""#));
+    assert_eq!(html.matches(r#"data-badge="current""#).count(), 1);
+    assert!(html.contains("使用中") && html.contains("設定過") && html.contains("gpt-5.2"));
+
+    // Nothing saved yet (the first run): no marks.
+    let first = wizard(Locale::En, Wizard::default());
+    assert!(!first.contains("data-current-ai") && !first.contains("data-badge"));
+}

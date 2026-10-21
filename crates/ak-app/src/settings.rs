@@ -20,8 +20,14 @@ pub async fn get_settings(state: State<'_, AppState>) -> Res<AppSettings> {
 #[tauri::command]
 pub async fn save_settings(state: State<'_, AppState>, request: AppSettings) -> Res<()> {
     let mut inner = state.inner.lock().await;
-    let ai = inner.settings.ai.clone();
-    let mut settings = AppSettings { ai, ..request }.clamped();
+    // The connection is the connect wizard's.
+    let (ai, ai_known) = (inner.settings.ai.clone(), inner.settings.ai_known.clone());
+    let mut settings = AppSettings {
+        ai,
+        ai_known,
+        ..request
+    }
+    .clamped();
     settings.read_folders.retain(|f| Path::new(f).is_absolute());
     inner.settings = settings;
     inner.settings.save(&state.state_dir).map_err(fail)?;

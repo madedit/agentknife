@@ -3,12 +3,13 @@
 
 use ak_types::ipc::{
     ConnectError, ConnectRequest, ModelCheck, ModelChoice, PRESETS, PresetKind, ProviderPreset,
+    SavedConnection,
 };
 use ak_types::settings::AiConnection;
 use leptos::prelude::*;
 
 use crate::backend::{Backend, CallError};
-use crate::i18n::{t, tr};
+use crate::i18n::{t, t_with, tr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
@@ -32,6 +33,12 @@ pub struct Wizard {
     pub busy: bool,
     /// The user chose a model without tool calling on purpose.
     pub accept_no_tools: bool,
+    /// What was saved before, per provider (filled in again when chosen).
+    pub saved: Vec<SavedConnection>,
+    /// The keychain has a key for the chosen provider: it may stay empty.
+    pub has_key: bool,
+    /// The model saved before for the chosen provider (picked again if listed).
+    pub saved_model: Option<String>,
 }
 
 impl Default for Wizard {
@@ -47,18 +54,40 @@ impl Default for Wizard {
             error: None,
             busy: false,
             accept_no_tools: false,
+            saved: Vec::new(),
+            has_key: false,
+            saved_model: None,
         }
     }
 }
 
 impl Wizard {
     pub fn choose(&mut self, preset: &'static ProviderPreset) {
+        let saved = std::mem::take(&mut self.saved);
+        let before = saved.iter().find(|s| s.connection.provider == preset.id);
         *self = Wizard {
             step: Step::Details,
             preset: Some(preset),
-            address: preset.base_url.unwrap_or_default().to_owned(),
+            address: before
+                .and_then(|s| s.connection.base_url.clone())
+                .unwrap_or_else(|| preset.base_url.unwrap_or_default().to_owned()),
+            has_key: before.is_some_and(|s| s.has_key),
+            saved_model: before.map(|s| s.connection.model.clone()),
+            saved: saved.clone(),
             ..Wizard::default()
         };
+    }
+
+    /// What was saved for a provider.
+    pub fn saved_for(&self, provider: &str) -> Option<&SavedConnection> {
+        self.saved
+            .iter()
+            .find(|s| s.connection.provider == provider)
+    }
+
+    /// The connection in use.
+    pub fn current(&self) -> Option<&SavedConnection> {
+        self.saved.iter().find(|s| s.current)
     }
 
     pub fn back(&mut self) {
@@ -84,7 +113,7 @@ impl Wizard {
             return false;
         };
         !self.busy
-            && (!p.needs_key || !self.key.trim().is_empty())
+            && (!p.needs_key || self.has_key || !self.key.trim().is_empty())
             && (!self.shows_address() || !self.address.trim().is_empty())
     }
 
@@ -106,12 +135,16 @@ impl Wizard {
         self.busy = false;
         match result {
             Ok(models) => {
+                // The model saved before, else the preset's suggestion, else the first.
+                let listed = |id: &str| models.iter().any(|m| m.id == id);
+                let before = self.saved_model.clone().filter(|m| listed(m));
                 let suggested = self
                     .preset
                     .and_then(|p| p.suggested_model)
-                    .filter(|s| models.iter().any(|m| m.id == *s));
-                self.model = suggested
-                    .map(str::to_owned)
+                    .filter(|s| listed(s))
+                    .map(str::to_owned);
+                self.model = before
+                    .or(suggested)
                     .or_else(|| models.first().map(|m| m.id.clone()))
                     .unwrap_or_default();
                 self.models = models;
@@ -157,6 +190,17 @@ pub fn ConnectWizard(
 ) -> impl IntoView {
     let w = RwSignal::new(initial.unwrap_or_default());
     let backend = expect_context::<Backend>();
+
+    // What was saved before: marks the one in use, fills in the details again.
+    #[cfg(target_arch = "wasm32")]
+    {
+        let backend = backend.clone();
+        leptos::task::spawn_local(async move {
+            if let Ok(saved) = backend.saved_connections().await {
+                w.update(|w| w.saved = saved);
+            }
+        });
+    }
 
     let test = {
         let backend = backend.clone();
@@ -242,15 +286,42 @@ fn ChooseStep(w: RwSignal<Wizard>, on_cancel: Option<Callback<()>>) -> impl Into
             .iter()
             .filter(|p| p.kind == kind)
             .map(|p| {
+                // In use, set up before, or new.
+                let state = move || {
+                    w.with(|w| match w.saved_for(p.id) {
+                        Some(s) if s.current => "current",
+                        Some(_) => "saved",
+                        None => "new",
+                    })
+                };
                 view! {
                     <button
                         title=t("connect-preset-tip")
                         type="button"
                         data-preset=p.id
-                        class="rounded-xl border border-gray-200 bg-white p-4 text-left hover:border-blue-500 hover:shadow-sm dark:border-gray-700 dark:bg-gray-950"
+                        data-state=state
+                        class=move || if state() == "current" {
+                            "rounded-xl border-2 border-blue-600 bg-blue-50 p-4 text-left hover:shadow-sm dark:bg-blue-950"
+                        } else {
+                            "rounded-xl border border-gray-200 bg-white p-4 text-left hover:border-blue-500 hover:shadow-sm dark:border-gray-700 dark:bg-gray-950"
+                        }
                         on:click=move |_| w.update(|w| w.choose(p))
                     >
-                        <span class="block font-medium">{tr(format!("connect-preset-{}", p.id))}</span>
+                        <span class="flex items-center gap-2">
+                            <span class="font-medium">{tr(format!("connect-preset-{}", p.id))}</span>
+                            {move || match state() {
+                                "current" => Some(view! {
+                                    <span data-badge="current" class="rounded-full bg-blue-600 px-2 py-0.5 text-xs text-white">{t("connect-in-use")}</span>
+                                }.into_any()),
+                                "saved" => Some(view! {
+                                    <span data-badge="saved" class="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-200">{t("connect-set-up")}</span>
+                                }.into_any()),
+                                _ => None,
+                            }}
+                        </span>
+                        {move || w.with(|w| w.saved_for(p.id).map(|s| s.connection.model.clone())).filter(|m| !m.is_empty()).map(|m| view! {
+                            <span data-saved-model="" class="mt-1 block truncate font-mono text-xs text-gray-500 dark:text-gray-400">{m}</span>
+                        })}
                         <span class="mt-1 block text-sm text-gray-600 dark:text-gray-400">
                             {tr(format!("connect-preset-{}-about", p.id))}
                         </span>
@@ -266,7 +337,20 @@ fn ChooseStep(w: RwSignal<Wizard>, on_cancel: Option<Callback<()>>) -> impl Into
             </section>
         }
     };
+    let current = move || {
+        w.with(|w| {
+            w.current().map(|s| {
+                let name = tr(format!("connect-preset-{}", s.connection.provider))();
+                (name, s.connection.model.clone())
+            })
+        })
+    };
     view! {
+        {move || current().map(|(name, model)| view! {
+            <p data-current-ai="" class="mt-4 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-100">
+                {t_with("connect-current", [("name", name), ("model", model)])}
+            </p>
+        })}
         {group(PresetKind::Cloud, "connect-cloud", "connect-cloud-about")}
         {group(PresetKind::Local, "connect-local", "connect-local-about")}
         {on_cancel.map(|cancel| view! {
@@ -299,6 +383,8 @@ fn DetailsStep(
                     {t("connect-key")}
                     <input
                         type="password"
+                        data-field="key"
+                        placeholder=move || w.with(|w| w.has_key).then(|| t("connect-key-saved")())
                         autocomplete="off"
                         spellcheck="false"
                         class=FIELD
@@ -574,6 +660,67 @@ mod tests {
         // Another model: consent and check start over.
         w.pick("qwen3:8b");
         assert!(w.check.is_none() && !w.accept_no_tools && !w.can_save());
+    }
+
+    fn saved(
+        provider: &str,
+        base_url: Option<&str>,
+        model: &str,
+        has_key: bool,
+    ) -> SavedConnection {
+        SavedConnection {
+            connection: AiConnection {
+                provider: provider.into(),
+                base_url: base_url.map(Into::into),
+                model: model.into(),
+                effort: None,
+            },
+            has_key,
+            current: false,
+        }
+    }
+
+    #[test]
+    fn what_was_saved_is_filled_in_again() {
+        let mut w = Wizard {
+            saved: vec![
+                saved("anthropic", None, "claude-sonnet-5-5", true),
+                saved(
+                    "ollama",
+                    Some("http://10.0.0.5:11434/v1"),
+                    "qwen3:8b",
+                    false,
+                ),
+            ],
+            ..Wizard::default()
+        };
+        w.saved[1].current = true;
+        assert_eq!(
+            w.current().map(|s| s.connection.provider.as_str()),
+            Some("ollama")
+        );
+
+        // A saved key: testing works without typing it again (the app uses the
+        // keychain's), and the model saved before is picked over the suggestion.
+        w.choose(preset("anthropic").unwrap_or(&PRESETS[0]));
+        assert!(w.has_key && w.key.is_empty() && w.can_test());
+        assert_eq!(w.request().map(|r| r.api_key), Some(None));
+        w.models_loaded(Ok(models(&["claude-opus-5-5", "claude-sonnet-5-5"])));
+        assert_eq!(w.model, "claude-sonnet-5-5");
+        assert_eq!(w.saved.len(), 2, "kept for going back");
+
+        // The address saved before, not the preset's.
+        w.back();
+        w.back();
+        w.choose(preset("ollama").unwrap_or(&PRESETS[0]));
+        assert_eq!(w.address, "http://10.0.0.5:11434/v1");
+        // A saved model no longer offered: the usual choice.
+        w.models_loaded(Ok(models(&["llama3.2:3b"])));
+        assert_eq!(w.model, "llama3.2:3b");
+
+        // Never saved: as before.
+        let w = chosen("openai");
+        assert!(!w.has_key && !w.can_test() && w.saved_model.is_none());
     }
 
     #[test]

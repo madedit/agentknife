@@ -463,6 +463,12 @@
   - logs::BuildLog: a dark panel on top of the preview stage (bottom, up to half its height) with the newest 200 lines of the building sources, following the bottom. It appears when the preview builds (first build or a rebuild: screens and backend lines) or while "Run in a real window" builds (window lines), and goes away when that ends. A failed build leaves the error cover, which already has Details.
   - Header: what is building, "Make small" / "Show more" (small shows only the newest line), and "Full log" to the Log tab in full mode. A new build opens it big again.
   - Tests: last_lines (sources, newest N); tests/preview.rs (shown with the build's lines and not the AI's while building; gone when ready).
-- P1-SHELL-001 (follow-up) — (hash in next commit) — every button shows what it does when the mouse rests on it (user request, after asking what "Reload" does).
+- P1-SHELL-001 (follow-up) — 4c05b87 — every button shows what it does when the mouse rests on it (user request, after asking what "Reload" does).
   - About 70 buttons got a `title` from new fluent `…-tip` strings (en, zh-TW): home, connect wizard, settings, the chat (plan, questions, permission, stuck, interrupted, tools and bundle cards), files and version history, preview, log and build log window, and the center tabs (`{tab}-tip`). Repeated actions share one (`common-cancel-tip`, `common-ok-tip`, `connect-back-tip`, `stuck-roll-back-tip`). The demo page (the user's stand-in app) is left out.
   - tests/tooltips.rs scans the shell's sources: each `<button` opening tag (outside comments) must contain `title=`.
+- P1-APP-001 (follow-up) — (hash in next commit) — the connect wizard remembers what was set up and marks the AI in use (user request).
+  - Before: only the connection in use was saved, so "Change the AI" started blank (preset address, the key asked again, the suggested model).
+  - AppSettings::ai_known: the last saved connection per provider (`connect()` sets `ai` and replaces that provider's entry; `known_connections()` also covers files from before). save_settings keeps it.
+  - cmd::SAVED_CONNECTIONS → Vec<SavedConnection {connection, has_key, current}>; has_key asks the keychain, the key never reaches the UI.
+  - Wizard: a "Now using {name} · {model}" line, the in-use card outlined with an "In use" badge, "Set up before" on the others with the saved model shown. Choosing one fills in its address and saved model (if still listed); with a saved key the field says so and may stay empty (list/check/save then use the keychain's key, and saving keeps it).
+  - Tests: settings connect/known_connections (incl. an old file), wizard fill-in (key, address, model, gone model), wizard render (marks; none on first run).

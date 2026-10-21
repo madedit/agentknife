@@ -10,8 +10,8 @@ use ak_types::ipc::CrashReports;
 use ak_types::ipc::{
     AGENT_EVENT, Answer, BundleFailure, BundleResult, ConnectError, ConnectRequest, DeleteProject,
     DoctorCheck, FileEntry, FileText, HomeState, InterruptionChoice, LOG_EVENT, MarkVersion,
-    ModelCheck, ModelChoice, NewProject, OpenedProject, PREVIEW_EVENT, SaveFile, SendMessage,
-    StuckChoice, TimelineRow, cmd,
+    ModelCheck, ModelChoice, NewProject, OpenedProject, PREVIEW_EVENT, SaveFile, SavedConnection,
+    SendMessage, StuckChoice, TimelineRow, cmd,
 };
 use ak_types::log::LogLine;
 use ak_types::preview::PreviewStatus;
@@ -258,6 +258,10 @@ impl Backend {
 
     pub async fn save_connection(&self, r: &ConnectRequest) -> Result<(), CallError> {
         self.call(cmd::SAVE_CONNECTION, Some(r)).await
+    }
+
+    pub async fn saved_connections(&self) -> Result<Vec<SavedConnection>, CallError> {
+        self.call(cmd::SAVED_CONNECTIONS, None::<()>).await
     }
 
     pub async fn send_message(&self, m: &SendMessage) -> Result<(), CallError> {

@@ -32,6 +32,9 @@ pub mod cmd {
     /// [`ConnectRequest`](super::ConnectRequest) → `()`: the key goes to the
     /// system keychain, the connection to the settings.
     pub const SAVE_CONNECTION: &str = "save_connection";
+    /// `()` → `Vec<`[`SavedConnection`](super::SavedConnection)`>`: what the
+    /// connect wizard fills in again.
+    pub const SAVED_CONNECTIONS: &str = "saved_connections";
     /// [`SendMessage`](super::SendMessage) → `()`: starts a turn in the open
     /// project; its progress arrives as [`AGENT_EVENT`](super::AGENT_EVENT).
     pub const SEND_MESSAGE: &str = "send_message";
@@ -113,6 +116,7 @@ pub mod cmd {
         LIST_MODELS,
         CHECK_MODEL,
         SAVE_CONNECTION,
+        SAVED_CONNECTIONS,
         SEND_MESSAGE,
         ANSWER_CONFIRMATION,
         ANSWER_PLAN,
@@ -339,6 +343,16 @@ pub struct ConnectRequest {
     pub connection: AiConnection,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
+}
+
+/// A provider's last saved connection, for the connect wizard. The key itself
+/// never leaves the app; `has_key` says the keychain has one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedConnection {
+    pub connection: AiConnection,
+    pub has_key: bool,
+    /// The connection in use.
+    pub current: bool,
 }
 
 impl std::fmt::Debug for ConnectRequest {

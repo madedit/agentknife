@@ -78,7 +78,12 @@ pub enum Plans {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
+    /// The connection in use.
     pub ai: Option<AiConnection>,
+    /// The last connection saved for each provider (one per provider), so the
+    /// connect wizard fills in its address and model again. Only the connect
+    /// wizard changes it.
+    pub ai_known: Vec<AiConnection>,
     /// `None` follows the system.
     pub language: Option<crate::i18n::Locale>,
     pub permissions: Permissions,
@@ -98,6 +103,24 @@ pub struct AppSettings {
 impl AppSettings {
     pub const FIX_ATTEMPTS: std::ops::RangeInclusive<u32> = 1..=10;
     pub const KEEP_TURNS: std::ops::RangeInclusive<u32> = 10..=500;
+
+    /// Uses `c` from now on and remembers it for its provider.
+    pub fn connect(&mut self, c: AiConnection) {
+        self.ai_known.retain(|k| k.provider != c.provider);
+        self.ai_known.push(c.clone());
+        self.ai = Some(c);
+    }
+
+    /// What is known per provider: the remembered ones, and the one in use
+    /// (settings from before `ai_known` only have that).
+    pub fn known_connections(&self) -> Vec<AiConnection> {
+        let mut known = self.ai_known.clone();
+        if let Some(ai) = &self.ai {
+            known.retain(|k| k.provider != ai.provider);
+            known.push(ai.clone());
+        }
+        known
+    }
 
     /// Values kept in their ranges; a limit of 0 or less means none.
     pub fn clamped(mut self) -> AppSettings {
@@ -124,6 +147,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         AppSettings {
             ai: None,
+            ai_known: Vec::new(),
             language: None,
             permissions: Permissions::default(),
             plans: Plans::default(),
@@ -172,6 +196,33 @@ mod tests {
         })
         .unwrap();
         assert!(json.contains(r#""language":"zh-TW""#), "{json}");
+    }
+
+    #[test]
+    fn each_provider_remembers_its_last_connection() {
+        let mut s = AppSettings::default();
+        s.connect(global());
+        let claude = AiConnection {
+            provider: "anthropic".into(),
+            base_url: None,
+            model: "claude-opus-5-5".into(),
+            effort: None,
+        };
+        s.connect(claude.clone());
+        s.connect(AiConnection {
+            model: "qwen3:32b".into(),
+            ..global()
+        });
+        assert_eq!(s.ai.as_ref().map(|a| a.model.as_str()), Some("qwen3:32b"));
+        let known = s.known_connections();
+        assert_eq!(known.len(), 2, "{known:?}");
+        assert!(known.contains(&claude));
+        assert!(known.iter().any(|k| k.model == "qwen3:32b"));
+
+        // A file from before `ai_known`: the one in use is known.
+        let old: AppSettings =
+            serde_json::from_str(r#"{"ai":{"provider":"ollama","model":"qwen3:8b"}}"#).unwrap();
+        assert_eq!(old.known_connections().len(), 1);
     }
 
     fn global() -> AiConnection {

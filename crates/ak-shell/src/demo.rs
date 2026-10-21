@@ -21,8 +21,8 @@ use ak_types::doctor::{
 };
 use ak_types::ipc::{
     BundleProgress, BundleResult, ConnectError, ConnectRequest, DoctorCheck, FileEntry, FileText,
-    HomeState, ModelCheck, ModelChoice, OpenedProject, ProjectRow, SaveFile, SendMessage,
-    TimelineRow, cmd,
+    HomeState, ModelCheck, ModelChoice, OpenedProject, ProjectRow, SaveFile, SavedConnection,
+    SendMessage, TimelineRow, cmd,
 };
 use ak_types::preview::{PreviewStatus, ServerState};
 use ak_types::settings::AiConnection;
@@ -69,6 +69,8 @@ const DEMO_FOLDER: &str = "~/AgentKnife/Projects";
 pub struct Demo {
     projects: Vec<ProjectRow>,
     ai: Option<AiConnection>,
+    /// Providers whose key was saved (the demo's keychain).
+    keys: std::collections::BTreeSet<String>,
     next: u32,
     /// Event name → listeners (`Backend::on`).
     pub(crate) listeners: BTreeMap<&'static str, Vec<Handler>>,
@@ -170,6 +172,7 @@ impl Demo {
                 },
             ],
             ai: None,
+            keys: Default::default(),
             next: 3,
             listeners: BTreeMap::new(),
             doctor_missing: vec!["trunk", "tauri-cli", "webview2"],
@@ -330,7 +333,12 @@ impl Demo {
             cmd::SAVE_SETTINGS => {
                 let s: ak_types::settings::AppSettings =
                     serde_json::from_value(req).map_err(|e| text(e.to_string()))?;
-                d.settings = ak_types::settings::AppSettings { ai: None, ..s }.clamped();
+                d.settings = ak_types::settings::AppSettings {
+                    ai: None,
+                    ai_known: d.settings.ai_known.clone(),
+                    ..s
+                }
+                .clamped();
                 Ok(Value::Null)
             }
             cmd::CRASH_REPORTS => Ok(json!(ak_types::ipc::CrashReports {
@@ -415,7 +423,8 @@ impl Demo {
                 let address = r.connection.base_url.clone().unwrap_or_default();
                 let needs_key =
                     ak_types::ipc::preset(&r.connection.provider).is_some_and(|p| p.needs_key);
-                if (needs_key && key.is_empty()) || key.contains("bad") {
+                let saved = d.keys.contains(&r.connection.provider);
+                if (needs_key && key.is_empty() && !saved) || key.contains("bad") {
                     return Err(err(ConnectError::WrongKey));
                 }
                 if address.contains("nothing") {
@@ -447,8 +456,28 @@ impl Demo {
             cmd::SAVE_CONNECTION => {
                 let r: ConnectRequest =
                     serde_json::from_value(req).map_err(|e| text(e.to_string()))?;
-                d.ai = Some(r.connection);
+                let c = r.connection;
+                if r.api_key.is_some() {
+                    d.keys.insert(c.provider.clone());
+                }
+                d.settings.ai_known.retain(|k| k.provider != c.provider);
+                d.settings.ai_known.push(c.clone());
+                d.ai = Some(c);
                 Ok(Value::Null)
+            }
+            cmd::SAVED_CONNECTIONS => {
+                let current = d.ai.as_ref().map(|a| a.provider.clone());
+                let saved: Vec<SavedConnection> = d
+                    .settings
+                    .ai_known
+                    .iter()
+                    .map(|c| SavedConnection {
+                        connection: c.clone(),
+                        has_key: d.keys.contains(&c.provider),
+                        current: current.as_ref() == Some(&c.provider),
+                    })
+                    .collect();
+                Ok(json!(saved))
             }
             cmd::SEND_MESSAGE => {
                 let m: SendMessage =

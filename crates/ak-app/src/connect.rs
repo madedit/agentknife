@@ -5,7 +5,7 @@ use std::sync::Arc;
 use ak_providers::connect::{check_model as check, list_models as list, provider_for};
 use ak_providers::credentials::{ApiKey, CredentialStore, Keychain, account};
 use ak_providers::{Provider, ReqwestTransport};
-use ak_types::ipc::{ConnectError, ConnectRequest, ModelCheck, ModelChoice};
+use ak_types::ipc::{ConnectError, ConnectRequest, ModelCheck, ModelChoice, SavedConnection};
 use ak_types::settings::AiConnection;
 use tauri::State;
 
@@ -62,11 +62,30 @@ pub async fn save_connection(
             })?;
     }
     let mut inner = state.inner.lock().await;
-    inner.settings.ai = Some(request.connection);
+    inner.settings.connect(request.connection);
     use crate::state::SettingsFile;
     inner.settings.save(&state.state_dir).map_err(|e| {
         to_value(ConnectError::Other {
             detail: e.to_string(),
         })
     })
+}
+
+/// Each provider's last saved connection, and whether the keychain has its key.
+#[tauri::command]
+pub async fn saved_connections(
+    state: State<'_, AppState>,
+) -> Result<Vec<SavedConnection>, serde_json::Value> {
+    let inner = state.inner.lock().await;
+    let current = inner.settings.ai.as_ref().map(|a| a.provider.clone());
+    Ok(inner
+        .settings
+        .known_connections()
+        .into_iter()
+        .map(|c| SavedConnection {
+            has_key: Keychain.get(&account(&c)).ok().flatten().is_some(),
+            current: current.as_deref() == Some(c.provider.as_str()),
+            connection: c,
+        })
+        .collect())
 }
