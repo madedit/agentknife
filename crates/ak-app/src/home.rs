@@ -1,13 +1,16 @@
 //! The home screen's commands, and opening a project (preview, conversation,
 //! interruption, greeting).
 
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use ak_preview::log::LogBook;
 use ak_preview::{Preview, PreviewSession, profiles};
 use ak_project::{Project, RecentProject, Timeline};
-use ak_types::ipc::{HomeState, LOG_EVENT, NewProject, OpenedProject, PREVIEW_EVENT, ProjectRow};
+use ak_types::ipc::{
+    DeleteProject, HomeState, LOG_EVENT, NewProject, OpenedProject, PREVIEW_EVENT, ProjectRow,
+};
 use ak_types::stack::StackProfile;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
@@ -16,6 +19,9 @@ use tokio::sync::Mutex;
 use crate::state::{AppState, OpenProject};
 use crate::{Res, fail, ui_locale};
 
+/// Moving a folder to the trash: tries after the first, and the wait between.
+const TRASH_TRIES: u32 = 5;
+const TRASH_WAIT: Duration = Duration::from_millis(400);
 /// New log lines are sent to the window at most this often.
 const LOG_BATCH: Duration = Duration::from_millis(200);
 
@@ -47,6 +53,51 @@ pub async fn home_state(state: State<'_, AppState>) -> Res<HomeState> {
         ai: inner.settings.ai.clone(),
         projects_folder: inner.registry.default_parent().display().to_string(),
     })
+}
+
+/// Takes a project off the list; with `folder`, its folder goes to the trash.
+/// An open project is closed first: its preview keeps files in use.
+#[tauri::command]
+pub async fn delete_project(state: State<'_, AppState>, request: DeleteProject) -> Res<HomeState> {
+    let (open, path) = {
+        let mut inner = state.inner.lock().await;
+        let path = inner
+            .registry
+            .recent()
+            .iter()
+            .find(|r| r.entry.id == request.id)
+            .map(|r| r.entry.path.clone())
+            .ok_or_else(|| fail(format!("no project {}", request.id)))?;
+        let is_open = inner.open.as_ref().is_some_and(|o| o.root == path);
+        (if is_open { inner.open.take() } else { None }, path)
+    };
+    close(open).await;
+    if request.folder && path.is_dir() {
+        trash_folder(&path).await.map_err(fail)?;
+    }
+    state
+        .inner
+        .lock()
+        .await
+        .registry
+        .forget(&request.id)
+        .map_err(fail)?;
+    home_state(state).await
+}
+
+/// Moves a folder to the system's trash. Windows releases the files of just
+/// stopped programs a moment later, so it tries a few times.
+async fn trash_folder(path: &Path) -> Result<(), trash::Error> {
+    let mut tries = 0;
+    loop {
+        match trash::delete(path) {
+            Err(_) if tries < TRASH_TRIES => {
+                tries += 1;
+                tokio::time::sleep(TRASH_WAIT).await;
+            }
+            done => return done,
+        }
+    }
 }
 
 #[tauri::command]

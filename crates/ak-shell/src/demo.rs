@@ -269,6 +269,18 @@ impl Demo {
         let req = request.unwrap_or(Value::Null);
         let err = |e: ConnectError| serde_json::to_value(e).unwrap_or(Value::Null);
         match command {
+            cmd::DELETE_PROJECT => {
+                let r: ak_types::ipc::DeleteProject =
+                    serde_json::from_value(req).map_err(|e| text(e.to_string()))?;
+                d.projects.retain(|p| p.id != r.id);
+                let mut projects = d.projects.clone();
+                projects.sort_by_key(|p| std::cmp::Reverse(p.last_opened_at));
+                Ok(json!(HomeState {
+                    projects,
+                    ai: d.ai.clone(),
+                    projects_folder: DEMO_FOLDER.into(),
+                }))
+            }
             cmd::HOME_STATE => {
                 let mut projects = d.projects.clone();
                 projects.sort_by_key(|p| std::cmp::Reverse(p.last_opened_at));

@@ -208,7 +208,7 @@ pub fn AppView(
                     }
                 }
                 Screen::Home => view! {
-                    <HomeScreen home=home.into() now=crate::backend::now() on_open=open />
+                    <HomeScreen home now=crate::backend::now() on_open=open />
                 }.into_any(),
                 Screen::Workspace(_) => view! { <Workspace layout /> }.into_any(),
                 Screen::Settings => {

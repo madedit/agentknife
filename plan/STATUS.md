@@ -443,7 +443,7 @@
     - kill_tree is used when replacing the window and when closing the project.
   - Tests: app_started / build_failed line checks.
   - Live: test-project's window opens in 52 s, and a second click replaces it with nothing left behind. The failed-build notice is verified in the log commit below.
-- P1-APP-001 (follow-up) — (hash in next commit) — a "Log" tab (full mode, next to Preview / Code) with all output of the open project (user request).
+- P1-APP-001 (follow-up) — 80b7a29 — a "Log" tab (full mode, next to Preview / Code) with all output of the open project (user request).
   - Sources: screens (trunk), app backend (cargo run), real window (cargo tauri dev), packaging, AI steps (tool + detail, then output).
   - ak_types::log: LogSource, LogLine {seq, at_ms, source, text}. Commands get_log and clear_log; LOG_EVENT carries batches of new lines.
   - ak_preview::log::LogBook: shared ring buffer (5000 lines per project, in memory), ANSI stripped, progress bars and blank lines skipped, plus a live listener. Preview owns one; the Watchers push into it; run_app and the turn's events push too.
@@ -454,3 +454,9 @@
   - Live (cargo xtask dev, test-project):
     - The Log tab lists the screens' and the background part's output.
     - With a build error only the real window sees (cfg(not(feature = "dev"))), "Run in a real window" shows the red notice after 5.6 s, with the compiler error under Details, and nothing is left behind.
+- P1-SHELL-002 (follow-up) — (hash in next commit) — a "Delete" button on every home-screen project (user request; the user chose to offer both ways).
+  - The button opens an in-row confirmation with "Remove from list only" (Registry::forget, folder kept) and "Move the folder to the trash too" (trash crate 5.2.9, then forget). The trash option is offered only when the folder exists. The OS name of the trash comes from a fluent `$os` select (macOS: 垃圾桶 / Trash).
+  - cmd::DELETE_PROJECT `DeleteProject {id, folder}` → HomeState. If that project is open (the preview keeps running after going home), it is closed first. Trashing retries briefly while Windows still holds the stopped processes' files.
+  - Tests: ak-app tests/home.rs (mock runtime: forget keeps the folder, the saved list agrees, an unknown id fails; the trash itself is not run in tests, it would fill the real Recycle Bin); render.rs (a Delete button per row, no dialog before a click).
+  - Live (cargo xtask dev): created 刪除測試A and 刪除測試B (B left open in the background). A → "Remove from list only": off the list, folder kept. B → "Move the folder to the Recycle Bin too": off the list after 1.6 s, the open project was closed first, and the folder is in the Recycle Bin. The leftover A folder was then sent to the Recycle Bin by hand.
+

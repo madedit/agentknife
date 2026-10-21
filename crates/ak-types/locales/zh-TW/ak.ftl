@@ -218,6 +218,17 @@ home-opened-yesterday = 昨天打開過
 # $days（數字）至少 2
 home-opened-days = { $days } 天前打開過
 home-missing = 找不到資料夾
+home-delete = 刪除
+home-delete-title = 要刪除「{ $name }」嗎？
+home-delete-about = { $os ->
+    [macos] 「只從清單移除」會把資料夾留在這台電腦上，之後可以用「打開資料夾…」加回來。移到垃圾桶會連資料夾一起丟掉，需要的話還能從垃圾桶救回。
+   *[other] 「只從清單移除」會把資料夾留在這台電腦上，之後可以用「打開資料夾…」加回來。移到資源回收筒會連資料夾一起丟掉，需要的話還能從資源回收筒救回。
+}
+home-delete-forget = 只從清單移除
+home-delete-trash = { $os ->
+    [macos] 連資料夾一起移到垃圾桶
+   *[other] 連資料夾一起移到資源回收筒
+}
 home-error = 沒有成功。
 
 ## 連接 AI 精靈

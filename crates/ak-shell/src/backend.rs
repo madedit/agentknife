@@ -8,10 +8,10 @@ use ak_types::agent::{AgentEvent, PlanDecision};
 use ak_types::doctor::SystemAction;
 use ak_types::ipc::CrashReports;
 use ak_types::ipc::{
-    AGENT_EVENT, Answer, BundleFailure, BundleResult, ConnectError, ConnectRequest, DoctorCheck,
-    FileEntry, FileText, HomeState, InterruptionChoice, LOG_EVENT, MarkVersion, ModelCheck,
-    ModelChoice, NewProject, OpenedProject, PREVIEW_EVENT, SaveFile, SendMessage, StuckChoice,
-    TimelineRow, cmd,
+    AGENT_EVENT, Answer, BundleFailure, BundleResult, ConnectError, ConnectRequest, DeleteProject,
+    DoctorCheck, FileEntry, FileText, HomeState, InterruptionChoice, LOG_EVENT, MarkVersion,
+    ModelCheck, ModelChoice, NewProject, OpenedProject, PREVIEW_EVENT, SaveFile, SendMessage,
+    StuckChoice, TimelineRow, cmd,
 };
 use ak_types::log::LogLine;
 use ak_types::preview::PreviewStatus;
@@ -233,6 +233,15 @@ impl Backend {
 
     pub async fn open_project(&self, id: &str) -> Result<OpenedProject, CallError> {
         self.call(cmd::OPEN_PROJECT, Some(id)).await
+    }
+
+    /// Takes a project off the list (`folder`: its folder goes to the trash too).
+    pub async fn delete_project(&self, id: &str, folder: bool) -> Result<HomeState, CallError> {
+        let request = DeleteProject {
+            id: id.to_owned(),
+            folder,
+        };
+        self.call(cmd::DELETE_PROJECT, Some(request)).await
     }
 
     pub async fn open_folder(&self) -> Result<Option<OpenedProject>, CallError> {

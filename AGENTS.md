@@ -270,6 +270,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Template rule: Trunk watches only what the screens are built from (`[watch] watch = [...]`). Writes elsewhere (`.agentknife/`, notes, the backend) must not reload the page while the agent works.
 - **Projects:**
   - The project list is the home screen. Projects default to `~/AgentKnife/Projects/<name>`.
+  - Deleting a project (`delete_project`) either removes it from the list only, or also moves its folder to the system trash (`trash` crate). AgentKnife never permanently deletes a user's project folder. An open project is closed first, because its preview holds files.
   - The AI connection is global, with an optional per-project override.
   - Each project's `.agentknife/` folder contains `PROJECT.md` (requirements and decisions in plain language), `plan/STATUS.md`, `plan/tasks.md` (same formats as §8), and the chat history.
   - The agent reads these at session start. Long chats are compacted.

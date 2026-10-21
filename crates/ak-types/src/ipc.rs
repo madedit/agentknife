@@ -21,6 +21,10 @@ pub mod cmd {
     /// `()` → `Option<OpenedProject>`: asks for a folder (the system's folder
     /// picker) and opens it as a project; `None` when the user cancels.
     pub const OPEN_FOLDER: &str = "open_folder";
+    /// [`DeleteProject`](super::DeleteProject) → [`HomeState`](super::HomeState):
+    /// removes a project from the list, and with `folder` also moves its folder
+    /// to the system's trash.
+    pub const DELETE_PROJECT: &str = "delete_project";
     /// [`ConnectRequest`](super::ConnectRequest) → `Vec<ModelChoice>`
     pub const LIST_MODELS: &str = "list_models";
     /// [`ConnectRequest`](super::ConnectRequest) with a model → [`ModelCheck`](super::ModelCheck)
@@ -104,6 +108,7 @@ pub mod cmd {
         HOME_STATE,
         CREATE_PROJECT,
         OPEN_PROJECT,
+        DELETE_PROJECT,
         OPEN_FOLDER,
         LIST_MODELS,
         CHECK_MODEL,
@@ -318,6 +323,13 @@ pub struct HomeState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewProject {
     pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeleteProject {
+    pub id: String,
+    /// Also move the project's folder to the trash (else it stays on disk).
+    pub folder: bool,
 }
 
 /// A connection being set up. `connection.model` may be empty when listing

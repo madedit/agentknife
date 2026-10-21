@@ -143,6 +143,12 @@ fn home_lists_projects_and_offers_new_and_open() {
     assert!(html.contains(r#"data-screen="home""#));
     assert!(html.contains(r#"data-project="p1""#) && html.contains("Shopping List"));
     assert!(html.contains(r#"data-action="new""#) && html.contains(r#"data-action="open-folder""#));
+    assert!(
+        html.contains(r#"data-action="delete-project" data-for="p1""#),
+        "{html}"
+    );
+    // The confirmation only shows after a click.
+    assert!(!html.contains(r#"data-dialog="delete-project""#));
     // No mode switch outside a project.
     assert!(!html.contains("data-mode="));
     // Opened long ago (unix 0).

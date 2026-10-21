@@ -218,6 +218,17 @@ home-opened-yesterday = Opened yesterday
 # $days (Number) at least 2
 home-opened-days = Opened { $days } days ago
 home-missing = Folder not found
+home-delete = Delete
+home-delete-title = Delete “{ $name }”?
+home-delete-about = { $os ->
+    [macos] “Remove from list only” keeps the folder on this computer: “Open a folder…” brings it back. Moving it to the Trash removes the folder too; you can still get it back from the Trash.
+   *[other] “Remove from list only” keeps the folder on this computer: “Open a folder…” brings it back. Moving it to the Recycle Bin removes the folder too; you can still get it back from the Recycle Bin.
+}
+home-delete-forget = Remove from list only
+home-delete-trash = { $os ->
+    [macos] Move the folder to the Trash too
+   *[other] Move the folder to the Recycle Bin too
+}
 home-error = That did not work.
 
 ## Connect wizard
