@@ -427,9 +427,19 @@
   - tests/e2e.rs (ignored; `cargo xtask e2e`): mock runtime + ScriptedProvider; save_connection → home_state; doctor_check (AK_E2E_PROVISION=1 → doctor_install); create_project → greeting turn, preview ready and answering; to-do turn (write src/main.rs from tests/fixtures/todo/main.rs, add serde_json + web-sys to Cargo.toml) → build check ok, timeline entry; selected add-button → the AI's request carries the selection note, button green, build ok; bundle → file in the project, OS, install steps, bundle-progress events. Stops the preview on drop.
   - Local run (Windows, toolchain present): passes in 213 s.
   - CI: job `e2e` on the three OSes (Linux Tauri packages, toolchain folder cached by versions.toml, AK_E2E_PROVISION=1); not run yet: no GitHub remote (same as P1-CORE-003).
-- P1-APP-002 (follow-up) — (hash in next commit) — folders the AI may read without asking (user request after the per-file "outside the project" prompts).
+- P1-APP-002 (follow-up) — 12e8e4e — folders the AI may read without asking (user request after the per-file "outside the project" prompts).
   - `AppSettings::read_folders` (clamped: trimmed, no empties or duplicates); `cmd::PICK_FOLDER` (`pick_folder`, folder dialog). save_settings keeps absolute paths only.
   - ak-app turn: `allowed_folders` (existing absolute folders) join the toolchain's reference folders (read tools + ProjectPolicy read-only commands); `folders_note` lists them in the system prompt as read-only. Writes there still ask/deny as before.
   - Settings page: section "AI 可以直接讀取的資料夾" with each folder, Remove, and "加入資料夾…"; demo answers no folder.
   - Tests: settings clamp, allowed_folders/folders_note, the settings page list. Live (cargo xtask dev, local model): with C:\dev\agentknife\docs allowed, "read docs\SPEC.md, tell me its first heading" → read with no confirmation card, right answer. The native folder dialog itself was not driven by script.
 - P1-APP-001 (follow-up) — needs: nothing urgent — if AgentKnife is killed instead of closed, the open project's preview processes (trunk, the app backend) keep running until the user ends them. On start, AgentKnife could stop leftovers it recorded (pids in the data folder).
+- P1-APP-001 (bug) — (hash in next commit) — "Run in a real window" showed "Opening…" and nothing happened.
+  - Cause: `cargo tauri dev` rebuilt target/debug/app.exe, which the preview runs. Windows refused ("failed to remove file … os error 5"), and the output was discarded.
+  - Fix:
+    - `cargo tauri dev -- --target-dir <project>/target/ak-window`.
+    - run_app waits for cargo's "Running `…`" plus 3 s.
+    - When the process exits, or cargo prints "error: could not compile" or "error: failed to", it stops the tree and returns the output. `cargo tauri dev` itself keeps waiting for file changes after a failed build.
+    - The pane shows the output in a red notice with Details.
+    - kill_tree is used when replacing the window and when closing the project.
+  - Tests: app_started / build_failed line checks.
+  - Live: test-project's window opens in 52 s, and a second click replaces it with nothing left behind. The failed-build notice was not seen live: the test was stopped by the user.

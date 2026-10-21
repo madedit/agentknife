@@ -112,12 +112,13 @@ pub async fn open_folder<R: Runtime>(
 
 /// Closes what is open: stops the turn, the preview and the app window.
 pub async fn close(open: Option<OpenProject>) {
-    let Some(mut o) = open else { return };
+    let Some(o) = open else { return };
     if let Some(c) = &o.cancel {
         c.cancel();
     }
-    if let Some(child) = o.app_window.as_mut() {
-        let _ = child.start_kill();
+    // The whole tree: `cargo tauri dev` leaves trunk and the app behind.
+    if let Some(pid) = o.app_window.as_ref().and_then(|c| c.id()) {
+        ak_preview::process::kill_tree(pid).await;
     }
     o.preview.stop().await;
 }

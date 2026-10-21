@@ -1,13 +1,18 @@
 //! The open project's files, history, preview status and real window.
 
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use ak_agent::tools::path::resolve;
+use ak_preview::log::{strip_ansi, tail};
+use ak_preview::process::{kill_tree, read_lines};
 use ak_project::{CheckpointKind, Timeline};
 use ak_types::ipc::{FileEntry, FileText, MarkVersion, SaveFile, TimelineRow};
 use ak_types::preview::PreviewStatus;
 use ak_types::stack::{CommandSpec, Tool};
 use tauri::State;
+use tokio::sync::mpsc;
 
 use crate::state::AppState;
 use crate::{Res, fail};
@@ -189,36 +194,150 @@ pub async fn preview_status(state: State<'_, AppState>) -> Res<PreviewStatus> {
         .unwrap_or_default())
 }
 
+/// Where "Run in a real window" builds the app, under the project's `target/`.
+/// Not `target/debug`: the preview runs its own `app.exe` from there, and Windows
+/// cannot replace a running program.
+const WINDOW_TARGET: &str = "ak-window";
+/// The window counts as open when the app still runs this long after starting.
+const WINDOW_SETTLE: Duration = Duration::from_secs(3);
+/// Output lines kept for Details.
+const WINDOW_LINES: usize = 80;
+
+/// cargo's line as it starts the built app (`Running `path``), not tauri's
+/// `Running DevCommand (…)`.
+fn app_started(line: &str) -> bool {
+    line.trim_start().starts_with("Running `")
+}
+
+/// cargo's last word on a failed build. `cargo tauri dev` does not exit then: it
+/// waits for the files to change.
+fn build_failed(line: &str) -> bool {
+    line.starts_with("error: could not compile") || line.starts_with("error: failed to")
+}
+
 /// "Run in a real window": the app as it runs installed (no preview bridge),
-/// through `cargo tauri dev` with AgentKnife's toolchain. A second click
-/// replaces the first window.
+/// through `cargo tauri dev` with AgentKnife's toolchain. Returns once the app
+/// has been running for a moment, or with the output when it could not start (a
+/// first build takes minutes). A second click replaces the first window.
 #[tauri::command]
 pub async fn run_app(state: State<'_, AppState>) -> Res<()> {
-    let mut inner = state.inner.lock().await;
-    let open = inner
-        .open
-        .as_mut()
-        .ok_or_else(|| fail("no project is open"))?;
-    if let Some(mut old) = open.app_window.take() {
-        let _ = old.start_kill();
-    }
-    let spec = CommandSpec {
-        tool: Tool::CargoTauri,
-        args: vec!["dev".into()],
-        cwd: "",
-        env: vec![("TRUNK_SKIP_VERSION_CHECK".into(), "true".into())],
-        env_remove: vec!["NO_COLOR".into()],
+    let (pid, mut lines) = {
+        let mut inner = state.inner.lock().await;
+        let open = inner
+            .open
+            .as_mut()
+            .ok_or_else(|| fail("no project is open"))?;
+        if let Some(old) = open.app_window.take()
+            && let Some(pid) = old.id()
+        {
+            kill_tree(pid).await;
+        }
+        let target = open.root.join("target").join(WINDOW_TARGET);
+        let spec = CommandSpec {
+            tool: Tool::CargoTauri,
+            // After `--`: arguments for `cargo run`.
+            args: vec![
+                "dev".into(),
+                "--".into(),
+                "--target-dir".into(),
+                target.to_string_lossy().into_owned(),
+            ],
+            cwd: "",
+            env: vec![("TRUNK_SKIP_VERSION_CHECK".into(), "true".into())],
+            env_remove: vec!["NO_COLOR".into()],
+        };
+        let (reader, writer) = std::io::pipe().map_err(fail)?;
+        let mut cmd = state.tools.command(&spec, &open.root, &[]);
+        cmd.stdout(writer.try_clone().map_err(fail)?).stderr(writer);
+        let child = cmd.spawn().map_err(fail)?;
+        // Our copies of the write end must close, or the reader never ends.
+        drop(cmd);
+        let (tx, rx) = mpsc::unbounded_channel();
+        read_lines(reader, tx);
+        let pid = child.id();
+        open.app_window = Some(child);
+        (pid, rx)
     };
-    let mut cmd = state.tools.command(&spec, &open.root, &[]);
-    cmd.stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
-    open.app_window = Some(cmd.spawn().map_err(fail)?);
-    Ok(())
+    let mut output = VecDeque::new();
+    let mut started: Option<Instant> = None;
+    let mut failed: Option<Instant> = None;
+    let mut tick = tokio::time::interval(Duration::from_millis(250));
+    loop {
+        tokio::select! {
+            line = lines.recv(), if !lines.is_closed() => {
+                let Some(line) = line else { continue };
+                let line = strip_ansi(&line);
+                if started.is_none() && app_started(&line) {
+                    started = Some(Instant::now());
+                }
+                if failed.is_none() && build_failed(&line) {
+                    failed = Some(Instant::now());
+                }
+                output.push_back(line);
+                if output.len() > WINDOW_LINES {
+                    output.pop_front();
+                }
+            }
+            _ = tick.tick() => {
+                let mut inner = state.inner.lock().await;
+                let Some(child) = inner.open.as_mut().and_then(|o| o.app_window.as_mut()) else {
+                    return Ok(()); // the project was closed
+                };
+                if child.id() != pid {
+                    return Ok(()); // replaced by another click
+                }
+                if child.try_wait().map_err(fail)?.is_some() {
+                    while let Ok(line) = lines.try_recv() {
+                        output.push_back(strip_ansi(&line));
+                    }
+                    return Err(fail(tail(&output)));
+                }
+                // A moment for the last lines, then nothing more will come.
+                if failed.is_some_and(|t| t.elapsed() >= Duration::from_secs(1)) {
+                    if let Some(pid) = pid {
+                        kill_tree(pid).await;
+                    }
+                    while let Ok(line) = lines.try_recv() {
+                        output.push_back(strip_ansi(&line));
+                    }
+                    return Err(fail(tail(&output)));
+                }
+                if started.is_some_and(|t| t.elapsed() >= WINDOW_SETTLE) {
+                    return Ok(());
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_window_counts_from_cargo_starting_the_app_not_from_tauri() {
+        assert!(app_started(
+            r"     Running `C:\p\target\ak-window\debug\app.exe`"
+        ));
+        assert!(!app_started(
+            "     Running DevCommand (`cargo  run --target-dir x --no-default-features --`)"
+        ));
+        assert!(!app_started(
+            "     Running BeforeDevCommand (`trunk serve`)"
+        ));
+    }
+
+    #[test]
+    fn a_failed_build_is_seen_from_cargos_last_word() {
+        assert!(build_failed(
+            "error: could not compile `app` (bin \"app\") due to 1 previous error"
+        ));
+        assert!(build_failed(
+            r"error: failed to remove file `target\debug\app.exe`"
+        ));
+        assert!(!build_failed("error[E0308]: mismatched types"));
+        assert!(!build_failed("   Compiling app v0.1.0"));
+    }
 
     #[test]
     fn the_file_list_hides_build_output_and_agentknife() {

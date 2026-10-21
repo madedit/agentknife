@@ -5,7 +5,7 @@
 use ak_types::preview::{PreviewStatus, ServerState};
 use leptos::prelude::*;
 
-use crate::backend::Backend;
+use crate::backend::{Backend, CallError};
 use crate::chat::{Chat, send_message};
 use crate::demo::{DEMO_PAGE, DEMO_URL};
 use crate::i18n::t;
@@ -92,6 +92,7 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
     let backend = expect_context::<Backend>();
     let reload = RwSignal::new(0u32);
     let opening = RwSignal::new(false);
+    let window_error = RwSignal::new(None::<String>);
     let stage_size = RwSignal::new((0.0f64, 0.0f64));
     let stage = NodeRef::<leptos::html::Div>::new();
     let frame = NodeRef::<leptos::html::Iframe>::new();
@@ -101,12 +102,19 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
     #[cfg(target_arch = "wasm32")]
     browser::wire(preview, chat, frame, stage, stage_size, url);
 
+    // Waits until the app runs (a first build takes minutes); on failure keeps
+    // the output for Details.
     let run_app = move |_| {
         opening.set(true);
+        window_error.set(None);
         let backend = backend.clone();
         leptos::task::spawn_local(async move {
-            let _ = backend.run_app().await;
-            crate::backend::sleep(4_000).await;
+            let failed = match backend.run_app().await {
+                Ok(()) => None,
+                Err(CallError::Connect(c)) => Some(c.to_string()),
+                Err(CallError::Other(d)) => Some(d),
+            };
+            window_error.set(failed);
             opening.set(false);
         });
     };
@@ -211,6 +219,25 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
                     {t("preview-run-app")}
                 </button>
             </div>
+            {move || window_error.get().map(|output| view! {
+                <div data-notice="window-failed" role="alert" class="shrink-0 bg-red-50 px-3 py-1.5 text-sm text-red-900 dark:bg-red-950 dark:text-red-100">
+                    <div class="flex items-start gap-2">
+                        <p class="flex-1">{t("preview-window-failed")}</p>
+                        <button
+                            type="button"
+                            data-action="dismiss-window-error"
+                            class="text-xs underline"
+                            on:click=move |_| window_error.set(None)
+                        >
+                            {t("common-ok")}
+                        </button>
+                    </div>
+                    <details class="mt-1 text-xs">
+                        <summary class="cursor-pointer select-none">{t("common-details")}</summary>
+                        <pre class="mt-1 max-h-60 overflow-auto rounded bg-white/60 p-2 whitespace-pre-wrap dark:bg-black/30">{output}</pre>
+                    </details>
+                </div>
+            })}
             <Show when=move || preview.picking.get()>
                 <p data-notice="picking" class="shrink-0 bg-blue-50 px-3 py-1.5 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-100">
                     {t("preview-picking")}
