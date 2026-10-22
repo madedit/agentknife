@@ -111,6 +111,14 @@ impl MessageAssembler {
                     (serde_json::Value::Object(Default::default()), None)
                 } else {
                     match serde_json::from_str(&args) {
+                        // Some local models encode the arguments twice: a JSON
+                        // string holding the object.
+                        Ok(serde_json::Value::String(inner)) => {
+                            match serde_json::from_str::<serde_json::Value>(&inner) {
+                                Ok(v) if v.is_object() => (v, None),
+                                _ => (serde_json::Value::String(inner), None),
+                            }
+                        }
                         Ok(v) => (v, None),
                         Err(_) => (serde_json::Value::Null, Some(args)),
                     }
@@ -254,6 +262,19 @@ mod tests {
                 .unwrap()
                 .contains("cut off")
         );
+    }
+
+    /// Regression: a local model sent `"{\"path\":…}"` now and then, and the
+    /// tool answered that `path` was missing.
+    #[test]
+    fn arguments_encoded_twice_are_unwrapped() {
+        let mut a = MessageAssembler::new("x");
+        a.push(start(0, "c", "read_file")).unwrap();
+        a.push(args(0, r#""{\"path\":\"a.rs\"}""#)).unwrap();
+        a.push(done(StopReason::ToolUse)).unwrap();
+        let (_, _, calls, _) = assistant(a.finish().unwrap().message);
+        assert_eq!(calls[0].arguments, serde_json::json!({ "path": "a.rs" }));
+        assert_eq!(calls[0].invalid_arguments, None);
     }
 
     #[test]

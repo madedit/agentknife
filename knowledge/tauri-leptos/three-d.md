@@ -36,8 +36,10 @@ web-sys = { version = "0.3.106", features = ["HtmlCanvasElement"] }
 
 ## 4. src/game.js: the 3D part
 One class. The constructor takes the canvas and callbacks for what Rust must know
-(score, game over); methods are what Rust can ask for. Give every object the player
-can hit a `name`. Clean everything up in `dispose()`.
+(score, game over); methods are what Rust can ask for. Name the methods in
+snake_case like Rust (`state_json`, `set_move`), so the names match without
+`js_name`. Give every object the player can hit a `name`. Clean everything up in
+`dispose()`.
 
 ```js
 // The 3D part of the app (three.js). The Rust screen creates a Game for a
@@ -126,15 +128,17 @@ export class Game {
     this.renderer.render(this.scene, this.camera);
   }
 
-  // The name of the object at (x, y) in canvas pixels, or undefined.
+  // The name of the object at (x, y) in canvas pixels, or undefined. The ray
+  // hits a part (a wolf's leg), so walk up to the nearest named group (the wolf).
   pick(x, y) {
     const ndc = new THREE.Vector2(
       (x / this.canvas.width) * 2 - 1,
       -(y / this.canvas.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
-    const hit = this.raycaster.intersectObjects(this.scene.children, true)[0];
-    return hit?.object.name || undefined;
+    let obj = this.raycaster.intersectObjects(this.scene.children, true)[0]?.object;
+    while (obj && !obj.name) obj = obj.parent;
+    return obj?.name || undefined;
   }
 
   restart() {
@@ -144,7 +148,7 @@ export class Game {
 
   // What AgentKnife sees of the game (dom_summary cannot look inside the
   // canvas): everything needed to check the rules.
-  stateJson() {
+  state_json() {
     return JSON.stringify({
       score: this.score,
       cubeColor: "#" + this.cube.material.color.getHexString(),
@@ -157,8 +161,14 @@ export class Game {
     this.canvas.removeEventListener("pointerdown", this.onDown);
     this.canvas.removeEventListener("pointerup", this.onUp);
     this.controls.dispose();
-    this.cube.geometry.dispose();
-    this.cube.material.dispose();
+    // Free every geometry, material and texture in the scene.
+    this.scene.traverse((obj) => {
+      obj.geometry?.dispose();
+      for (const m of [obj.material].flat()) {
+        m?.map?.dispose();
+        m?.dispose();
+      }
+    });
     this.renderer.dispose();
   }
 }
@@ -169,12 +179,13 @@ export class Game {
 from the project folder). Keep the `Closure`s alive as long as the game (here in the
 same `StoredValue`), or JS calls into freed memory.
 
-**Names must match exactly.** A JS method named in camelCase (`stateJson`,
-`setBest`, `togglePause`) needs `js_name` on the Rust side:
-`#[wasm_bindgen(method, js_name = setBest)] fn set_best(this: &Game, n: u32);`.
-A wrong name still builds; the page then fails with `….set_best is not a function`
-(often followed by `closure invoked recursively or after being dropped`, which is
-only a consequence). Call `dom_summary` to see such errors.
+**Names must match exactly.** Write the JS methods in snake_case (`state_json`,
+`set_move`) and the Rust declarations use the same names. A camelCase JS method
+(`setMove`) needs `js_name`: `#[wasm_bindgen(method, js_name = setMove)] fn
+set_move(this: &Game, dir: i32);`. A wrong name still builds; the page then fails
+with `….set_move is not a function` (often followed by `closure invoked recursively
+or after being dropped`, which is only a consequence). Call `dom_summary` to see
+such errors.
 
 ```rust
 //! The game screen: a <canvas> drawn by src/game.js (three.js), with the
@@ -199,8 +210,7 @@ extern "C" {
     #[wasm_bindgen(method)]
     fn restart(this: &Game);
 
-    // camelCase in JS: `js_name` gives the exact name.
-    #[wasm_bindgen(method, js_name = stateJson)]
+    #[wasm_bindgen(method)]
     fn state_json(this: &Game) -> String;
 
     #[wasm_bindgen(method)]
@@ -269,9 +279,11 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
   the top of `src/game.js`: each state (e.g. not started, playing, paused, over) ×
   each input (arrow keys, pause, restart, a click) → what happens. Decide the
   awkward cases up front (a key just after game over, turning back on oneself).
-- **Report the state.** Put everything the rules depend on into `stateJson()`
+- **Report the state.** Put everything the rules depend on into `state_json()`
   (positions, direction, state, score, lives) and keep it current: it is the only
-  way to check the game, since `dom_summary` cannot see inside the canvas.
+  way to check the game, since `dom_summary` cannot see inside the canvas. Add
+  what a test needs to aim: what the player aims at now (`aim_on`) and the nearest
+  target's distance and angle (`nearest`).
 - **More data to Rust**: one callback per kind of news (`onScore`, `onGameOver`).
   Each is a `Closure` passed to the constructor and kept in the `StoredValue`.
   `Closure` cannot be copied and needs no `Rc`: create them all, pass references
@@ -290,15 +302,16 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
   ```
   Numbers, strings and bools cross directly; for more, pass a JSON string and parse
   it with `serde_json` in Rust.
-- **Rust to the game**: add a method (`setLevel(n)`, `pause()`), declare it in the
-  `extern "C"` block (`js_name` for camelCase names), call it through
-  `game.with_value`.
+- **Rust to the game**: add a method (`set_level(n)`, `pause()`), declare it in the
+  `extern "C"` block, call it through `game.with_value`.
 - **Keyboard**: `window.addEventListener("keydown", this.onKey)` in the constructor,
   `removeEventListener` in `dispose()`. Keep pressed keys in a `Set` and read it in
-  `frame()`.
+  `frame()`. Call `e.preventDefault()` for the keys the game uses (space, arrows):
+  otherwise space also presses the button clicked last (it keeps the focus) and
+  arrows scroll the page.
 - **Buttons held down** (move while pressed, on screen or touch): Leptos
   `on:pointerdown` starts, `on:pointerup` and `on:pointerleave` stop; tell the game
-  with a method (`setMove(-1)`, `setMove(0)`).
+  with a method (`set_move(-1)`, `set_move(0)`).
 - **Saving** (high score, progress): send it to the backend from Rust (topics
   `ak-bridge`, `storage`), not `localStorage` alone.
 - **Shapes and looks**: build from three.js geometries (`BoxGeometry`,
@@ -309,11 +322,50 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
   `new THREE.TextureLoader().load("./assets/wood.png")`.
 - **Speed**: reuse geometries and materials for many copies (or `InstancedMesh`);
   never create objects inside `frame()`; `dispose()` what you remove from the scene.
+- **Tuning**: put the numbers that set the difficulty at the top of `game.js` as
+  constants (`MAX_ENEMIES`, `BITE_DAMAGE`, `BITE_COOLDOWN_S`, `ENEMY_SPEED`), so
+  they are easy to find and change after a test.
+
+## Shooters and enemies
+- **Crosshair**: a Leptos element over the canvas, not a 3D object: wrap the canvas
+  in `<div class="relative …">` and add `<div data-ak-id="crosshair"
+  class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2
+  -translate-y-1/2 text-white">"+"</div>`.
+- **Things a shot passes through** (bullets, effects, helpers): `obj.raycast = () =>
+  {};` takes them out of `pick` and other rays.
+- **Aiming** with a camera behind and above the player: a ray from the middle of
+  the screen hits the ground in front of the player first. Aim from the player
+  instead: the target is the nearest enemy whose direction is within a few degrees
+  of where the player faces, measured on the ground plane:
+  ```js
+  aimed() {
+    const facing = new THREE.Vector3(0, 0, -1).applyQuaternion(this.player.quaternion).setY(0);
+    let best;
+    for (const e of this.enemies) {
+      const to = e.position.clone().sub(this.player.position).setY(0);
+      if (facing.angleTo(to) < AIM_TOLERANCE && (!best || to.length() < best.dist))
+        best = { enemy: e, dist: to.length() };
+    }
+    return best?.enemy;
+  }
+  ```
+- **Fast bullets** move farther in one frame than a "close enough" distance, so
+  they fly through. Each frame, steer toward the target's current position, and
+  count a hit when this frame's step reaches it:
+  ```js
+  const to = target.position.clone().sub(bullet.position);
+  const step = BULLET_SPEED * dt;
+  if (step >= to.length()) hit(target);
+  else bullet.position.add(to.setLength(step));
+  ```
+- **Enemies** must keep apart from the player and each other (push them back to a
+  minimum distance each frame), or they pile up, hide the camera and block shots.
+  Limit the damage too: one bite at a time, with a cooldown.
 
 ## Checking the preview
 - Changing `src/game.js` rebuilds and reloads the preview like Rust code.
 - JS errors do not stop the build. After every change call `dom_summary`: it shows
-  the game state from `stateJson()` and ends with the page's errors (e.g. a
+  the game state from `state_json()` and ends with the page's errors (e.g. a
   misspelled three.js name or a method name without `js_name`, with file and
   line). If the whole page is blank, check the import map and `vendor/three/`.
 - `pick` + `set_hit_test` make "this one" in the user's message name the 3D object
@@ -327,7 +379,7 @@ The game moves every frame; test it by acting and then watching its state.
 - **Watch**: `interact` `read_state` with `wait_ms` waits first; with `samples` it
   reads several times over `wait_ms` (e.g. `samples: 5, wait_ms: 4000` to see a
   ball travel and bounce). Do not sleep with `run_command`.
-- Put what the rules depend on, and a frame or time counter, into `stateJson()`
+- Put what the rules depend on, and a frame or time counter, into `state_json()`
   so the readings show movement.
-- After a change the page reloads; if an action says the page reloaded, call
-  `dom_summary` and do it again.
+- After a change the page reloads and the game starts over: an element can be
+  missing (the start screen is back). Call `dom_summary` and do it again.

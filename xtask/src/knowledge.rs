@@ -36,10 +36,11 @@ fn rust_blocks(markdown: &str) -> Vec<String> {
     blocks(markdown, "rust")
 }
 
-/// The fenced blocks of one language, in order.
+/// The fenced blocks of one language, in order. Only fences at the start of a
+/// line count: indented ones (in a list) are fragments, not compiled.
 fn blocks(markdown: &str, lang: &str) -> Vec<String> {
-    markdown
-        .split(&format!("```{lang}\n"))
+    format!("\n{markdown}")
+        .split(&format!("\n```{lang}\n"))
         .skip(1)
         .filter_map(|rest| rest.split_once("```").map(|(code, _)| code.to_owned()))
         .collect()
@@ -154,5 +155,10 @@ mod tests {
     fn extracts_rust_blocks_only() {
         let md = "# T\n```rust\nfn a() {}\n```\ntext\n```text\nno\n```\n```rust\nfn b() {}\n```\n";
         assert_eq!(rust_blocks(md), ["fn a() {}\n", "fn b() {}\n"]);
+        let listed = "- a list item:\n  ```rust\n  let x = 1;\n  ```\n";
+        assert!(
+            rust_blocks(listed).is_empty(),
+            "indented fragments are skipped"
+        );
     }
 }

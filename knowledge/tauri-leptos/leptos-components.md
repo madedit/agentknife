@@ -40,8 +40,12 @@ fn Page() -> impl IntoView {
   is read once and never updates.
 - Attributes: `class="…"`, `data-ak-id="…"`, `disabled=move || busy.get()`,
   `placeholder=hint` (a variable).
-- Class toggles: `class:hidden=move || !open.get()`, or a closure returning the whole
-  class string.
+- Class toggles: `class:hidden=move || !open.get()`. For several conditions use one
+  closure returning the whole class string (every class written out in full):
+  `class=move || format!("rounded p-2 {}", if hp.get() <= 3 { "bg-red-500" } else { "bg-gray-100" })`.
+- An attribute value with `<` or `>` in it goes in braces:
+  `disabled={move || hp.get() <= 0}`. Without them the `<` reads as a tag and the
+  error is `invalid tag name or attribute key`, pointing at the `<`.
 - Events: `on:click=move |_| set_count.update(|n| *n += 1)`,
   `on:input=move |ev| text.set(event_target_value(&ev))`.
 - Events that need a value (which arrow, which item): a small function that

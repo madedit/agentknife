@@ -184,6 +184,11 @@ async fn preview_tools() {
     )
     .await;
     assert!(out.is_error && text_of(&out).contains("no element"));
+    assert!(
+        text_of(&out).contains("the page reloaded"),
+        "a missing element may mean a fresh page: {}",
+        text_of(&out)
+    );
     let out = call(&r, "interact", json!({ "action": "click" })).await;
     assert!(out.is_error && text_of(&out).contains("`ak_id` is required"));
     assert!(

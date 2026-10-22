@@ -20,7 +20,8 @@ inside the handler and in the label, reading signals:
     {move || match phase.get() { Phase::Playing => "Pause", Phase::Paused => "Resume", Phase::Ready => "Start" }}
 </Button>
 ```
-`on_click` takes a closure `move |_| …` (the event is an `ev::MouseEvent`).
+`on_click` takes a closure `move |_| …` (the event is an `ev::MouseEvent`); not
+`move |()|`, which is only for `Form`'s `on_submit`.
 
 `Button` has no `class` prop: its looks come from `variant`. For a control that
 must look different (big see-through arrow keys over a game), use a plain element

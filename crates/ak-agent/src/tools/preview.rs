@@ -322,6 +322,12 @@ fn page_error(e: String) -> String {
          not have happened. Call dom_summary or read_state to see the page now, then try \
          again."
             .into()
+    } else if e.starts_with("no element with data-ak-id") {
+        // Usually a fresh page after a rebuild, which starts the app over.
+        format!(
+            "{e}. If you just changed a file, the page reloaded and the app started over \
+             (a game is back at its start screen). Call dom_summary to see the page now."
+        )
     } else {
         e
     }

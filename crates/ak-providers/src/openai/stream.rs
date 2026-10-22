@@ -139,7 +139,15 @@ impl Decoder {
                 if let Some(name) = call["function"]["name"].as_str().filter(|s| !s.is_empty()) {
                     state.name.push_str(name);
                 }
-                let frag = call["function"]["arguments"].as_str().unwrap_or_default();
+                // Some local servers send the arguments as an object, not a string.
+                let object;
+                let frag = match &call["function"]["arguments"] {
+                    Value::Object(_) => {
+                        object = call["function"]["arguments"].to_string();
+                        object.as_str()
+                    }
+                    a => a.as_str().unwrap_or_default(),
+                };
                 state.args.push_str(frag);
                 if !state.started && !state.name.is_empty() {
                     // Start once the name is known; flush arguments buffered so far.
@@ -373,6 +381,24 @@ mod tests {
         assert_eq!(
             replay(&ev)["tool_calls"][0]["function"]["arguments"],
             "{\"a\":1}"
+        );
+    }
+
+    #[test]
+    fn arguments_sent_as_an_object_are_kept() {
+        let ev = run(
+            Flavor::Generic,
+            vec![
+                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c","function":{"name":"read_file","arguments":{"path":"a"}}}]}}]}),
+                json!({"choices":[{"delta":{},"finish_reason":"tool_calls"}]}),
+            ],
+        );
+        assert_eq!(
+            ev[1],
+            StreamEvent::ToolCallDelta {
+                index: 0,
+                arguments_fragment: "{\"path\":\"a\"}".into()
+            }
         );
     }
 

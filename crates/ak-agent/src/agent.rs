@@ -989,6 +989,11 @@ impl Agent {
                 "The arguments were not valid JSON (probably cut off by the output limit). \
                  Call the tool again with complete, smaller arguments.",
             )
+        } else if !call.arguments.is_object() {
+            ToolOutput::error(
+                "The arguments must be one JSON object with the fields as keys, \
+                 such as {\"path\": \"src/main.rs\"}. Call the tool again.",
+            )
         } else if let Some(tool) = self.tools.get(&call.name) {
             let needs_plan = self.config.plan_mode == PlanMode::AlwaysAsk
                 && tool.changes_project()

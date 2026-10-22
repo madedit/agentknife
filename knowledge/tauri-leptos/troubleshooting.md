@@ -20,6 +20,11 @@ builds again.
   the prop `#[prop(into)]`.
 - **`this function takes N arguments`** on a component — check prop names; optional
   props need `#[prop(optional)]`.
+- **`invalid tag name or attribute key`** at a `<` or `>` inside `view!` — an
+  attribute value compares something: put it in braces,
+  `class:low={move || hp.get() <= 3}` (topic `leptos-components`).
+- **`type mismatch in closure arguments`** on `Button`'s `on_click` — write
+  `move |_| …`; `move |()| …` is for `Form`'s `on_submit`.
 
 ## Tauri backend
 - **`command X not found`** at runtime — add it to `tauri::generate_handler![…]`.
@@ -31,8 +36,8 @@ builds again.
 ## Builds, but the page fails
 Call `dom_summary`: its last part lists the page's errors.
 - **`….some_name is not a function`** — Rust calls a JS function by the wrong
-  name: JS names are camelCase, so add `js_name = someName` to its
-  `#[wasm_bindgen(…)]` (topic `three-d`).
+  name: rename the JS method to the same snake_case name, or add
+  `js_name = someName` to its `#[wasm_bindgen(…)]` (topic `three-d`).
 - **`closure invoked recursively or after being dropped`** — usually follows
   another error: fix that one first. Otherwise a `Closure` passed to JS was
   dropped; keep it alive (topic `three-d`).
