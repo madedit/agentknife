@@ -359,4 +359,17 @@ mod tests {
         let conf = String::from_utf8_lossy(file("src-tauri/tauri.conf.json").unwrap().contents);
         assert!(conf.contains(r#""beforeBuildCommand": "trunk build --release""#));
     }
+
+    #[test]
+    fn debug_builds_skip_most_debug_info_and_release_is_untouched() {
+        let manifest: toml::Table = toml::from_str(&String::from_utf8_lossy(
+            file("Cargo.toml").unwrap().contents,
+        ))
+        .unwrap();
+        let profile = manifest["profile"].as_table().unwrap();
+        let dev = profile["dev"].as_table().unwrap();
+        assert_eq!(dev["debug"].as_str(), Some("line-tables-only"));
+        assert_eq!(dev["package"]["*"]["debug"].as_bool(), Some(false));
+        assert!(!profile.contains_key("release"));
+    }
 }

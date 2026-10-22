@@ -466,9 +466,14 @@
 - P1-SHELL-001 (follow-up) — 4c05b87 — every button shows what it does when the mouse rests on it (user request, after asking what "Reload" does).
   - About 70 buttons got a `title` from new fluent `…-tip` strings (en, zh-TW): home, connect wizard, settings, the chat (plan, questions, permission, stuck, interrupted, tools and bundle cards), files and version history, preview, log and build log window, and the center tabs (`{tab}-tip`). Repeated actions share one (`common-cancel-tip`, `common-ok-tip`, `connect-back-tip`, `stuck-roll-back-tip`). The demo page (the user's stand-in app) is left out.
   - tests/tooltips.rs scans the shell's sources: each `<button` opening tag (outside comments) must contain `title=`.
-- P1-APP-001 (follow-up) — (hash in next commit) — the connect wizard remembers what was set up and marks the AI in use (user request).
+- P1-APP-001 (follow-up) — ffbf1b9 — the connect wizard remembers what was set up and marks the AI in use (user request).
   - Before: only the connection in use was saved, so "Change the AI" started blank (preset address, the key asked again, the suggested model).
   - AppSettings::ai_known: the last saved connection per provider (`connect()` sets `ai` and replaces that provider's entry; `known_connections()` also covers files from before). save_settings keeps it.
   - cmd::SAVED_CONNECTIONS → Vec<SavedConnection {connection, has_key, current}>; has_key asks the keychain, the key never reaches the UI.
   - Wizard: a "Now using {name} · {model}" line, the in-use card outlined with an "In use" badge, "Set up before" on the others with the saved model shown. Choosing one fills in its address and saved model (if still listed); with a saved key the field says so and may stay empty (list/check/save then use the keychain's key, and saving keeps it).
   - Tests: settings connect/known_connections (incl. an old file), wizard fill-in (key, address, model, gone model), wizard render (marks; none on first run).
+- P1-PREVIEW (follow-up) — (hash in next commit) — faster preview builds (user asked for React-style fast updates; kept one codebase instead, so the preview stays what ships).
+  - Measured with the isolated toolchain (`trunk build --features dev`, backend `cargo build --features dev`): an edit already rebuilds in ≈2–3 s (screens) and ≈2–3 s (backend), CSS only ≈1.5 s; the slow part is a new project's first build (screens 49 s, backend 46 s, target/ 3.2 GB).
+  - Template `[profile.dev]`: `debug = "line-tables-only"`, dependencies `debug = false` → first build 36 s / 38 s, edits ≈1.9 s / 1.6 s, target/ 1.9 GB. New projects only; release builds unchanged.
+  - Tried and dropped: one shared `CARGO_BUILD_BUILD_DIR` for all projects (second project's first build 1.2 s), because a project whose files were older than the last build of another one got that project's screens.
+  - Test: tauri_leptos `debug_builds_skip_most_debug_info_and_release_is_untouched`.

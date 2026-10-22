@@ -213,6 +213,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - The template builds as-is with default names (`template.toml` [replace] lists them). Its gitignore is stored as `gitignore` and renamed on creation.
   - Pinned versions are checked in both manifests, in Trunk.toml [tools] and in Cargo.lock.
   - wasm-opt is off (`data-wasm-opt="0"`) because it is not in the toolchain.
+  - `[profile.dev]` keeps only line tables for the app's code and no debug info for dependencies (first build ≈ −25%, target/ ≈ −40%; release is untouched). Never share one cargo `build-dir`/target between projects: unit hashes ignore the project path, so another project's stale screens can count as fresh.
 - **Running trunk** (preview, gallery): put the toolchain's `cargo/bin` and `bin` first on PATH, so trunk uses the pinned wasm-bindgen and tailwindcss and downloads nothing.
   - Remove `NO_COLOR`: trunk parses it as a true/false flag, and `NO_COLOR=1` makes it exit.
   - Set `TRUNK_SKIP_VERSION_CHECK=true`; otherwise trunk checks the network for updates.
