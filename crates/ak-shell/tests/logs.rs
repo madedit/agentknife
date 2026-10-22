@@ -27,6 +27,7 @@ fn line(seq: u64, source: LogSource, text: &str) -> LogLine {
         at_ms: 0,
         source,
         text: text.into(),
+        progress: None,
     }
 }
 

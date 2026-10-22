@@ -107,6 +107,7 @@ fn demo_log() -> Vec<ak_types::log::LogLine> {
         at_ms: 0,
         source,
         text: text.into(),
+        progress: None,
     })
     .collect()
 }

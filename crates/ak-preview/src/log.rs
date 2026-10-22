@@ -5,7 +5,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use ak_types::log::{LogLine, LogSource};
+use ak_types::log::{BuildProgress, LogLine, LogSource};
 use ak_types::preview::ServerState;
 use ak_types::stack::LogMarkers;
 use tokio::sync::mpsc;
@@ -156,15 +156,11 @@ struct Book {
     listener: Option<mpsc::UnboundedSender<LogLine>>,
 }
 
-/// cargo's progress bar (`Building [===> ] 12/360: tauri`), redrawn with `\r`.
-fn is_progress(line: &str) -> bool {
-    line.trim_start().starts_with("Building [")
-}
-
 impl LogBook {
     /// Adds what a program printed, one entry per line. One read may hold
-    /// several `\r`-separated redraws: progress bars and blank lines are
-    /// skipped, colors removed.
+    /// several `\r`-separated redraws. Colors are removed and blank lines
+    /// skipped. cargo's progress bar is not kept: the listener gets it as a
+    /// progress report (`LogLine::progress`) for the build window.
     pub fn push(&self, source: LogSource, raw: &str) {
         let Ok(mut book) = self.inner.lock() else {
             return;
@@ -174,7 +170,22 @@ impl LogBook {
             .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
         for part in raw.split(['\r', '\n']) {
             let text = strip_ansi(part);
-            if text.trim().is_empty() || is_progress(&text) {
+            if text.trim().is_empty() {
+                continue;
+            }
+            if let Some((progress, what)) = BuildProgress::parse(&text) {
+                let report = LogLine {
+                    seq: book.next_seq,
+                    at_ms,
+                    source,
+                    text: what,
+                    progress: Some(progress),
+                };
+                if let Some(tx) = &book.listener
+                    && tx.send(report).is_err()
+                {
+                    book.listener = None;
+                }
                 continue;
             }
             book.next_seq += 1;
@@ -183,6 +194,7 @@ impl LogBook {
                 at_ms,
                 source,
                 text,
+                progress: None,
             };
             if let Some(tx) = &book.listener
                 && tx.send(line.clone()).is_err()
@@ -246,6 +258,10 @@ mod tests {
                 (2, LogSource::Backend, "Hello")
             ]
         );
+        // The progress bar reaches the listener as a report, not a line.
+        let report = rx.try_recv().unwrap();
+        assert_eq!(report.progress, Some(BuildProgress { done: 1, total: 9 }));
+        assert_eq!((report.seq, report.text.as_str()), (0, "tauri"));
         assert_eq!(rx.try_recv().map(|l| l.seq).ok(), Some(1));
         assert_eq!(rx.try_recv().map(|l| l.seq).ok(), Some(2));
         book.clear();

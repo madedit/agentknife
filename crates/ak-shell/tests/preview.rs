@@ -14,7 +14,7 @@ use ak_shell::layout::{Device, Layout};
 use ak_shell::logs::ProjectLog;
 use ak_shell::preview::{Preview, PreviewPane};
 use ak_types::i18n::Locale;
-use ak_types::log::{LogLine, LogSource};
+use ak_types::log::{BuildProgress, LogLine, LogSource};
 use ak_types::preview::{Picked, PreviewStatus, Rect, ServerState, Size};
 use leptos::prelude::*;
 
@@ -44,7 +44,18 @@ fn render(locale: Locale, status: PreviewStatus, device: Device, picked: Option<
                 at_ms: 0,
                 source,
                 text: text.into(),
+                progress: None,
             })
+            .chain([LogLine {
+                seq: 2,
+                at_ms: 0,
+                source: LogSource::Screens,
+                text: "tauri".into(),
+                progress: Some(BuildProgress {
+                    done: 137,
+                    total: 274,
+                }),
+            }])
             .collect(),
         );
         provide_context(log);
@@ -211,6 +222,14 @@ fn a_build_shows_its_log_in_a_window_over_the_preview() {
     assert!(first.contains("Compiling serde"), "the build's lines");
     assert!(!first.contains("Writing main.rs"), "not the AI's steps");
     assert!(first.contains(r#"data-action="toggle-build-log""#) && first.contains("縮小"));
+    // cargo's counts as a percentage and a bar.
+    assert!(first.contains(r#"data-build-percent="50""#) && first.contains(">50%<"));
+    assert!(first.contains(r#"data-build-part="screens""#) && first.contains("畫面"));
+    assert!(first.contains("width:50%"));
+    assert!(
+        !first.contains(">tauri<"),
+        "a progress report is not a line"
+    );
     let rebuild = render(
         Locale::En,
         status(ServerState::Building, Some(URL)),

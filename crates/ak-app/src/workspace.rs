@@ -265,7 +265,10 @@ pub async fn run_app(state: State<'_, AppState>) -> Res<()> {
                 target.to_string_lossy().into_owned(),
             ],
             cwd: "",
-            env: vec![("TRUNK_SKIP_VERSION_CHECK".into(), "true".into())],
+            env: std::iter::once(("TRUNK_SKIP_VERSION_CHECK", "true"))
+                .chain(ak_preview::process::CARGO_PROGRESS_ENV)
+                .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                .collect(),
             env_remove: vec!["NO_COLOR".into()],
         };
         let (reader, writer) = std::io::pipe().map_err(fail)?;

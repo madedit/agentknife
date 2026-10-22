@@ -96,6 +96,13 @@ impl Tools {
     }
 }
 
+/// Makes cargo print its progress bar (`Building [==> ] 12/274`) into a pipe
+/// too, so the build window can show how far a build is (`LogBook`).
+pub const CARGO_PROGRESS_ENV: [(&str, &str); 2] = [
+    ("CARGO_TERM_PROGRESS_WHEN", "always"),
+    ("CARGO_TERM_PROGRESS_WIDTH", "80"),
+];
+
 /// Sends the process's output, line by line (a blocking read on its own thread).
 pub fn read_lines(reader: std::io::PipeReader, tx: mpsc::UnboundedSender<String>) {
     std::thread::spawn(move || {

@@ -1,6 +1,7 @@
-//! Starts the preview of an existing project and prints what the agent's
-//! `dom_summary` would see, every few seconds, while you use the page in a
-//! browser (the URL is printed). Manual only; changes no files.
+//! Starts the preview of an existing project, prints the build's progress (as
+//! the build window gets it) and then what the agent's `dom_summary` would
+//! see, every few seconds, while you use the page in a browser (the URL is
+//! printed). Manual only; changes no files.
 //!
 //! ```text
 //! cargo run -p ak-preview --example preview_probe -- <dir> [seconds=120]
@@ -29,6 +30,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         profiles::default_profile().preview(),
         Tools::from_toolchain(&tc),
     )?;
+    // Progress reports, at most one per 10% step and source.
+    let mut log = preview.log().subscribe();
+    tokio::spawn(async move {
+        let mut shown = std::collections::HashMap::new();
+        while let Some(line) = log.recv().await {
+            let Some(p) = line.progress else { continue };
+            let step = p.percent() / 10;
+            if shown.insert(line.source, step) != Some(step) {
+                println!(
+                    "progress {:?}: {}/{} {}",
+                    line.source, p.done, p.total, line.text
+                );
+            }
+        }
+    });
     let session = PreviewSession::new(preview, None);
     session.start().await?;
     let st = session.settled(Duration::from_secs(600)).await;

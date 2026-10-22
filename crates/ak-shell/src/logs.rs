@@ -2,7 +2,7 @@
 //! build, the app's background part, the real window, packaging, the AI's
 //! steps), to look at or copy when something goes wrong.
 
-use ak_types::log::{LogLine, LogSource};
+use ak_types::log::{BuildProgress, LogLine, LogSource};
 use leptos::prelude::*;
 
 use crate::backend::Backend;
@@ -17,18 +17,36 @@ const MAX_LINES: usize = 5_000;
 #[derive(Clone, Copy)]
 pub struct ProjectLog {
     pub lines: RwSignal<Vec<LogLine>>,
+    /// The newest progress report per source (cargo's counts), for the build
+    /// window's percentage.
+    pub progress: RwSignal<Vec<(LogSource, BuildProgress)>>,
 }
 
 impl ProjectLog {
     pub fn new() -> ProjectLog {
         ProjectLog {
             lines: RwSignal::new(Vec::new()),
+            progress: RwSignal::new(Vec::new()),
         }
     }
 
     /// Adds new lines, skipping those already shown (a batch may overlap the
-    /// lines fetched when the tab opened).
+    /// lines fetched when the tab opened). Progress reports update `progress`.
     pub fn append(&self, batch: Vec<LogLine>) {
+        let (reports, batch): (Vec<_>, Vec<_>) =
+            batch.into_iter().partition(|l| l.progress.is_some());
+        if !reports.is_empty() {
+            self.progress.update(|all| {
+                for r in reports {
+                    let Some(p) = r.progress else { continue };
+                    all.retain(|(s, _)| *s != r.source);
+                    all.push((r.source, p));
+                }
+            });
+        }
+        if batch.is_empty() {
+            return;
+        }
         self.lines.update(|lines| {
             let last = lines.last().map_or(0, |l| l.seq);
             lines.extend(batch.into_iter().filter(|l| l.seq > last));
@@ -36,6 +54,24 @@ impl ProjectLog {
                 lines.drain(..lines.len() - MAX_LINES);
             }
         });
+    }
+
+    /// Forgets the progress of `sources` (their new build starts from zero).
+    pub fn reset_progress(&self, sources: &[LogSource]) {
+        self.progress
+            .update(|all| all.retain(|(s, _)| !sources.contains(s)));
+    }
+
+    /// The part of `sources` that reported last and how far it is, in whole
+    /// percent. Parts build one after the other (they share a target folder),
+    /// so a sum would jump back when the next one starts.
+    pub fn percent(&self, sources: &[LogSource]) -> Option<(LogSource, u32)> {
+        self.progress.with(|all| {
+            all.iter()
+                .rev()
+                .find(|(s, _)| sources.contains(s))
+                .map(|(s, p)| (*s, p.percent()))
+        })
     }
 }
 
@@ -245,15 +281,20 @@ pub fn BuildLog(
         let sources = sources.get();
         log.lines.with(|l| last_lines(l, &sources, BUILD_LINES))
     });
-    // A new build opens it big again.
+    // A new build opens it big again, counting from zero.
     #[cfg(target_arch = "wasm32")]
     Effect::new(move |was: Option<bool>| {
         let on = sources.with(|s| !s.is_empty());
         if on && was == Some(false) {
             small.set(false);
             follow.set(true);
+            log.reset_progress(&sources.get_untracked());
         }
         on
+    });
+    let percent = Memo::new(move |_| {
+        let sources = sources.get();
+        log.percent(&sources)
     });
     #[cfg(target_arch = "wasm32")]
     Effect::new(move |_| {
@@ -296,6 +337,11 @@ pub fn BuildLog(
                 <header class="flex shrink-0 items-center gap-2 border-b border-gray-700 px-3 py-1.5">
                     <span class="h-2 w-2 shrink-0 animate-pulse rounded-full bg-blue-400"></span>
                     <span class="shrink-0 text-sm font-medium">{move || title.get()}</span>
+                    {move || percent.get().map(|(part, p)| view! {
+                        <span data-build-percent=p data-build-part=part.key() class="shrink-0 text-sm text-blue-300">
+                            {t(source_label(Some(part)))} " " <span class="font-mono">{format!("{p}%")}</span>
+                        </span>
+                    })}
                     <span data-build-latest="" class="min-w-0 flex-1 truncate font-mono text-xs text-gray-400">
                         {move || small.get().then(latest)}
                     </span>
@@ -315,6 +361,11 @@ pub fn BuildLog(
                         {move || if small.get() { t("build-log-expand")() } else { t("build-log-shrink")() }}
                     </button>
                 </header>
+                {move || percent.get().map(|(_, p)| view! {
+                    <div class="h-1 shrink-0 bg-gray-700">
+                        <div data-build-bar="" class="h-1 bg-blue-400 transition-all" style=format!("width:{p}%")></div>
+                    </div>
+                })}
                 <Show when=move || !small.get()>
                     <div
                         node_ref=list
@@ -366,7 +417,37 @@ mod tests {
             at_ms: 0,
             source,
             text: text.into(),
+            progress: None,
         }
+    }
+
+    #[test]
+    fn progress_reports_set_the_percentage_and_are_not_lines() {
+        let owner = Owner::new();
+        owner.with(|| {
+            let log = ProjectLog::new();
+            let report = |seq, source, done, total| LogLine {
+                progress: Some(BuildProgress { done, total }),
+                ..line(seq, source, "tauri")
+            };
+            log.append(vec![
+                line(1, LogSource::Screens, "Compiling a"),
+                report(1, LogSource::Screens, 10, 100),
+                report(1, LogSource::Screens, 50, 100),
+                report(1, LogSource::Backend, 0, 100),
+            ]);
+            assert_eq!(log.lines.with_untracked(Vec::len), 1);
+            let both = [LogSource::Screens, LogSource::Backend];
+            assert_eq!(
+                log.percent(&[LogSource::Screens]),
+                Some((LogSource::Screens, 50))
+            );
+            // The part building now: the one that reported last.
+            assert_eq!(log.percent(&both), Some((LogSource::Backend, 0)));
+            assert_eq!(log.percent(&[LogSource::Window]), None);
+            log.reset_progress(&[LogSource::Backend]);
+            assert_eq!(log.percent(&both), Some((LogSource::Screens, 50)));
+        });
     }
 
     #[test]

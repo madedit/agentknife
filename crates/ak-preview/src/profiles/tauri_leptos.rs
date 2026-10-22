@@ -78,6 +78,13 @@ fn trunk_env() -> (Vec<(String, String)>, Vec<String>) {
     )
 }
 
+/// cargo's progress for the build window (preview builds only).
+fn progress_env() -> impl Iterator<Item = (String, String)> {
+    crate::process::CARGO_PROGRESS_ENV
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+}
+
 pub struct TauriLeptos;
 
 impl StackProfile for TauriLeptos {
@@ -107,7 +114,8 @@ impl StackProfile for TauriLeptos {
     }
 
     fn preview(&self) -> PreviewPlan {
-        let (env, env_remove) = trunk_env();
+        let (mut env, env_remove) = trunk_env();
+        env.extend(progress_env());
         PreviewPlan {
             frontend: CommandSpec {
                 tool: Tool::Trunk,
@@ -141,11 +149,14 @@ impl StackProfile for TauriLeptos {
                     "dev",
                 ]),
                 cwd: "",
-                env: vec![
+                env: [
                     (BRIDGE_ENV[0].into(), "{bridge_port}".into()),
                     (BRIDGE_ENV[1].into(), "{bridge_token}".into()),
                     (BRIDGE_ENV[2].into(), "{bridge_origin}".into()),
-                ],
+                ]
+                .into_iter()
+                .chain(progress_env())
+                .collect(),
                 env_remove,
             }),
             backend_ready: ReadySignal::StdoutPrefix(BRIDGE_READY_PREFIX),
@@ -368,6 +379,10 @@ mod tests {
         assert!(backend.args.windows(2).any(|w| w == ["--features", "dev"]));
         assert!(backend.env.iter().any(|(_, v)| v == "{bridge_token}"));
         assert!(preview.frontend.env_remove.contains(&"NO_COLOR".to_owned()));
+        // The build window's percentage; packaging output stays plain lines.
+        let progress = ("CARGO_TERM_PROGRESS_WHEN".to_owned(), "always".to_owned());
+        assert!(preview.frontend.env.contains(&progress));
+        assert!(backend.env.contains(&progress));
         assert!(
             preview
                 .frontend
@@ -378,6 +393,7 @@ mod tests {
         let bundle = TauriLeptos.bundle();
         for t in &bundle.targets {
             assert!(!t.command.args.iter().any(|a| a.contains("dev")));
+            assert!(!t.command.env.contains(&progress));
         }
         // The installer build must not enable `dev` behind our back either.
         let conf = String::from_utf8_lossy(file("src-tauri/tauri.conf.json").unwrap().contents);
