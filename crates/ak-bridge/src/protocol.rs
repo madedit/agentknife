@@ -22,6 +22,9 @@ pub const STORAGE_KEY: &str = "ak_bridge";
 pub const PAGE_NOT_OPEN: &str = "the preview page is not open";
 pub const PAGE_CLOSED: &str = "the preview page closed";
 
+/// The longest a `hold` or `key` action keeps something pressed.
+pub const MAX_HOLD_MS: u32 = 10_000;
+
 /// Query parameter that marks a connection as AgentKnife's controller (the
 /// agent), not the preview page: `?token=…&role=controller`.
 pub const CONTROLLER_ROLE: &str = "role=controller";
@@ -63,9 +66,23 @@ pub enum ServerMessage {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum ControlAction {
-    /// Click the element with this `data-ak-id` (scrolled into view first).
+    /// Click the element with this `data-ak-id` (scrolled into view first), as
+    /// a mouse does: pointer and mouse down and up at its centre, then `click`.
     Click {
         ak_id: String,
+    },
+    /// Press the element and hold it for `ms` (at most [`MAX_HOLD_MS`]), then
+    /// let go: for buttons that act while held down.
+    Hold {
+        ak_id: String,
+        ms: u32,
+    },
+    /// Press a key (`key` as in `KeyboardEvent.key`: "ArrowLeft", " ", "a") on
+    /// the focused element and hold it for `ms` (0: a tap).
+    Key {
+        key: String,
+        #[serde(default)]
+        ms: u32,
     },
     /// Replace the text of an input, textarea or editable element, firing
     /// `input` and `change`; `enter` then presses Enter (submitting its form).
@@ -158,6 +175,19 @@ pub fn render_dom_summary(s: &DomSummary) -> String {
         }
     }
     out
+}
+
+/// `KeyboardEvent.code` for a `key`, as a US keyboard sends it: "a" → "KeyA",
+/// "7" → "Digit7", " " → "Space"; named keys ("ArrowLeft", "Enter") keep their
+/// name.
+pub fn key_code(key: &str) -> String {
+    let mut chars = key.chars();
+    match (chars.next(), chars.next()) {
+        (Some(' '), None) => "Space".into(),
+        (Some(c), None) if c.is_ascii_alphabetic() => format!("Key{}", c.to_ascii_uppercase()),
+        (Some(c), None) if c.is_ascii_digit() => format!("Digit{c}"),
+        _ => key.into(),
+    }
 }
 
 /// `text` with every `ak_bridge=…` value cut out (an error message may quote the
@@ -517,6 +547,16 @@ mod tests {
              Errors on the page:\n\
              - ReferenceError: THREE is not defined (game.js:9)\n"
         );
+    }
+
+    #[test]
+    fn keys_get_the_code_a_keyboard_sends() {
+        assert_eq!(key_code("a"), "KeyA");
+        assert_eq!(key_code("W"), "KeyW");
+        assert_eq!(key_code("7"), "Digit7");
+        assert_eq!(key_code(" "), "Space");
+        assert_eq!(key_code("ArrowLeft"), "ArrowLeft");
+        assert_eq!(key_code("Enter"), "Enter");
     }
 
     #[test]

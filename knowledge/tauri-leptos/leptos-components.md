@@ -54,6 +54,9 @@ fn Page() -> impl IntoView {
   }
   ```
   (`Dir` must be `Copy`: `#[derive(Clone, Copy)]`.)
+- Naming the event's type: `use leptos::ev;` first (the prelude does not bring
+  it), then `move |e: ev::MouseEvent| …`, `ev::KeyboardEvent`, `ev::PointerEvent`.
+  Usually `|_|` is enough.
 - Properties (current input value): `prop:value=move || text.get()`.
 - Two-way binding of inputs: `bind:value=text` (an `RwSignal<String>`),
   `bind:checked=done` (an `RwSignal<bool>`).

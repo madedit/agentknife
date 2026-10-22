@@ -272,7 +272,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - On timeout or cancel, `run_command` must kill the whole process tree, because killing only the shell leaves cargo/trunk running.
 - **Agent sees results:** a preview-screenshot tool when the model has vision, and a DOM summary otherwise. In dev builds, the `ak-bridge` control channel lets the agent click, type, and read state for self-verification.
   - Tools (`ak_agent::tools::preview`, added with `with_preview_tools(registry, preview, vision)`):
-    - `build_status`, `dom_summary`, `interact` (click/type/read_state by data-ak-id) and `get_selection`.
+    - `build_status`, `dom_summary`, `interact` (click — real pointer/mouse down and up, then click; hold for `ms`; key on the focused element; type; read_state, optionally after `wait_ms` and as `samples` over time — by data-ak-id; a page reload mid-action gets an error that says to check with dom_summary and retry, never a silent retry) and `get_selection`.
     - `screenshot_preview`, only with vision and a `Capturer` (ak-app supplies the capture).
     - All go through the `PreviewAccess` trait (implemented by `ak_preview::PreviewSession`), and the policy allows them.
   - `Agent::with_preview`:

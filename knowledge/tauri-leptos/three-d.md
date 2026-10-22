@@ -3,7 +3,8 @@
 For 3D (games, product viewers, 3D charts) use **three.js 0.186.1**, which ships with
 AgentKnife. The 3D part is a small JavaScript module drawing on a `<canvas>`; menus,
 scores and buttons stay in Leptos. No npm, no CDN links, no downloads: they do not
-work here.
+work here. The Rust side is ordinary Leptos: read topics `leptos-components` and
+`ak-ui` too before writing it.
 
 ## 1. Add the library
 Call `add_library` with `"three"`. It copies into `vendor/three/`:
@@ -273,6 +274,20 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
   way to check the game, since `dom_summary` cannot see inside the canvas.
 - **More data to Rust**: one callback per kind of news (`onScore`, `onGameOver`).
   Each is a `Closure` passed to the constructor and kept in the `StoredValue`.
+  `Closure` cannot be copied and needs no `Rc`: create them all, pass references
+  to the constructor, then move them into one struct kept with the game:
+  ```rust
+  struct Running {
+      game: Game,
+      // JS calls these as long as the game lives.
+      _on_score: Closure<dyn FnMut(u32)>,
+      _on_over: Closure<dyn FnMut()>,
+  }
+  let on_score = Closure::new(move |p: u32| score.set(p));
+  let on_over = Closure::new(move || over.set(true));
+  let game = Game::new(&el, &on_score, &on_over);
+  running.set_value(Some(Running { game, _on_score: on_score, _on_over: on_over }));
+  ```
   Numbers, strings and bools cross directly; for more, pass a JSON string and parse
   it with `serde_json` in Rust.
 - **Rust to the game**: add a method (`setLevel(n)`, `pause()`), declare it in the
@@ -281,6 +296,9 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
 - **Keyboard**: `window.addEventListener("keydown", this.onKey)` in the constructor,
   `removeEventListener` in `dispose()`. Keep pressed keys in a `Set` and read it in
   `frame()`.
+- **Buttons held down** (move while pressed, on screen or touch): Leptos
+  `on:pointerdown` starts, `on:pointerup` and `on:pointerleave` stop; tell the game
+  with a method (`setMove(-1)`, `setMove(0)`).
 - **Saving** (high score, progress): send it to the backend from Rust (topics
   `ak-bridge`, `storage`), not `localStorage` alone.
 - **Shapes and looks**: build from three.js geometries (`BoxGeometry`,
@@ -300,3 +318,16 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
   line). If the whole page is blank, check the import map and `vendor/three/`.
 - `pick` + `set_hit_test` make "this one" in the user's message name the 3D object
   under the pointer.
+
+## Testing a game that runs by itself
+The game moves every frame; test it by acting and then watching its state.
+- **Act**: `interact` `click` sends pointer down/up, mouse down/up and click, like a
+  mouse. `hold` presses an element for `ms` (buttons that act while held). `key`
+  presses a key on the page (`"ArrowLeft"`, `" "`, `"a"`), held for `ms`.
+- **Watch**: `interact` `read_state` with `wait_ms` waits first; with `samples` it
+  reads several times over `wait_ms` (e.g. `samples: 5, wait_ms: 4000` to see a
+  ball travel and bounce). Do not sleep with `run_command`.
+- Put what the rules depend on, and a frame or time counter, into `stateJson()`
+  so the readings show movement.
+- After a change the page reloads; if an action says the page reloaded, call
+  `dom_summary` and do it again.

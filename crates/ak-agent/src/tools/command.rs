@@ -109,7 +109,10 @@ impl Tool for RunCommand {
         ToolSpec {
             name: "run_command".into(),
             description: "Run a shell command in the project folder (Windows: cmd, otherwise sh), \
-                          e.g. `cargo build`. Returns the exit code and output."
+                          e.g. `cargo build`. Returns the exit code and output. There is no \
+                          keyboard: commands that wait for a key or a terminal (`timeout`, \
+                          `pause`) fail. To wait for the app in the preview, use `interact` \
+                          `read_state` with `wait_ms` instead."
                 .into(),
             input_schema: json!({
                 "type": "object",

@@ -10,6 +10,18 @@ get derived ids. Components have no built-in text: pass labels in the user's lan
 <Button ak_id="add-button" submit=true>"Add"</Button>            // submits its Form
 <Button ak_id="close-button" variant=ButtonVariant::Ghost label="Close">"✕"</Button>  // icon: give a label
 ```
+One button that does different things by state (Start / Pause / Resume): decide
+inside the handler and in the label, reading signals:
+```rust
+<Button ak_id="play-button" on_click=move |_| match phase.get_untracked() {
+    Phase::Ready | Phase::Paused => start(),
+    Phase::Playing => pause(),
+}>
+    {move || match phase.get() { Phase::Playing => "Pause", Phase::Paused => "Resume", Phase::Ready => "Start" }}
+</Button>
+```
+`on_click` takes a closure `move |_| …` (the event is an `ev::MouseEvent`).
+
 `Button` has no `class` prop: its looks come from `variant`. For a control that
 must look different (big see-through arrow keys over a game), use a plain element
 with Tailwind classes and give it its own `data-ak-id`:

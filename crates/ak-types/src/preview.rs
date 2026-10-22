@@ -65,6 +65,8 @@ impl PreviewStatus {
 /// The bridge's answers when no page ran an action (`ak_bridge::protocol`).
 pub const PAGE_NOT_OPEN: &str = "the preview page is not open";
 pub const PAGE_CLOSED: &str = "the preview page closed";
+/// The longest a `hold` or `key` action keeps something pressed.
+pub const MAX_HOLD_MS: u32 = 10_000;
 
 /// An action the agent performs in the preview page (control channel).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -72,6 +74,15 @@ pub const PAGE_CLOSED: &str = "the preview page closed";
 pub enum ControlAction {
     Click {
         ak_id: String,
+    },
+    Hold {
+        ak_id: String,
+        ms: u32,
+    },
+    Key {
+        key: String,
+        #[serde(default)]
+        ms: u32,
     },
     Type {
         ak_id: String,

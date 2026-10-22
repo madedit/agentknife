@@ -31,8 +31,17 @@ fn same_json<A: serde::Serialize, B: serde::Serialize + serde::de::DeserializeOw
 fn protocol_copies_match_ak_bridge() {
     assert_eq!(ours::PAGE_NOT_OPEN, bridge::PAGE_NOT_OPEN);
     assert_eq!(ours::PAGE_CLOSED, bridge::PAGE_CLOSED);
+    assert_eq!(ours::MAX_HOLD_MS, bridge::MAX_HOLD_MS);
     let actions = [
         bridge::ControlAction::Click { ak_id: "a".into() },
+        bridge::ControlAction::Hold {
+            ak_id: "a".into(),
+            ms: 500,
+        },
+        bridge::ControlAction::Key {
+            key: "ArrowLeft".into(),
+            ms: 0,
+        },
         bridge::ControlAction::Type {
             ak_id: "b".into(),
             text: "t".into(),

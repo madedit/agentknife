@@ -13,7 +13,9 @@ use ak_agent::tools::{PreviewAccess, with_preview_tools};
 use ak_agent::{Agent, AgentConfig};
 use ak_types::agent::{AgentEvent, TurnOutcome};
 use ak_types::chat::{ContentPart, Conversation, Message, ToolSpec};
-use ak_types::preview::{ControlAction, Picked, PreviewStatus, Rect, ServerState, Size};
+use ak_types::preview::{
+    ControlAction, PAGE_CLOSED, Picked, PreviewStatus, Rect, ServerState, Size,
+};
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -92,6 +94,7 @@ impl PreviewAccess for FakePreview {
             ControlAction::Click { ak_id } if ak_id == "missing" => {
                 Err("no element with data-ak-id `missing` on the page".into())
             }
+            ControlAction::Click { ak_id } if ak_id == "reloading" => Err(PAGE_CLOSED.into()),
             ControlAction::AppState => Ok(json!({ "url": "u", "title": "t", "local_storage": {} })),
             _ => Ok(json!({ "done": true })),
         };
@@ -187,6 +190,21 @@ async fn preview_tools() {
         text_of(&call(&r, "interact", json!({ "action": "read_state" })).await)
             .contains("local_storage")
     );
+    // Watching over time: one reading per sample, spread over wait_ms.
+    let before = fake.actions.lock().unwrap().len();
+    let watched = text_of(
+        &call(
+            &r,
+            "interact",
+            json!({ "action": "read_state", "wait_ms": 40, "samples": 3 }),
+        )
+        .await,
+    );
+    assert!(
+        watched.contains("\"after_ms\": 0") && watched.contains("\"after_ms\": 40"),
+        "{watched}"
+    );
+    assert_eq!(fake.actions.lock().unwrap().len(), before + 3);
     assert_eq!(
         fake.actions.lock().unwrap()[1],
         ControlAction::Type {
@@ -445,4 +463,46 @@ async fn the_id_pass_runs_on_the_changed_files_before_the_build_check() {
         vec![vec!["src/main.rs".to_owned()]; 2]
     );
     assert_eq!(build_events(&events), ["checking", "ok=true 0/3"]);
+}
+
+#[tokio::test]
+async fn holding_pressing_keys_and_reloads() {
+    let fake = FakePreview::with(vec![ok()]);
+    let r = with_preview_tools(ToolRegistry::new(), fake.clone(), false);
+    for args in [
+        json!({ "action": "hold", "ak_id": "left-button" }),
+        json!({ "action": "hold", "ak_id": "left-button", "ms": 99_999 }),
+        json!({ "action": "key", "key": "ArrowLeft" }),
+        json!({ "action": "key", "key": " ", "ms": 300 }),
+    ] {
+        let out = call(&r, "interact", args).await;
+        assert!(!out.is_error, "{}", text_of(&out));
+    }
+    let hold = |ms| ControlAction::Hold {
+        ak_id: "left-button".into(),
+        ms,
+    };
+    let key = |k: &str, ms| ControlAction::Key { key: k.into(), ms };
+    assert_eq!(
+        *fake.actions.lock().unwrap(),
+        [hold(1000), hold(10_000), key("ArrowLeft", 0), key(" ", 300)],
+        "defaults, and holds are capped"
+    );
+    let out = call(&r, "interact", json!({ "action": "key" })).await;
+    assert!(out.is_error && text_of(&out).contains("`key` is required"));
+    let out = call(&r, "interact", json!({ "action": "hold" })).await;
+    assert!(out.is_error && text_of(&out).contains("`ak_id` is required"));
+
+    // A rebuild reloads the page mid-action: say what to do next.
+    let out = call(
+        &r,
+        "interact",
+        json!({ "action": "click", "ak_id": "reloading" }),
+    )
+    .await;
+    assert!(
+        out.is_error && text_of(&out).contains("dom_summary"),
+        "{}",
+        text_of(&out)
+    );
 }

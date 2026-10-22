@@ -8,12 +8,13 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     Element, Event, EventInit, HtmlElement, HtmlInputElement, HtmlSelectElement,
-    HtmlTextAreaElement, KeyboardEvent, KeyboardEventInit,
+    HtmlTextAreaElement, KeyboardEvent, KeyboardEventInit, MouseEvent, MouseEventInit,
+    PointerEvent, PointerEventInit,
 };
 
 use crate::protocol::{
-    AppState, ControlAction, DomItem, DomSummary, Rect, ScreenshotArea, Size, error_file,
-    redact_bridge, short_text, strip_bridge_param,
+    AppState, ControlAction, DomItem, DomSummary, MAX_HOLD_MS, Rect, ScreenshotArea, Size,
+    error_file, key_code, redact_bridge, short_text, strip_bridge_param,
 };
 
 /// More than this many items is a sign of a list; the agent gets the start.
@@ -89,19 +90,46 @@ pub fn watch_errors() {
 pub async fn run(action: ControlAction) -> Result<Value, String> {
     match action {
         ControlAction::Click { ak_id } => {
-            let el = find(&ak_id)?;
-            if el.has_attribute("disabled") {
-                return Err(format!("`{ak_id}` is disabled"));
-            }
-            el.scroll_into_view();
-            let html: HtmlElement = el
-                .clone()
-                .dyn_into()
-                .map_err(|_| format!("`{ak_id}` cannot be clicked"))?;
-            let _ = html.focus();
+            let (el, html) = pressable(&ak_id)?;
+            press(&el, true);
+            press(&el, false);
             html.click();
             settle().await;
             Ok(json!({ "clicked": ak_id, "tag": tag(&el) }))
+        }
+        ControlAction::Hold { ak_id, ms } => {
+            let (el, html) = pressable(&ak_id)?;
+            let ms = ms.min(MAX_HOLD_MS);
+            press(&el, true);
+            sleep(ms).await;
+            press(&el, false);
+            html.click();
+            settle().await;
+            Ok(json!({ "held": ak_id, "ms": ms, "tag": tag(&el) }))
+        }
+        ControlAction::Key { key, ms } => {
+            let document = web_sys::window()
+                .and_then(|w| w.document())
+                .ok_or("no document")?;
+            // Where a real key goes: the focused element, else the page.
+            let target: Element = document
+                .active_element()
+                .or_else(|| document.body().map(Into::into))
+                .ok_or("no page body")?;
+            let ms = ms.min(MAX_HOLD_MS);
+            let init = KeyboardEventInit::new();
+            init.set_key(&key);
+            init.set_code(&key_code(&key));
+            init.set_bubbles(true);
+            init.set_cancelable(true);
+            for (kind, wait) in [("keydown", ms), ("keyup", 0)] {
+                if let Ok(ev) = KeyboardEvent::new_with_keyboard_event_init_dict(kind, &init) {
+                    let _ = target.dispatch_event(&ev);
+                }
+                sleep(wait).await;
+            }
+            settle().await;
+            Ok(json!({ "pressed": key, "ms": ms, "on": tag(&target) }))
         }
         ControlAction::Type { ak_id, text, enter } => {
             let el = find(&ak_id)?;
@@ -212,6 +240,74 @@ fn set_text(el: &Element, text: &str) -> Option<()> {
     fire(el, "input");
     fire(el, "change");
     Some(())
+}
+
+/// The element to press, scrolled into view and focused.
+fn pressable(ak_id: &str) -> Result<(Element, HtmlElement), String> {
+    let el = find(ak_id)?;
+    if el.has_attribute("disabled") {
+        return Err(format!("`{ak_id}` is disabled"));
+    }
+    el.scroll_into_view();
+    let html: HtmlElement = el
+        .clone()
+        .dyn_into()
+        .map_err(|_| format!("`{ak_id}` cannot be clicked"))?;
+    let _ = html.focus();
+    Ok((el, html))
+}
+
+/// What a mouse button sends going down or up at the element's centre:
+/// `pointerdown`/`mousedown` or `pointerup`/`mouseup`.
+fn press(el: &Element, down: bool) {
+    let r = el.get_bounding_client_rect();
+    #[allow(clippy::cast_possible_truncation)]
+    let (x, y) = (
+        (r.x() + r.width() / 2.0) as i32,
+        (r.y() + r.height() / 2.0) as i32,
+    );
+    let buttons = u16::from(down);
+    let (pointer, mouse) = if down {
+        ("pointerdown", "mousedown")
+    } else {
+        ("pointerup", "mouseup")
+    };
+    let init = PointerEventInit::new();
+    init.set_bubbles(true);
+    init.set_cancelable(true);
+    init.set_client_x(x);
+    init.set_client_y(y);
+    init.set_buttons(buttons);
+    init.set_pointer_id(1);
+    init.set_pointer_type("mouse");
+    init.set_is_primary(true);
+    if let Ok(ev) = PointerEvent::new_with_event_init_dict(pointer, &init) {
+        let _ = el.dispatch_event(&ev);
+    }
+    let init = MouseEventInit::new();
+    init.set_bubbles(true);
+    init.set_cancelable(true);
+    init.set_client_x(x);
+    init.set_client_y(y);
+    init.set_buttons(buttons);
+    if let Ok(ev) = MouseEvent::new_with_mouse_event_init_dict(mouse, &init) {
+        let _ = el.dispatch_event(&ev);
+    }
+}
+
+/// Waits `ms` milliseconds (none for 0).
+async fn sleep(ms: u32) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    if ms == 0 {
+        return;
+    }
+    let ms = i32::try_from(ms).unwrap_or(i32::MAX);
+    let promise = js_sys::Promise::new(&mut |resolve, _| {
+        let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
+    });
+    let _ = JsFuture::from(promise).await;
 }
 
 /// Enter key events; if nothing handled them, submits the field's form.

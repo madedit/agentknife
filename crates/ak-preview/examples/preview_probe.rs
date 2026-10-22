@@ -60,6 +60,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         session.page_url().await
     );
 
+    // `AK_PROBE_ACTIONS`: a JSON list of control actions to run first, each
+    // answer printed with the app's state after it.
+    if let Ok(list) = std::env::var("AK_PROBE_ACTIONS") {
+        let actions: Vec<ak_types::preview::ControlAction> = serde_json::from_str(&list)?;
+        for a in actions {
+            println!("---- {a:?}\n{:?}", session.act(&a).await);
+            println!("state: {:?}", session.app_state().await.map(|s| s.app));
+        }
+    }
+
     let end = Instant::now() + Duration::from_secs(secs);
     let mut last = String::new();
     while Instant::now() < end {

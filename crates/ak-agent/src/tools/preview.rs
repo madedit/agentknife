@@ -6,7 +6,9 @@ use std::time::Duration;
 
 use ak_preview::PreviewSession;
 use ak_types::chat::{ContentPart, ToolSpec};
-use ak_types::preview::{ControlAction, DomSummary, Picked, PreviewStatus, ServerState};
+use ak_types::preview::{
+    ControlAction, DomSummary, MAX_HOLD_MS, PAGE_CLOSED, Picked, PreviewStatus, ServerState,
+};
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
 
@@ -195,19 +197,29 @@ impl Tool for Interact {
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "interact".into(),
-            description: "Use the running app in the preview, like the user would: click an \
-                          element, type into a field (optionally pressing Enter), or read \
-                          the app's saved state (localStorage and what the app reports). \
-                          Elements are named by data-ak-id. Check the result with \
-                          dom_summary afterwards."
+            description: "Use the running app in the preview, like the user would. Elements \
+                          are named by data-ak-id. `click`: pointer and mouse down and up, \
+                          then click, like a mouse. `hold`: press an element for `ms` then \
+                          let go (buttons that act while held). `key`: press a key on the \
+                          focused element or the page (`key` like \"ArrowLeft\", \" \", \"a\"), \
+                          held for `ms`. `type`: replace a field's text (optionally pressing \
+                          Enter). `read_state`: the app's saved state (localStorage and what \
+                          the app reports with set_state_reader); with `wait_ms` it waits \
+                          first, with `samples` it reads several times spread over `wait_ms` \
+                          (to watch a game run: no need to sleep with run_command). Check \
+                          the result with dom_summary or read_state afterwards."
                 .into(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "action": { "type": "string", "enum": ["click", "type", "read_state"] },
-                    "ak_id": { "type": "string", "description": "data-ak-id of the element (click, type)" },
+                    "action": { "type": "string", "enum": ["click", "hold", "key", "type", "read_state"] },
+                    "ak_id": { "type": "string", "description": "data-ak-id of the element (click, hold, type)" },
                     "text": { "type": "string", "description": "What to type (replaces the field's text)" },
                     "enter": { "type": "boolean", "description": "Press Enter after typing" },
+                    "key": { "type": "string", "description": "The key to press (key), as KeyboardEvent.key" },
+                    "ms": { "type": "integer", "description": "How long to hold (hold: default 1000; key: default 0, a tap), at most 10000" },
+                    "wait_ms": { "type": "integer", "description": "read_state: wait this long first, at most 10000" },
+                    "samples": { "type": "integer", "description": "read_state: read this many times (2 to 10), the first now and the last after wait_ms" },
                 },
                 "required": ["action"],
             }),
@@ -217,31 +229,101 @@ impl Tool for Interact {
     fn call<'a>(&'a self, args: Value, _: &'a ToolContext) -> BoxFuture<'a, ToolOutput> {
         Box::pin(async move {
             let ak_id = args["ak_id"].as_str().map(str::to_owned);
+            let ms = |default: u32| {
+                args["ms"]
+                    .as_u64()
+                    .map_or(default, |n| u32::try_from(n).unwrap_or(u32::MAX))
+                    .min(MAX_HOLD_MS)
+            };
             let action = match (args["action"].as_str(), ak_id) {
                 (Some("click"), Some(ak_id)) => ControlAction::Click { ak_id },
+                (Some("hold"), Some(ak_id)) => ControlAction::Hold {
+                    ak_id,
+                    ms: ms(1000),
+                },
+                (Some("key"), _) => match args["key"].as_str().filter(|k| !k.is_empty()) {
+                    Some(key) => ControlAction::Key {
+                        key: key.to_owned(),
+                        ms: ms(0),
+                    },
+                    None => return ToolOutput::error("`key` is required for key."),
+                },
                 (Some("type"), Some(ak_id)) => ControlAction::Type {
                     ak_id,
                     text: args["text"].as_str().unwrap_or_default().to_owned(),
                     enter: args["enter"].as_bool().unwrap_or(false),
                 },
                 (Some("read_state"), _) => ControlAction::AppState,
-                (Some("click" | "type"), None) => {
-                    return ToolOutput::error("`ak_id` is required for click and type.");
+                (Some("click" | "hold" | "type"), None) => {
+                    return ToolOutput::error("`ak_id` is required for click, hold and type.");
                 }
-                _ => return ToolOutput::error("`action` must be click, type or read_state."),
+                _ => {
+                    return ToolOutput::error(
+                        "`action` must be click, hold, key, type or read_state.",
+                    );
+                }
             };
             let s = self.0.settled(BUILD_WAIT).await;
             if let Some(out) = not_open(&s) {
                 return out;
             }
-            match self.0.act(action).await {
-                Ok(v) => ToolOutput::text(cap(
-                    &serde_json::to_string_pretty(&v).unwrap_or_default(),
+            let shown = |v: &Value| {
+                ToolOutput::text(cap(
+                    &serde_json::to_string_pretty(v).unwrap_or_default(),
                     MAX_OUTPUT_CHARS,
-                )),
-                Err(e) => ToolOutput::error(e),
+                ))
+            };
+            if action == ControlAction::AppState {
+                let wait = args["wait_ms"]
+                    .as_u64()
+                    .map_or(0, |n| n.min(u64::from(MAX_HOLD_MS)));
+                let samples = args["samples"].as_u64().map_or(1, |n| n.clamp(1, 10));
+                return match read_over_time(&*self.0, wait, samples).await {
+                    Ok(v) => shown(&v),
+                    Err(e) => ToolOutput::error(page_error(e)),
+                };
+            }
+            match self.0.act(action).await {
+                Ok(v) => shown(&v),
+                Err(e) => ToolOutput::error(page_error(e)),
             }
         })
+    }
+}
+
+/// The app's state after `wait` ms; with several `samples`, a list of
+/// `{ after_ms, state }` spread evenly from now to `wait`.
+async fn read_over_time(
+    preview: &dyn PreviewAccess,
+    wait: u64,
+    samples: u64,
+) -> Result<Value, String> {
+    if samples <= 1 {
+        tokio::time::sleep(Duration::from_millis(wait)).await;
+        return preview.act(ControlAction::AppState).await;
+    }
+    let step = wait / (samples - 1);
+    let mut out = Vec::new();
+    for i in 0..samples {
+        if i > 0 {
+            tokio::time::sleep(Duration::from_millis(step)).await;
+        }
+        let state = preview.act(ControlAction::AppState).await?;
+        out.push(json!({ "after_ms": i * step, "state": state }));
+    }
+    Ok(Value::Array(out))
+}
+
+/// The page reloads after each rebuild; an action caught by that may or may
+/// not have happened, so say what to do instead of the bare bridge answer.
+fn page_error(e: String) -> String {
+    if e == PAGE_CLOSED {
+        "The preview page reloaded (the app was rebuilt) before this finished, so it may \
+         not have happened. Call dom_summary or read_state to see the page now, then try \
+         again."
+            .into()
+    } else {
+        e
     }
 }
 
