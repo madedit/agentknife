@@ -2,7 +2,8 @@
 
 The app is all Rust: a **Leptos** user interface compiled to WebAssembly (shown in a
 web view) and a **Tauri 2** backend that runs on the computer. Never add Node.js, npm
-or JavaScript frameworks.
+or JavaScript frameworks. The one exception is 3D: three.js, added with
+`add_library` (topic `three-d`).
 
 ```text
 Cargo.toml            the screens' package (app-ui) and the workspace
@@ -35,7 +36,8 @@ ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates 
 - Keep data the user enters: save it (topic `storage`).
 - Splitting code: put screens in `src/` modules (`mod todos;` in `src/main.rs` and
   `src/todos.rs`) and backend code in `src-tauri/src/` modules.
-- Do not change `[features]`, the `ak/` folder, `index.html`'s trunk links or
+- Do not change `[features]`, the `ak/` folder, `index.html`'s trunk links (adding
+  what topic `three-d` says is fine) or
   `tauri.conf.json`'s `build` section: the preview and the installer depend on them.
 - New crates: only when really needed, with a fixed version
   (e.g. `chrono = "0.4.45"`). Crates must work in WebAssembly if the screens use them.

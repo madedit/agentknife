@@ -12,7 +12,7 @@ use ak_types::stack::{
 /// `templates/tauri-leptos`, embedded by build.rs.
 static FILES: &[TemplateFile] = include!(concat!(env!("OUT_DIR"), "/tauri_leptos_files.rs"));
 
-// `knowledge/tauri-leptos` (KNOWLEDGE_ID, KNOWLEDGE_VERSION, KNOWLEDGE_TOPICS),
+// `knowledge/tauri-leptos` (KNOWLEDGE_ID, KNOWLEDGE_VERSION, KNOWLEDGE_TOPICS, KNOWLEDGE_LIBRARIES),
 // embedded by build.rs.
 include!(concat!(env!("OUT_DIR"), "/tauri_leptos_knowledge.rs"));
 
@@ -98,6 +98,7 @@ impl StackProfile for TauriLeptos {
             id: KNOWLEDGE_ID,
             version: KNOWLEDGE_VERSION,
             topics: KNOWLEDGE_TOPICS,
+            libraries: KNOWLEDGE_LIBRARIES,
         }
     }
 
@@ -320,6 +321,29 @@ mod tests {
                 .body
                 .contains("data-ak-id")
         );
+    }
+
+    #[test]
+    fn three_js_ships_with_its_topic() {
+        let pack = TauriLeptos.knowledge_pack();
+        let three = pack.library("three").unwrap();
+        assert_eq!(three.target, "vendor/three");
+        let paths: Vec<&str> = three.files.iter().map(|f| f.path).collect();
+        assert_eq!(
+            paths,
+            [
+                "LICENSE",
+                "addons/controls/OrbitControls.js",
+                "three.core.js",
+                "three.module.js"
+            ]
+        );
+        // The topic's import map points at the files add_library writes.
+        let topic = pack.topic("three-d").unwrap().body;
+        for p in ["three.module.js", "addons/"] {
+            assert!(topic.contains(&format!("./{}/{p}", three.target)), "{p}");
+        }
+        assert!(three.summary.contains("`three-d`"));
     }
 
     #[test]

@@ -60,6 +60,7 @@ fn protocol_copies_match_ak_bridge() {
             disabled: true,
         }],
         omitted: 2,
+        errors: vec!["TypeError: x is undefined (game.js:3)".into()],
     };
     let copy: ours::DomSummary = same_json(&summary);
     assert_eq!(copy.render(), bridge::render_dom_summary(&summary));

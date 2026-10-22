@@ -4,6 +4,7 @@ mod ask;
 mod command;
 mod files;
 mod knowledge;
+mod library;
 pub mod path;
 pub mod preview;
 mod search;
@@ -17,6 +18,7 @@ pub use ask::{AskUser, Asker, Question};
 pub use command::{RunCommand, ToolEnv};
 pub use files::{EditFile, ListFiles, ReadFile, WriteFile};
 pub use knowledge::{READ_KNOWLEDGE, ReadKnowledge};
+pub use library::{ADD_LIBRARY, AddLibrary};
 pub use preview::{PREVIEW_TOOLS, PreviewAccess, with_preview_tools};
 pub use search::SearchFiles;
 
@@ -29,7 +31,8 @@ pub const MAX_OUTPUT_CHARS: usize = 30_000;
 pub(crate) const SKIP_DIRS: &[&str] = &[".git", "target", "node_modules", "dist"];
 
 /// Every project tool, ready for [`crate::Agent`]. `knowledge` is the project
-/// stack's docs (`StackProfile::knowledge_pack`), served by `read_knowledge`.
+/// stack's docs (`StackProfile::knowledge_pack`), served by `read_knowledge`;
+/// its libraries, if any, by `add_library`.
 pub fn project_tools(
     env: ToolEnv,
     asker: Arc<dyn Asker>,
@@ -44,6 +47,9 @@ pub fn project_tools(
         .with(Arc::new(RunCommand::new(env)))
         .with(Arc::new(AskUser::new(asker)));
     match knowledge {
+        Some(pack) if !pack.libraries.is_empty() => tools
+            .with(Arc::new(ReadKnowledge::new(pack)))
+            .with(Arc::new(AddLibrary::new(pack))),
         Some(pack) => tools.with(Arc::new(ReadKnowledge::new(pack))),
         None => tools,
     }

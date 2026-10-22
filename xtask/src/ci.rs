@@ -3,7 +3,9 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::{Result, bridge, downloads, i18n, kit, layering, nonode, stack, vendor, versions};
+use crate::{
+    Result, bridge, downloads, i18n, kit, layering, libs, nonode, stack, vendor, versions,
+};
 
 /// Crates that must also build for `wasm32-unknown-unknown`.
 const WASM_CRATES: &[&str] = &[
@@ -67,6 +69,7 @@ pub fn run(root: &Path) -> Result<()> {
     step("stack", || stack::check(root))?;
     step("i18n", || i18n::check(root))?;
     step("vendor", || vendor::check(root))?;
+    step("libs", || libs::check(root))?;
     step("no-node", || nonode::check(root))?;
     step("wasm", || {
         let mut args = vec!["clippy", "--target", "wasm32-unknown-unknown"];

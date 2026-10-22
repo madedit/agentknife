@@ -95,6 +95,7 @@ mod tests {
             id: "stack",
             version: "1.0.0",
             topics: TOPICS,
+            libraries: &[],
         })
     }
 

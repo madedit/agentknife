@@ -56,6 +56,7 @@ impl StackProfile for Fake {
             id: "fake",
             version: "0",
             topics: &[],
+            libraries: &[],
         }
     }
     fn doctor_requirements(&self) -> &'static [&'static str] {

@@ -115,6 +115,10 @@ pub struct DomSummary {
     /// Items left out to stay within the size limit.
     #[serde(default)]
     pub omitted: usize,
+    /// Uncaught script errors on the page since it loaded, oldest first (the
+    /// newest few). A blank canvas often means one of these.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<String>,
 }
 
 /// The summary as compact text for a model, e.g.
@@ -147,7 +151,44 @@ pub fn render_dom_summary(s: &DomSummary) -> String {
     if s.omitted > 0 {
         out.push_str(&format!("({} more elements not shown)\n", s.omitted));
     }
+    if !s.errors.is_empty() {
+        out.push_str("Errors on the page:\n");
+        for e in &s.errors {
+            out.push_str(&format!("- {e}\n"));
+        }
+    }
     out
+}
+
+/// `text` with every `ak_bridge=…` value cut out (an error message may quote the
+/// page's URL, which carries the bridge token).
+pub fn redact_bridge(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(i) = rest.find("ak_bridge=") {
+        let (before, after) = rest.split_at(i + "ak_bridge=".len());
+        out.push_str(before);
+        out.push('…');
+        let end = after
+            .find(|c: char| c.is_whitespace() || matches!(c, '&' | '#' | '"' | '\'' | ')'))
+            .unwrap_or(after.len());
+        rest = &after[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The file name a page error points at (`game.js` for
+/// `http://127.0.0.1:1420/snippets/app-ui-…/src/game.js`), without query or
+/// fragment: the page's own URL carries the bridge token. `None` for none.
+pub fn error_file(url: &str) -> Option<String> {
+    let path = url.split(['?', '#']).next().unwrap_or_default();
+    let name = path.rsplit('/').next().unwrap_or_default();
+    match name {
+        "" if path.is_empty() => None,
+        "" => Some("index.html".into()),
+        n => Some(n.to_owned()),
+    }
 }
 
 /// `url` without the `ak_bridge` parameter: it carries the bridge token, which
@@ -462,6 +503,7 @@ mod tests {
                 },
             ],
             omitted: 3,
+            errors: vec!["ReferenceError: THREE is not defined (game.js:9)".into()],
         };
         assert_eq!(
             render_dom_summary(&summary),
@@ -471,8 +513,31 @@ mod tests {
              \x20 input #todo-input type=text value=\"milk\"\n\
              \x20 button #add-button disabled \"Add\"\n\
              \x20 input checked\n\
-             (3 more elements not shown)\n"
+             (3 more elements not shown)\n\
+             Errors on the page:\n\
+             - ReferenceError: THREE is not defined (game.js:9)\n"
         );
+    }
+
+    #[test]
+    fn page_errors_name_the_file_without_the_token() {
+        let page = "http://127.0.0.1:59215/?ak_bridge=ws%3A%2F%2Fx%3Ftoken%3Dsecret";
+        assert_eq!(error_file(page).as_deref(), Some("index.html"));
+        assert_eq!(
+            error_file("http://127.0.0.1:1420/snippets/app-ui-1/src/game.js").as_deref(),
+            Some("game.js")
+        );
+        assert_eq!(
+            error_file("http://h/vendor/three/three.core.js?v=1#x").as_deref(),
+            Some("three.core.js")
+        );
+        assert_eq!(error_file(""), None);
+        assert_eq!(
+            redact_bridge("bad url http://h/?a=1&ak_bridge=ws%3Asecret&b=2 (x)"),
+            "bad url http://h/?a=1&ak_bridge=…&b=2 (x)"
+        );
+        assert_eq!(redact_bridge("ak_bridge=secret"), "ak_bridge=…");
+        assert_eq!(redact_bridge("plain"), "plain");
     }
 
     #[test]

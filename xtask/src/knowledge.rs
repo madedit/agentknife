@@ -1,7 +1,8 @@
 //! `cargo xtask check-knowledge`: compiles the knowledge pack's code the way the
 //! agent would use it — a project from the template with the complete example
 //! (`example-todo.md`) as its code and the other topics' snippets
-//! (`knowledge/<stack>/check/`) beside it — using AgentKnife's own toolchain.
+//! (`knowledge/<stack>/check/`) beside it, plus the 3D topic's `game.js` and
+//! `game.rs` as a module — using AgentKnife's own toolchain.
 //! Slow (a full build); run it after changing the docs or a pinned version.
 
 use std::path::Path;
@@ -32,8 +33,13 @@ fn copy_dir(from: &Path, to: &Path) -> Result<()> {
 
 /// The ```rust blocks of a Markdown file, in order.
 fn rust_blocks(markdown: &str) -> Vec<String> {
+    blocks(markdown, "rust")
+}
+
+/// The fenced blocks of one language, in order.
+fn blocks(markdown: &str, lang: &str) -> Vec<String> {
     markdown
-        .split("```rust\n")
+        .split(&format!("```{lang}\n"))
         .skip(1)
         .filter_map(|rest| rest.split_once("```").map(|(code, _)| code.to_owned()))
         .collect()
@@ -64,8 +70,18 @@ pub fn check_build(root: &Path) -> Result<()> {
     )?;
     std::fs::write(
         out.join("src/main.rs"),
-        format!("{screens}\n#[allow(dead_code, unused)]\nmod snippets;\n"),
+        format!(
+            "{screens}\n#[allow(dead_code, unused)]\nmod snippets;\n#[allow(dead_code)]\nmod game;\n"
+        ),
     )?;
+    // The 3D topic: its JS module (wasm-bindgen reads it while compiling) and screen.
+    let three = std::fs::read_to_string(pack.join("three-d.md"))?;
+    let [game_js] = <[String; 1]>::try_from(blocks(&three, "js"))
+        .map_err(|b| format!("three-d.md: expected 1 js block, found {}", b.len()))?;
+    let [game_rs] = <[String; 1]>::try_from(rust_blocks(&three))
+        .map_err(|b| format!("three-d.md: expected 1 rust block, found {}", b.len()))?;
+    std::fs::write(out.join("src/game.js"), game_js)?;
+    std::fs::write(out.join("src/game.rs"), game_rs)?;
     std::fs::copy(
         pack.join("check/backend.rs"),
         out.join("src-tauri/src/snippets.rs"),
@@ -78,7 +94,7 @@ pub fn check_build(root: &Path) -> Result<()> {
     )?;
     add_deps(
         &out.join("Cargo.toml"),
-        "serde_json = \"1.0.154\"\nweb-sys = { version = \"0.3.106\", features = [\"Storage\", \"Window\"] }\n",
+        "serde_json = \"1.0.154\"\nweb-sys = { version = \"0.3.106\", features = [\"HtmlCanvasElement\", \"Storage\", \"Window\"] }\n",
     )?;
 
     let pinned = Pinned::builtin()?;

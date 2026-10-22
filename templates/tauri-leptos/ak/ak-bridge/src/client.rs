@@ -18,6 +18,7 @@ use wasm_bindgen_futures::JsFuture;
 pub fn start() {
     #[cfg(feature = "dev")]
     {
+        crate::control::watch_errors();
         crate::inspector::install();
         bridge::keep_connected();
     }

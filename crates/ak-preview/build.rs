@@ -117,6 +117,44 @@ fn knowledge(dir: &Path, out_dir: &Path) {
         );
     }
     code.push_str("];\n");
+    code.push_str("pub(crate) static KNOWLEDGE_LIBRARIES: &[ak_types::stack::Library] = &[\n");
+    for lib in pack
+        .get("library")
+        .and_then(|t| t.as_array())
+        .into_iter()
+        .flatten()
+    {
+        let lib_dir = dir.join(field(lib, "dir"));
+        let mut files = Vec::new();
+        walk(&lib_dir, &lib_dir, &mut files);
+        files.sort();
+        let _ = writeln!(
+            code,
+            "    ak_types::stack::Library {{ id: {:?}, version: {:?}, summary: {:?}, target: {:?}, files: &[",
+            field(lib, "id"),
+            field(lib, "version"),
+            field(lib, "summary"),
+            field(lib, "target"),
+        );
+        for file in files {
+            let rel = file
+                .strip_prefix(&lib_dir)
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_default();
+            // The vendoring checksums stay in AgentKnife's repo.
+            if rel == "SHA256SUMS" {
+                continue;
+            }
+            let abs = file.canonicalize().unwrap_or(file);
+            let _ = writeln!(
+                code,
+                "        ak_types::stack::TemplateFile {{ path: {rel:?}, contents: include_bytes!({:?}) }},",
+                abs.to_string_lossy()
+            );
+        }
+        code.push_str("    ] },\n");
+    }
+    code.push_str("];\n");
     let out = out_dir.join("tauri_leptos_knowledge.rs");
     if let Err(e) = std::fs::write(&out, code) {
         panic!("writing {}: {e}", out.display());

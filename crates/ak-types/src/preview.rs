@@ -138,6 +138,10 @@ pub struct DomSummary {
     pub items: Vec<DomItem>,
     #[serde(default)]
     pub omitted: usize,
+    /// Uncaught script errors on the page since it loaded, oldest first (the
+    /// newest few). A blank canvas often means one of these.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<String>,
 }
 
 impl DomSummary {
@@ -170,6 +174,12 @@ impl DomSummary {
         }
         if self.omitted > 0 {
             out.push_str(&format!("({} more elements not shown)\n", self.omitted));
+        }
+        if !self.errors.is_empty() {
+            out.push_str("Errors on the page:\n");
+            for e in &self.errors {
+                out.push_str(&format!("- {e}\n"));
+            }
         }
         out
     }

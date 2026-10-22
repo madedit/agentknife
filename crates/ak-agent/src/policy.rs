@@ -103,6 +103,8 @@ impl PermissionGate for ProjectPolicy {
                 }
             }
             "write_file" | "edit_file" => change(file_decision(root, path_arg, true), path_arg),
+            // Copies a library that ships with AgentKnife into its fixed folder.
+            crate::tools::ADD_LIBRARY => change(Decision::Allow, crate::tools::ADD_LIBRARY),
             "run_command" => {
                 let cmd = args["command"].as_str().unwrap_or_default();
                 change(classify_with(cmd, root, &self.references), cmd)
@@ -849,6 +851,15 @@ mod tests {
     }
 
     #[test]
+    fn adding_a_library_is_an_ordinary_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = ToolContext::for_project(dir.path());
+        let policy = ProjectPolicy::new(PermissionMode::Standard);
+        let args = json!({ "library": "three" });
+        assert_eq!(kind(&policy.check("add_library", &args, &ctx)), "allow");
+    }
+
+    #[test]
     fn ask_every_change_mode() {
         let dir = tempfile::tempdir().unwrap();
         let ctx = ToolContext::for_project(dir.path());
@@ -861,6 +872,10 @@ mod tests {
             "allow"
         );
         assert_eq!(check("write_file", json!({ "path": "a" })), "ask:Change");
+        assert_eq!(
+            check("add_library", json!({ "library": "three" })),
+            "ask:Change"
+        );
         assert_eq!(
             check("run_command", json!({ "command": "cargo build" })),
             "ask:Change"

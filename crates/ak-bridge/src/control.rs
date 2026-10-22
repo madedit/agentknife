@@ -12,8 +12,8 @@ use web_sys::{
 };
 
 use crate::protocol::{
-    AppState, ControlAction, DomItem, DomSummary, Rect, ScreenshotArea, Size, short_text,
-    strip_bridge_param,
+    AppState, ControlAction, DomItem, DomSummary, Rect, ScreenshotArea, Size, error_file,
+    redact_bridge, short_text, strip_bridge_param,
 };
 
 /// More than this many items is a sign of a list; the agent gets the start.
@@ -23,12 +23,67 @@ const OVERLAY_ID: &str = "__ak_inspector_overlay";
 
 type StateReader = Box<dyn Fn() -> Value>;
 
+/// Page errors kept for `dom_summary` (the newest).
+const MAX_ERRORS: usize = 10;
+const ERROR_MAX: usize = 300;
+
 thread_local! {
     static STATE_READER: RefCell<Option<StateReader>> = const { RefCell::new(None) };
+    static ERRORS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
 pub fn set_state_reader(f: impl Fn() -> Value + 'static) {
     STATE_READER.with(|r| *r.borrow_mut() = Some(Box::new(f)));
+}
+
+fn field(v: &wasm_bindgen::JsValue, name: &str) -> wasm_bindgen::JsValue {
+    js_sys::Reflect::get(v, &name.into()).unwrap_or(wasm_bindgen::JsValue::UNDEFINED)
+}
+
+fn remember_error(text: String) {
+    ERRORS.with(|e| {
+        let mut e = e.borrow_mut();
+        if let Some(text) = short_text(&redact_bridge(&text), ERROR_MAX) {
+            if e.len() == MAX_ERRORS {
+                e.remove(0);
+            }
+            e.push(text);
+        }
+    });
+}
+
+/// Records uncaught errors and rejected promises (e.g. from the app's own
+/// JavaScript), so the agent sees why a canvas stays blank.
+pub fn watch_errors() {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let on_error = wasm_bindgen::closure::Closure::<dyn Fn(Event)>::new(|ev: Event| {
+        let message = field(&ev, "message").as_string().unwrap_or_default();
+        let url = field(&ev, "filename").as_string().unwrap_or_default();
+        let line = field(&ev, "lineno").as_f64().unwrap_or(0.0);
+        remember_error(match error_file(&url) {
+            Some(file) => format!("{message} ({file}:{line})"),
+            None => message,
+        });
+    });
+    let on_rejection = wasm_bindgen::closure::Closure::<dyn Fn(Event)>::new(|ev: Event| {
+        let reason = field(&ev, "reason");
+        let text = js_sys::Reflect::get(&reason, &"message".into())
+            .ok()
+            .and_then(|m| m.as_string())
+            .or_else(|| reason.as_string())
+            .unwrap_or_else(|| "a promise was rejected".into());
+        remember_error(format!("Unhandled rejection: {text}"));
+    });
+    let _ = window.add_event_listener_with_callback("error", on_error.as_ref().unchecked_ref());
+    let _ = window.add_event_listener_with_callback(
+        "unhandledrejection",
+        on_rejection.as_ref().unchecked_ref(),
+    );
+    // For the page's lifetime.
+    on_error.forget();
+    on_rejection.forget();
 }
 
 pub async fn run(action: ControlAction) -> Result<Value, String> {
@@ -238,6 +293,7 @@ fn dom_summary() -> Result<DomSummary, String> {
         url: strip_bridge_param(&window.location().href().unwrap_or_default()),
         items,
         omitted,
+        errors: ERRORS.with(|e| e.borrow().clone()),
     })
 }
 

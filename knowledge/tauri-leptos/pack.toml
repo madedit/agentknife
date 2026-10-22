@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.1.0"
+version = "0.2.0"
 
 [versions]
 tauri = "2.12.4"
@@ -79,7 +79,22 @@ summary = "A whole app: add, check and delete items, saved to a file by the back
 file = "example-todo.md"
 
 [[topic]]
+id = "three-d"
+title = "3D games and scenes (three.js)"
+summary = "3D graphics with three.js on a <canvas>: add_library, index.html, a game.js module called from Rust, input, score, cleanup."
+file = "three-d.md"
+
+[[topic]]
 id = "troubleshooting"
 title = "Fixing common build errors"
 summary = "What the usual Rust, Leptos, Tauri and Trunk errors mean and how to fix them."
 file = "troubleshooting.md"
+
+# JS libraries `add_library` can copy into a project (vendored by
+# `cargo xtask vendor-libs`; versions in versions.toml [vendor.libraries]).
+[[library]]
+id = "three"
+version = "0.186.1"
+summary = "three.js 3D graphics (WebGL) for games and 3D scenes. Read topic `three-d` for the setup."
+dir = "libraries/three"
+target = "vendor/three"

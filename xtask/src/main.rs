@@ -10,6 +10,7 @@ mod i18n;
 mod kit;
 mod knowledge;
 mod layering;
+mod libs;
 mod nonode;
 mod stack;
 mod vendor;
@@ -29,6 +30,7 @@ fn main() -> ExitCode {
             Some("index") => vendor::write_index(&workspace_root()),
             _ => vendor::vendor_codemirror(&workspace_root()),
         },
+        Some("vendor-libs") => libs::vendor(&workspace_root()),
         Some("pin-downloads") => downloads::pin(&workspace_root()),
         Some("vendor-kit") => kit::vendor(&workspace_root()),
         Some("check-knowledge") => knowledge::check_build(&workspace_root()),
@@ -46,7 +48,7 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-toolchain|ci|dev|build|e2e|vendor-codemirror|pin-downloads|vendor-kit|check-knowledge>"
+                "usage: cargo xtask <gen-toolchain|ci|dev|build|e2e|vendor-codemirror|vendor-libs|pin-downloads|vendor-kit|check-knowledge>"
             );
             return ExitCode::FAILURE;
         }

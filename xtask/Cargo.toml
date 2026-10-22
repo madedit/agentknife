@@ -7,11 +7,13 @@ publish.workspace = true
 
 [dependencies]
 ak-doctor = { path = "../crates/ak-doctor" }
+flate2.workspace = true
 fluent-syntax.workspace = true
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tar.workspace = true
 toml.workspace = true
 ureq.workspace = true
 

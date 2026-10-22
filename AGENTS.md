@@ -36,7 +36,7 @@ Core flow: connect an AI → AI greets the user and suggests next steps → `doc
 
 The user's app stack is the MVP **stack profile** `tauri-leptos`: Tauri 2, Leptos CSR, Trunk, and the Tailwind standalone CLI.
 
-**No Node.js anywhere.** That covers AgentKnife, generated apps, and CI. A `package.json` or `node_modules` must never appear in this repo.
+**No Node.js anywhere.** That covers AgentKnife, generated apps, and CI. A `package.json` or `node_modules` must never appear in this repo. Plain JS files are fine where vendored (CodeMirror below; libraries for generated apps, see "JS libraries for generated apps").
 
 ### Single source of versions: `versions.toml`
 
@@ -65,6 +65,14 @@ To upgrade, edit `versions.toml` and update everything that follows from it **in
   - every import resolves through the import map
   - no stray imports
 - To upgrade or add a language: edit `versions.toml` (and the module list in `vendor.rs`), then re-run the xtask.
+
+### JS libraries for generated apps
+
+- Apps get JS only through the knowledge pack's `[[library]]` entries (id, version, summary, `dir` under the pack, `target` in the project). Today: three.js (`three`) for 3D, with `addons/controls/OrbitControls.js`.
+- `cargo xtask vendor-libs` takes each library's files from its npm tarball (checked against the registry's sha512 `integrity`) into `knowledge/<stack>/libraries/<id>/` and writes `SHA256SUMS`. Versions live in `versions.toml` `[vendor.libraries]`; the file list in `xtask/src/libs.rs`.
+- CI (step `libs`) checks the hashes, a version mark inside the files, and that `pack.toml` agrees with `versions.toml`. It downloads nothing. `.gitattributes` keeps the files byte-for-byte.
+- ak-preview build.rs embeds the files (`KnowledgePack::libraries`, without `SHA256SUMS`). The agent's `add_library` tool copies them into `<target>/` (unchanged files untouched, changed ones restored); the policy treats it like any file change. It is registered only when the pack has libraries.
+- The topic (`three-d`) has the app add an import map and `copy-dir` to `index.html`, put its 3D code in `src/game.js` and call it from Rust with `#[wasm_bindgen(module = "/src/game.js")]`. check-knowledge compiles its `js` and `rust` blocks as `src/game.js` and `src/game.rs`.
 
 Out of scope until Phase 3: wasmtime plugins and an egui profile. Keep the abstractions open, but do not implement them.
 
@@ -179,6 +187,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
     - `prepare_screenshot` only scrolls, waits for paint and reports the area. The pixels are captured by AgentKnife (P1-PREV-002).
     - Page reports strip the `ak_bridge` URL parameter, because it carries the token and the reports go to the model.
     - Apps may expose state with `ak_bridge::set_state_reader`.
+    - `start()` also records uncaught page errors and rejected promises (newest 10); `dom_summary` lists them at the end, so the agent can see why e.g. a canvas stays blank.
   - Crates that link Tauri and have tests need the Windows Common-Controls manifest for their test binaries (see `crates/ak-bridge/build.rs`); otherwise the tests fail to start with STATUS_ENTRYPOINT_NOT_FOUND.
   - A "Run in real window" button runs `cargo tauri dev -- --target-dir <project>/target/ak-window`. It needs its own target folder: the preview runs its `app.exe` from `target/debug`, and Windows cannot replace a running program. The command waits until the app has run for a moment and returns the output if it could not start. Stop it with `kill_tree`, because tauri leaves trunk and the app behind.
   - The project's log (`ak_preview::log::LogBook`, owned by `Preview`, shared via `OpenProject::log`) gets every line any project program prints: the preview's processes, the real window, packaging and the AI's steps. Anything new that runs a project program must push its output there too. The Log tab (full mode) shows it; see `get_log` / `LOG_EVENT`. Anything the user waits on while it builds shows its lines live in the build log window over the preview (`logs::BuildLog`), never only a spinner.

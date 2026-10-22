@@ -162,6 +162,8 @@ pub struct KnowledgePack {
     pub id: &'static str,
     pub version: &'static str,
     pub topics: &'static [KnowledgeTopic],
+    /// JS libraries the agent may add to the project (`add_library`).
+    pub libraries: &'static [Library],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -174,9 +176,27 @@ pub struct KnowledgeTopic {
     pub body: &'static str,
 }
 
+/// A pinned, vendored JS library (no Node, nothing downloaded): `add_library`
+/// copies its files into the project under `target`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Library {
+    pub id: &'static str,
+    pub version: &'static str,
+    /// One line: what it is for and which topic explains its use.
+    pub summary: &'static str,
+    /// Project-relative folder the files go to.
+    pub target: &'static str,
+    /// Paths relative to `target`.
+    pub files: &'static [TemplateFile],
+}
+
 impl KnowledgePack {
     pub fn topic(&self, id: &str) -> Option<&'static KnowledgeTopic> {
         self.topics.iter().find(|t| t.id == id)
+    }
+
+    pub fn library(&self, id: &str) -> Option<&'static Library> {
+        self.libraries.iter().find(|l| l.id == id)
     }
 }
 

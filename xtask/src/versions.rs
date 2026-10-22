@@ -25,6 +25,10 @@ pub struct VendorVersions {
     /// npm package -> exact version, vendored by `cargo xtask vendor-codemirror`.
     #[serde(default)]
     pub codemirror: BTreeMap<String, String>,
+    /// npm package -> exact version, vendored by `cargo xtask vendor-libs` for
+    /// generated apps (`add_library`).
+    #[serde(default)]
+    pub libraries: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]

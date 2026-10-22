@@ -16,7 +16,7 @@ use crate::Result;
 use crate::versions::Versions;
 
 const CODEMIRROR_DIR: &str = "crates/ak-shell/vendor/codemirror";
-const SUMS_FILE: &str = "SHA256SUMS";
+pub(crate) const SUMS_FILE: &str = "SHA256SUMS";
 const MANIFEST_FILE: &str = "manifest.toml";
 const IMPORTMAP_FILE: &str = "importmap.json";
 const ESM_HOST: &str = "https://esm.sh";
@@ -344,7 +344,7 @@ fn parse_sums(text: &str) -> BTreeMap<String, String> {
         .collect()
 }
 
-fn verify_dir(dir: &Path) -> Result<Vec<String>> {
+pub(crate) fn verify_dir(dir: &Path) -> Result<Vec<String>> {
     let label = dir.display();
     let Ok(text) = std::fs::read_to_string(dir.join(SUMS_FILE)) else {
         return Ok(vec![format!("{label}: missing {SUMS_FILE}")]);
@@ -369,7 +369,7 @@ fn verify_dir(dir: &Path) -> Result<Vec<String>> {
 }
 
 /// Lists files under `dir` as sorted `/`-separated paths relative to `base`.
-fn list_files(base: &Path, dir: &Path) -> Result<Vec<String>> {
+pub(crate) fn list_files(base: &Path, dir: &Path) -> Result<Vec<String>> {
     let mut out = Vec::new();
     for entry in std::fs::read_dir(dir)? {
         let path = entry?.path();
