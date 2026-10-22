@@ -48,11 +48,15 @@ Use effects for syncing (e.g. saving), not for computing values to show.
 Event handlers cannot be `async`; start a task:
 ```rust
 let busy = RwSignal::new(false);
+let toaster = use_toaster();   // in the component body
 let load = move |_| {
     busy.set(true);
     leptos::task::spawn_local(async move {
         let result: Result<Vec<String>, _> = ak_bridge::invoke("list_items", &()).await;
-        if let Ok(list) = result { items.set(list); }
+        match result {
+            Ok(list) => items.set(list),
+            Err(e) => toaster.error(e.to_string()),
+        }
         busy.set(false);
     });
 };

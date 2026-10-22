@@ -91,11 +91,25 @@ pub async fn invoke<T: DeserializeOwned>(
 ) -> Result<T, InvokeError> {
     let args = serde_json::to_value(args).map_err(|e| InvokeError::Decode(e.to_string()))?;
     let value = invoke_value(cmd, args).await?;
-    serde_json::from_value(value).map_err(|e| InvokeError::Decode(e.to_string()))
+    serde_json::from_value(value).map_err(|e| noted(cmd, InvokeError::Decode(e.to_string())))
 }
 
 /// [`invoke`] without types.
 pub async fn invoke_value(cmd: &str, args: Value) -> Result<Value, InvokeError> {
+    call(cmd, args).await.map_err(|e| noted(cmd, e))
+}
+
+/// In the preview, a failed command is also listed among the page's errors:
+/// apps often ignore the error, and the button then silently does nothing.
+fn noted(cmd: &str, e: InvokeError) -> InvokeError {
+    #[cfg(feature = "dev")]
+    crate::control::remember_error(format!("Command `{cmd}` failed: {e}"));
+    #[cfg(not(feature = "dev"))]
+    let _ = cmd;
+    e
+}
+
+async fn call(cmd: &str, args: Value) -> Result<Value, InvokeError> {
     #[cfg(feature = "dev")]
     let bridge_url = bridge::url();
     #[cfg(not(feature = "dev"))]

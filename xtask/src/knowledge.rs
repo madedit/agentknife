@@ -91,11 +91,11 @@ pub fn check_build(root: &Path) -> Result<()> {
     // What the docs tell the agent to add.
     add_deps(
         &out.join("src-tauri/Cargo.toml"),
-        "serde_json = \"1.0.154\"\n",
+        "serde_json = \"1.0.154\"\nchrono = \"0.4.45\"\n",
     )?;
     add_deps(
         &out.join("Cargo.toml"),
-        "serde_json = \"1.0.154\"\nweb-sys = { version = \"0.3.106\", features = [\"HtmlCanvasElement\", \"Storage\", \"Window\"] }\n",
+        "serde_json = \"1.0.154\"\njs-sys = \"0.3.106\"\nweb-sys = { version = \"0.3.106\", features = [\"HtmlCanvasElement\", \"Storage\", \"Window\"] }\n",
     )?;
 
     let pinned = Pinned::builtin()?;

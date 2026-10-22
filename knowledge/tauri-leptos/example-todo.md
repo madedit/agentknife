@@ -76,6 +76,7 @@ struct Todo {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct SaveArgs {
     todos: Vec<Todo>,
 }

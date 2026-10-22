@@ -65,8 +65,56 @@ fn save_notes(app: tauri::AppHandle, notes: Vec<Note>) -> Result<(), String> {
     std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
+// ---- storage: export ----
+/// Writes `rows` as a CSV file in the user's Downloads folder; returns its path.
+#[tauri::command]
+fn export_csv(
+    app: tauri::AppHandle,
+    file_name: String,
+    rows: Vec<Vec<String>>,
+) -> Result<String, String> {
+    let dir = app.path().download_dir().map_err(|e| e.to_string())?;
+    let path = dir.join(format!("{}.csv", safe_file_name(&file_name)));
+    // The BOM makes Excel read Chinese and other non-English text correctly.
+    let mut text = String::from('\u{feff}');
+    for row in &rows {
+        let cells: Vec<String> = row.iter().map(|c| csv_cell(c)).collect();
+        text.push_str(&cells.join(","));
+        text.push_str("\r\n");
+    }
+    // Same as saving: a temporary file first, so a crash never leaves half a file.
+    let tmp = path.with_extension("csv.tmp");
+    std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
+    Ok(path.display().to_string())
+}
+
+/// Quotes a cell that holds a comma, a quote or a line break.
+fn csv_cell(s: &str) -> String {
+    if s.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_owned()
+    }
+}
+
+/// A name Windows accepts: no \ / : * ? " < > |, no trailing dot or space.
+fn safe_file_name(name: &str) -> String {
+    let s: String = name
+        .chars()
+        .map(|c| if "\\/:*?\"<>|".contains(c) || c.is_control() { '_' } else { c })
+        .collect();
+    let s = s.trim().trim_end_matches(['.', ' ']);
+    if s.is_empty() { "export".to_owned() } else { s.to_owned() }
+}
+
 /// The registrations the docs show, to make sure they type-check.
 pub fn register(b: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
     b.manage(Counter::default())
-        .invoke_handler(tauri::generate_handler![add, bump, slow_task, data_file, load_notes, save_notes])
+        .invoke_handler(tauri::generate_handler![add, bump, slow_task, data_file, load_notes, save_notes, export_csv])
+}
+
+// ---- date-time ----
+fn today() -> String {
+    chrono::Local::now().format("%Y-%m-%d").to_string()
 }

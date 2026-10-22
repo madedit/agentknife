@@ -41,7 +41,7 @@ fn field(v: &wasm_bindgen::JsValue, name: &str) -> wasm_bindgen::JsValue {
     js_sys::Reflect::get(v, &name.into()).unwrap_or(wasm_bindgen::JsValue::UNDEFINED)
 }
 
-fn remember_error(text: String) {
+pub(crate) fn remember_error(text: String) {
     ERRORS.with(|e| {
         let mut e = e.borrow_mut();
         if let Some(text) = short_text(&redact_bridge(&text), ERROR_MAX) {

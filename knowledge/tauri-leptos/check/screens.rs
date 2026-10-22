@@ -123,11 +123,15 @@ fn Reactivity() -> impl IntoView {
     });
 
     let busy = RwSignal::new(false);
+    let toaster = use_toaster();
     let load = move |_| {
         busy.set(true);
         leptos::task::spawn_local(async move {
             let result: Result<Vec<String>, _> = ak_bridge::invoke("list_items", &()).await;
-            if let Ok(list) = result { items.set(list); }
+            match result {
+                Ok(list) => items.set(list),
+                Err(e) => toaster.error(e.to_string()),
+            }
             busy.set(false);
         });
     };
@@ -228,13 +232,15 @@ struct Note {
 #[component]
 fn Storage() -> impl IntoView {
     #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
     struct SaveArgs { notes: Vec<Note> }
 
     let toaster = use_toaster();
     let notes = RwSignal::new(Vec::<Note>::new());
     leptos::task::spawn_local(async move {
-        if let Ok(list) = ak_bridge::invoke::<Vec<Note>>("load_notes", &()).await {
-            notes.set(list);
+        match ak_bridge::invoke::<Vec<Note>>("load_notes", &()).await {
+            Ok(list) => notes.set(list),
+            Err(e) => toaster.error(e.to_string()),
         }
     });
     let save = move || {
@@ -245,7 +251,28 @@ fn Storage() -> impl IntoView {
             }
         });
     };
-    view! { <button on:click=move |_| save()>"Save"</button> }
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ExportArgs {
+        file_name: String,
+        rows: Vec<Vec<String>>,
+    }
+
+    let export = move |_| {
+        let mut rows = vec![vec!["Date".to_owned(), "Amount".to_owned()]];
+        rows.extend(notes.get_untracked().iter().map(|n| vec![n.id.to_string(), n.text.clone()]));
+        let args = ExportArgs { file_name: "notes 2026-10".into(), rows };
+        leptos::task::spawn_local(async move {
+            match ak_bridge::invoke::<String>("export_csv", &args).await {
+                Ok(path) => toaster.success(format!("Saved to {path}")),
+                Err(e) => toaster.error(e.to_string()),
+            }
+        });
+    };
+    view! {
+        <button on:click=move |_| save()>"Save"</button>
+        <button on:click=export>"Export"</button>
+    }
 }
 
 fn save_setting(key: &str, value: &str) {
@@ -290,6 +317,19 @@ fn AkUi() -> impl IntoView {
             row=move |t: Todo| view! { <span class="flex-1">{t.text}</span> }
             empty="Nothing to do yet"
         />
+        <List
+            ak_id="edit-list"
+            items=todos
+            key=|t: &Todo| t.id
+            row=move |t: Todo| {
+                let id = t.id;
+                let latest = Memo::new(move |_| todos.with(|v| v.iter().find(|x| x.id == id).cloned()));
+                view! {
+                    <span class="flex-1">{move || latest.get().map(|x| x.text).unwrap_or_default()}</span>
+                    <span>{move || latest.get().map(|x| format!("{}", x.done)).unwrap_or_default()}</span>
+                }
+            }
+        />
         <Button ak_id="clear-button" variant=ButtonVariant::Danger on_click=move |_| open.set(true)>"Clear"</Button>
         <Dialog ak_id="clear-dialog" open=open title="Clear everything?" close_label="Close">
             <p>"This cannot be undone."</p>
@@ -317,4 +357,24 @@ fn classes(urgent: bool) -> &'static str {
 #[component]
 fn Rows(t: Todo) -> impl IntoView {
     view! { <li data-ak-id=format!("todo-{}", t.id)> <button data-ak-id=format!("todo-{}-delete", t.id)>"✕"</button></li> }
+}
+
+// ---- date-time ----
+fn today() -> String {
+    let d = js_sys::Date::new_0();
+    format!("{:04}-{:02}-{:02}", d.get_full_year(), d.get_month() + 1, d.get_date())
+}
+
+fn shift_month(month: &str, by: i32) -> String {
+    let (y, m) = month
+        .split_once('-')
+        .and_then(|(y, m)| Some((y.parse::<i32>().ok()?, m.parse::<i32>().ok()?)))
+        .unwrap_or((1970, 1));
+    let n = y * 12 + (m - 1) + by;
+    format!("{:04}-{:02}", n.div_euclid(12), n.rem_euclid(12) + 1)
+}
+
+fn date_bits() -> (String, String, f64, u32) {
+    let d = js_sys::Date::new_0();
+    (today()[..7].to_owned(), String::from(d.to_iso_string()), js_sys::Date::now(), d.get_hours())
 }

@@ -877,22 +877,26 @@ impl Agent {
         state: &mut TurnState,
     ) -> Option<ToolOutput> {
         let args = &call.arguments;
-        let steps: Vec<String> = args["steps"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|s| {
-                s.as_str()
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                    .map(str::to_owned)
-            })
-            .collect();
+        let steps = plan_steps(&args["steps"]);
         let title = args["title"].as_str().unwrap_or_default().trim().to_owned();
-        if call.invalid_arguments.is_some() || steps.is_empty() || title.is_empty() {
-            return Some(ToolOutput::error(
-                "A plan needs a `title` and 3 to 5 `steps`. Call propose_plan again.",
-            ));
+        let problem = if call.invalid_arguments.is_some() || !args.is_object() {
+            Some("The arguments were not one JSON object.".to_owned())
+        } else if title.is_empty() {
+            Some("`title` is missing or empty.".to_owned())
+        } else if steps.is_empty() {
+            let got = args["steps"].to_string();
+            Some(format!(
+                "`steps` must be a list of strings, like [\"Add the form\", \"Save to a file\"]; \
+                 it was {}.",
+                got.chars().take(200).collect::<String>()
+            ))
+        } else {
+            None
+        };
+        if let Some(problem) = problem {
+            return Some(ToolOutput::error(format!(
+                "{problem} A plan needs a `title` and 3 to 5 `steps`. Call propose_plan again."
+            )));
         }
         let plan = PlanProposal {
             title,
@@ -1176,6 +1180,29 @@ fn plain_text(m: &Message) -> String {
 /// Characters of a step's arguments and output kept for the UI's "Details".
 const DETAIL_CHARS: usize = 4_000;
 
+/// `propose_plan`'s steps: strings, or what models send instead (objects with
+/// the step's text, or one string with a step per line).
+fn plan_steps(v: &serde_json::Value) -> Vec<String> {
+    let text = |s: &serde_json::Value| match s {
+        serde_json::Value::Object(o) => ["title", "text", "step", "description"]
+            .iter()
+            .find_map(|k| o.get(*k).and_then(|v| v.as_str()))
+            .map(str::to_owned),
+        s => s.as_str().map(str::to_owned),
+    };
+    let lines: Vec<String> = match v {
+        serde_json::Value::Array(items) => items.iter().filter_map(text).collect(),
+        serde_json::Value::String(s) => s.lines().map(str::to_owned).collect(),
+        _ => Vec::new(),
+    };
+    lines
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
 fn shorten(text: &str) -> String {
     if text.chars().count() <= DETAIL_CHARS {
         return text.to_owned();
@@ -1209,4 +1236,24 @@ fn details_text(output: &ToolOutput) -> String {
         })
         .collect();
     shorten(&text.join("\n"))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::plan_steps;
+
+    #[test]
+    fn plan_steps_take_what_models_send() {
+        let want = ["Add the form", "Save it"];
+        assert_eq!(plan_steps(&json!(["Add the form", " Save it ", ""])), want);
+        assert_eq!(
+            plan_steps(&json!([{ "title": "Add the form" }, { "description": "Save it" }])),
+            want
+        );
+        assert_eq!(plan_steps(&json!("Add the form\nSave it\n")), want);
+        assert!(plan_steps(&json!(null)).is_empty());
+        assert!(plan_steps(&json!([1, 2])).is_empty());
+    }
 }

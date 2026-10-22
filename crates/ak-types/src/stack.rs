@@ -24,6 +24,13 @@ pub trait StackProfile: Send + Sync {
     fn add_missing_ids(&self, _rel_path: &str, _source: &str) -> Option<String> {
         None
     }
+
+    /// The folder the app saves its data in, relative to the OS's per-user data
+    /// folder (`%APPDATA%`, `~/Library/Application Support`, `~/.local/share`),
+    /// read from the project at `root`. `None` if unknown.
+    fn app_data_folder(&self, _root: &std::path::Path) -> Option<String> {
+        None
+    }
 }
 
 impl DoctorReport {

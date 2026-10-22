@@ -179,6 +179,16 @@ impl StackProfile for TauriLeptos {
         (!added.is_empty()).then_some(out)
     }
 
+    /// Tauri's `app_data_dir()`: the identifier in tauri.conf.json.
+    fn app_data_folder(&self, root: &std::path::Path) -> Option<String> {
+        let conf = std::fs::read_to_string(root.join("src-tauri/tauri.conf.json")).ok()?;
+        let conf: serde_json::Value = serde_json::from_str(&conf).ok()?;
+        let id = conf["identifier"].as_str()?.trim();
+        // A folder name, never a path.
+        (!id.is_empty() && !id.contains(['/', '\\', ':']) && id != "." && id != "..")
+            .then(|| id.to_owned())
+    }
+
     fn bundle(&self) -> BundlePlan {
         // tauri.conf.json runs `trunk build --release` first (no `dev`
         // feature: the bridge is not in the release build).
@@ -238,6 +248,22 @@ mod tests {
 
     fn file(path: &str) -> Option<&'static TemplateFile> {
         FILES.iter().find(|f| f.path == path)
+    }
+
+    #[test]
+    fn the_app_data_folder_is_the_identifier() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = TauriLeptos;
+        assert_eq!(p.app_data_folder(dir.path()), None);
+        std::fs::create_dir_all(dir.path().join("src-tauri")).unwrap();
+        let conf = dir.path().join("src-tauri/tauri.conf.json");
+        std::fs::write(&conf, r#"{ "identifier": "com.agentknife.ledger" }"#).unwrap();
+        assert_eq!(
+            p.app_data_folder(dir.path()).as_deref(),
+            Some("com.agentknife.ledger")
+        );
+        std::fs::write(&conf, r#"{ "identifier": "../elsewhere" }"#).unwrap();
+        assert_eq!(p.app_data_folder(dir.path()), None);
     }
 
     #[test]

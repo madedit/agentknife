@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.3"
+version = "0.2.4"
 
 [versions]
 tauri = "2.12.4"
@@ -37,6 +37,12 @@ summary = "Binding text, numbers, checkboxes and selects to signals; submitting 
 file = "forms.md"
 
 [[topic]]
+id = "date-time"
+title = "Dates and times"
+summary = "Today's date and months in the screens (js_sys::Date, no SystemTime) and the backend (chrono); dates kept as YYYY-MM-DD text."
+file = "date-time.md"
+
+[[topic]]
 id = "tauri-commands"
 title = "Tauri backend commands"
 summary = "#[tauri::command], argument names, State, async commands, errors, files in the app data folder."
@@ -45,7 +51,7 @@ file = "tauri-commands.md"
 [[topic]]
 id = "storage"
 title = "Saving data"
-summary = "Keeping the app's data between runs: a JSON file in the app data folder (recommended) or localStorage."
+summary = "Keeping the app's data between runs: a JSON file in the app data folder (recommended) or localStorage; exporting a CSV file for Excel (BOM, safe file names)."
 file = "storage.md"
 
 [[topic]]

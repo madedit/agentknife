@@ -39,8 +39,12 @@ ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates 
 - Do not change `[features]`, the `ak/` folder, `index.html`'s trunk links (adding
   what topic `three-d` says is fine) or
   `tauri.conf.json`'s `build` section: the preview and the installer depend on them.
-- New crates: only when really needed, with a fixed version
-  (e.g. `chrono = "0.4.45"`). Crates must work in WebAssembly if the screens use them.
+- New crates: only when really needed, with a fixed version. Prefer the versions the
+  project already has in `Cargo.lock` (already downloaded, known to fit):
+  `serde_json = "1.0.154"`, `js-sys = "0.3.106"`, `web-sys = "0.3.106"` (add the
+  features you use), `chrono = "0.4.45"` (backend), `uuid = "1.28.0"`,
+  `regex = "1.13.1"`. For another crate, search `Cargo.lock` for its version first.
+  Crates must work in WebAssembly if the screens use them.
 
 ## The window
 `tauri.conf.json` → `app.windows[0]`: `title`, `width`, `height`, `minWidth`,

@@ -26,6 +26,13 @@ async fn rename(id: u64, name: String) -> Result<Item, ak_bridge::InvokeError> {
     ak_bridge::invoke::<Item>("rename_item", &RenameArgs { item_id: id, new_name: name }).await
 }
 ```
+- **Always `#[serde(rename_all = "camelCase")]` on the arguments struct**, even
+  when every name is one word today: the backend expects `fileName` for its
+  `file_name` argument, and a mismatch makes the command fail.
+- **Always handle the `Err`**: show it (`toaster.error(e.to_string())`). Never
+  `let _ =` or `if let Ok` alone: the button then silently does nothing. In the
+  preview a failed command is also listed under the page's errors in
+  `dom_summary`.
 - No arguments: pass `&()`.
 - No result (`Result<(), String>` in the backend): `invoke::<()>(…)`.
 - `invoke` is async: call it inside `leptos::task::spawn_local(async move { … })`

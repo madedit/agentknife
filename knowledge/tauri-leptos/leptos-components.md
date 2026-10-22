@@ -43,9 +43,11 @@ fn Page() -> impl IntoView {
 - Class toggles: `class:hidden=move || !open.get()`. For several conditions use one
   closure returning the whole class string (every class written out in full):
   `class=move || format!("rounded p-2 {}", if hp.get() <= 3 { "bg-red-500" } else { "bg-gray-100" })`.
-- An attribute value with `<` or `>` in it goes in braces:
-  `disabled={move || hp.get() <= 0}`. Without them the `<` reads as a tag and the
-  error is `invalid tag name or attribute key`, pointing at the `<`.
+- **Any attribute or prop value with `<` or `>` in it goes in braces**, on every
+  element and component: `when={move || total.get() > 0.0}`,
+  `disabled={move || hp.get() <= 0}`. Without them `view!` cuts the value at the
+  `<`/`>` and the error looks unrelated: `invalid tag name or attribute key`, or
+  `expected bool, found f64`.
 - Events: `on:click=move |_| set_count.update(|n| *n += 1)`,
   `on:input=move |ev| text.set(event_target_value(&ev))`.
 - Events that need a value (which arrow, which item): a small function that

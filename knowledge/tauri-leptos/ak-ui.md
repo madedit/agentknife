@@ -51,6 +51,9 @@ search, date. `disabled` takes a `Signal<bool>`.
 </Form>
 ```
 Enter or the submit button calls `on_submit`; the page never reloads.
+`Form` lays its children out itself: a column, side by side from the `sm` width
+(`sm:flex-row sm:items-end`), made for one field and a button. For several fields,
+put them all in one `<div class="grid w-full gap-3 sm:grid-cols-2">` inside it.
 
 ## List
 ```rust
@@ -63,6 +66,21 @@ Enter or the submit button calls `on_submit`; the page never reloads.
 />
 ```
 Rows are flex rows: put buttons at the end of `row`.
+
+`row` runs once per key, when the item first appears: if an item is edited later
+(same id, new amount), the row still shows the old values. For rows whose content
+can change, read the latest values from the signal inside the row:
+```rust
+row=move |e: Entry| {
+    let id = e.id;
+    // The row is built once; this follows edits to the entry.
+    let latest = Memo::new(move |_| entries.with(|v| v.iter().find(|x| x.id == id).cloned()));
+    view! {
+        <span class="flex-1">{move || latest.get().map(|x| x.title).unwrap_or_default()}</span>
+        <span>{move || latest.get().map(|x| format!("{:.2}", x.amount)).unwrap_or_default()}</span>
+    }
+}
+```
 
 ## Dialog
 ```rust
@@ -84,7 +102,10 @@ Escape, the × and a click outside close it. Ids: `clear-dialog-close`,
 let tab = RwSignal::new("all".to_string());
 <Nav ak_id="filter-tabs" items=vec![NavItem::new("all", "All"), NavItem::new("done", "Done")] active=tab />
 ```
-Item ids: `filter-tabs-all`, `filter-tabs-done`.
+Item ids: `filter-tabs-all`, `filter-tabs-done`. `items` is fixed when the screen
+is built: use `Nav` for fixed tabs only. Filters that change (this month, a date)
+are plain buttons with fixed ids (`month-today`, `month-prev`); never put a date
+or other changing value into an id.
 
 ## Card
 ```rust

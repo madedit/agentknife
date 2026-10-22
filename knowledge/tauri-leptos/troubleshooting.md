@@ -20,9 +20,15 @@ builds again.
   the prop `#[prop(into)]`.
 - **`this function takes N arguments`** on a component — check prop names; optional
   props need `#[prop(optional)]`.
-- **`invalid tag name or attribute key`** at a `<` or `>` inside `view!` — an
-  attribute value compares something: put it in braces,
-  `class:low={move || hp.get() <= 3}` (topic `leptos-components`).
+- **`invalid tag name or attribute key`** at a `<` or `>` inside `view!`, or
+  **`expected bool, found f64`** on `<Show when=…>` — an attribute value compares
+  something: put it in braces, `when={move || total.get() > 0.0}` (topic
+  `leptos-components`).
+- **`the trait bound … Ord is not satisfied`** on `.sort()` of `f64` values — numbers with a
+  fraction cannot `sort()`: `v.sort_by(|a, b| a.1.total_cmp(&b.1))`.
+- **`use of moved value`** for a `String` shown in `view!` after another use —
+  `.clone()` it for the earlier use, or show `{text.clone()}`.
+- **`mismatched types: expected &AppHandle, found AppHandle`** — pass a reference: `notes_path(&app)`.
 - **`type mismatch in closure arguments`** on `Button`'s `on_click` — write
   `move |_| …`; `move |()| …` is for `Form`'s `on_submit`.
 

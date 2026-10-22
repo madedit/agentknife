@@ -167,6 +167,16 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
         system.push_str(&note);
     }
     config.reference_dirs.extend(allowed);
+    // What the app itself saved (in the preview too), so the AI can check it.
+    if let Some(data) = profile
+        .app_data_folder(&parts.root)
+        .and_then(|f| dirs::data_dir().map(|d| d.join(f)))
+    {
+        if let Some(system) = config.system.as_mut() {
+            system.push_str(&app_data_note(&data));
+        }
+        config.reference_dirs.push(data);
+    }
     let config_refs = config.reference_dirs.clone();
     let bridge = Arc::new(UiBridge(state.pending.clone()));
     let env = ToolEnv {
@@ -227,6 +237,16 @@ pub fn folders_note(folders: &[PathBuf]) -> Option<String> {
          for reading only: never change anything in them.\n{}",
         list.join("\n")
     ))
+}
+
+/// Tells the AI where the app saves its data (English: for the model).
+pub fn app_data_note(folder: &std::path::Path) -> String {
+    format!(
+        "\n\nThe app saves its data (app_data_dir) in {}; it appears once the app \
+         first saves something. To check what the app wrote, read_file and list_files \
+         take absolute paths there. Read only: never change anything in it.",
+        folder.display()
+    )
 }
 
 /// What a turn starts from.
@@ -618,6 +638,8 @@ mod tests {
         let note = folders_note(&allowed).unwrap_or_default();
         assert!(note.contains(&dir.path().display().to_string()) && note.contains("never change"));
         assert_eq!(folders_note(&[]), None);
+        let note = app_data_note(dir.path());
+        assert!(note.contains(&dir.path().display().to_string()) && note.contains("Read only"));
     }
 
     #[test]
