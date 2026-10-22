@@ -42,8 +42,11 @@ fn field(v: &wasm_bindgen::JsValue, name: &str) -> wasm_bindgen::JsValue {
 }
 
 pub(crate) fn remember_error(text: String) {
-    ERRORS.with(|e| {
-        let mut e = e.borrow_mut();
+    // try_*: this also runs from the panic hook, which may fire anywhere.
+    let _ = ERRORS.try_with(|e| {
+        let Ok(mut e) = e.try_borrow_mut() else {
+            return;
+        };
         if let Some(text) = short_text(&redact_bridge(&text), ERROR_MAX) {
             if e.len() == MAX_ERRORS {
                 e.remove(0);
@@ -51,6 +54,19 @@ pub(crate) fn remember_error(text: String) {
             e.push(text);
         }
     });
+}
+
+/// Records Rust panics in the screens with their message and place (the
+/// browser itself only reports `RuntimeError: unreachable`), and prints them to
+/// the console.
+pub fn watch_panics() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let text = format!("Rust panic: {info}");
+        web_sys::console::error_1(&text.as_str().into());
+        remember_error(text);
+        previous(info);
+    }));
 }
 
 /// Records uncaught errors and rejected promises (e.g. from the app's own

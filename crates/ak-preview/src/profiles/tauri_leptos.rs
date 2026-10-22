@@ -4,9 +4,9 @@
 //! This is the only place that knows those names (checked by `cargo xtask ci`).
 
 use ak_types::stack::{
-    ArchiveFormat, BundleOutput, BundlePlan, BundleTarget, CommandSpec, HostOs, JsonField,
-    KnowledgePack, LogMarkers, PreviewMarker, PreviewPlan, ReadySignal, ScanIn, StackProfile,
-    Template, TemplateFile, TemplateValue, Tool,
+    ArchiveFormat, BundleOutput, BundlePlan, BundleTarget, CommandSpec, CrashMarkers, HostOs,
+    JsonField, KnowledgePack, LogMarkers, PreviewMarker, PreviewPlan, ReadySignal, ScanIn,
+    StackProfile, Template, TemplateFile, TemplateValue, Tool,
 };
 
 /// `templates/tauri-leptos`, embedded by build.rs.
@@ -162,6 +162,12 @@ impl StackProfile for TauriLeptos {
             backend_ready: ReadySignal::StdoutPrefix(BRIDGE_READY_PREFIX),
             backend_watch: &["src-tauri", "ak/ak-bridge"],
             bridge_url_param: BRIDGE_URL_PARAM,
+            // Rust: "thread 'main' panicked at src/main.rs:9:5:", the message, then
+            // "note: run with `RUST_BACKTRACE=1` …".
+            backend_crash: CrashMarkers {
+                start: " panicked at ",
+                end: "note: ",
+            },
         }
     }
 

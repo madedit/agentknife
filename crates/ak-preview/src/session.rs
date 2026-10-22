@@ -38,6 +38,7 @@ pub struct PreviewSession {
     controller: Controller,
     selection: Mutex<Option<Picked>>,
     capturer: Option<Arc<dyn Capturer>>,
+    crashes: crate::log::CrashLog,
 }
 
 fn busy(s: &ServerState) -> bool {
@@ -49,6 +50,7 @@ impl PreviewSession {
         Self {
             status: preview.subscribe(),
             controller: Controller::new(preview.controller_url()),
+            crashes: preview.crashes(),
             preview: tokio::sync::Mutex::new(preview),
             selection: Mutex::new(None),
             capturer,
@@ -65,6 +67,11 @@ impl PreviewSession {
 
     pub fn status(&self) -> PreviewStatus {
         self.status.borrow().clone()
+    }
+
+    /// The backend's crash reports since it last started, oldest first.
+    pub fn backend_crashes(&self) -> Vec<String> {
+        self.crashes.reports()
     }
 
     pub fn subscribe(&self) -> watch::Receiver<PreviewStatus> {

@@ -271,6 +271,16 @@ pub struct PreviewPlan {
     pub backend_watch: &'static [&'static str],
     /// URL query parameter that tells the page where the bridge is.
     pub bridge_url_param: &'static str,
+    /// How the backend reports a crash while running (shown to the agent).
+    pub backend_crash: CrashMarkers,
+}
+
+/// A crash report in a program's output: a line containing `start`, then its
+/// message on the next lines, until a line starting with `end`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CrashMarkers {
+    pub start: &'static str,
+    pub end: &'static str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

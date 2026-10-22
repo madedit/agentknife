@@ -41,6 +41,15 @@ builds again.
 
 ## Builds, but the page fails
 Call `dom_summary`: its last part lists the page's errors.
+- **`Rust panic: panicked at src/….rs:LINE:COL: …`** — the screens' Rust code
+  crashed at that line (often `unwrap()`, `expect()` or an index out of range).
+  Handle the `None`/`Err` or check the length instead. The page may stop
+  reacting until it reloads.
+- **"The backend crashed while running"** (in `build_status` and `dom_summary`) —
+  a command panicked at the given `src-tauri/src` line; the screen got a failed
+  command. Return `Err("…")` instead of panicking (topic `tauri-commands`).
+- **`Command `x` failed: …`** — a backend call failed (wrong argument names,
+  the command's own `Err`): see topic `ak-bridge`.
 - **`….some_name is not a function`** — Rust calls a JS function by the wrong
   name: rename the JS method to the same snake_case name, or add
   `js_name = someName` to its `#[wasm_bindgen(…)]` (topic `three-d`).

@@ -19,6 +19,7 @@ pub fn start() {
     #[cfg(feature = "dev")]
     {
         crate::control::watch_errors();
+        crate::control::watch_panics();
         crate::inspector::install();
         bridge::keep_connected();
     }

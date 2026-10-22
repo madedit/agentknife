@@ -28,6 +28,7 @@ struct FakePreview {
     actions: Mutex<Vec<ControlAction>>,
     selection: Option<Picked>,
     capture: bool,
+    crashes: Vec<String>,
 }
 
 fn ok() -> PreviewStatus {
@@ -117,6 +118,10 @@ impl PreviewAccess for FakePreview {
                 data_base64: "iVBORw0K".into(),
             })
         })
+    }
+
+    fn backend_crashes(&self) -> Vec<String> {
+        self.crashes.clone()
     }
 }
 
@@ -510,4 +515,30 @@ async fn holding_pressing_keys_and_reloads() {
         "{}",
         text_of(&out)
     );
+}
+
+#[tokio::test]
+async fn backend_crashes_reach_the_agent() {
+    let fake = Arc::new(FakePreview {
+        statuses: Mutex::new(vec![ok()]),
+        crashes: vec![
+            "thread 'main' panicked at src/main.rs:12:5:
+called `Option::unwrap()` on a `None` value"
+                .into(),
+        ],
+        ..FakePreview::default()
+    });
+    let r = with_preview_tools(ToolRegistry::new(), fake, false);
+    for tool in ["build_status", "dom_summary"] {
+        let text = text_of(&call(&r, tool, json!({})).await);
+        assert!(
+            text.contains("The backend crashed")
+                && text.contains("src/main.rs:12:5")
+                && text.contains("on a `None` value"),
+            "{tool}: {text}"
+        );
+    }
+    let quiet = with_preview_tools(ToolRegistry::new(), FakePreview::with(vec![ok()]), false);
+    let text = text_of(&call(&quiet, "build_status", json!({})).await);
+    assert!(!text.contains("crashed"), "{text}");
 }

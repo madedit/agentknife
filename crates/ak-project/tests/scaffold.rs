@@ -6,8 +6,8 @@
 use ak_project::{Project, ProjectError};
 use ak_types::i18n::Locale;
 use ak_types::stack::{
-    BundlePlan, CommandSpec, JsonField, KnowledgePack, LogMarkers, PreviewPlan, ReadySignal,
-    StackProfile, Template, TemplateFile, TemplateValue, Tool,
+    BundlePlan, CommandSpec, CrashMarkers, JsonField, KnowledgePack, LogMarkers, PreviewPlan,
+    ReadySignal, StackProfile, Template, TemplateFile, TemplateValue, Tool,
 };
 
 struct Fake(&'static str);
@@ -74,6 +74,10 @@ impl StackProfile for Fake {
             backend_ready: ReadySignal::StdoutPrefix("READY"),
             backend_watch: &[],
             bridge_url_param: "x",
+            backend_crash: CrashMarkers {
+                start: "CRASH",
+                end: "END",
+            },
         }
     }
     fn bundle(&self) -> BundlePlan {

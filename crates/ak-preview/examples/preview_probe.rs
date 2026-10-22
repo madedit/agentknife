@@ -68,6 +68,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("---- {a:?}\n{:?}", session.act(&a).await);
             println!("state: {:?}", session.app_state().await.map(|s| s.app));
         }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        println!("backend crashes: {:?}", session.backend_crashes());
     }
 
     let end = Instant::now() + Duration::from_secs(secs);

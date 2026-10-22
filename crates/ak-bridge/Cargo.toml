@@ -32,6 +32,7 @@ wasm-bindgen-futures.workspace = true
 futures-channel = { workspace = true, optional = true }
 web-sys = { workspace = true, features = [
     "Window",
+    "console",
     "Location",
     "Storage",
     "UrlSearchParams",

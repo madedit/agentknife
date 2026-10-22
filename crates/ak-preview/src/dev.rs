@@ -12,7 +12,7 @@ use ak_types::stack::{PreviewPlan, ReadySignal};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
-use crate::log::{BuildTracker, LogBook, Tail};
+use crate::log::{BuildTracker, CrashLog, LogBook, Tail};
 use crate::process::{
     Tools, encode_query_value, free_port, kill_tree, kill_tree_now, random_token, read_lines,
 };
@@ -43,6 +43,8 @@ pub struct Preview {
     status: watch::Sender<PreviewStatus>,
     /// Everything the two processes print.
     log: LogBook,
+    /// The backend's crashes since it last started.
+    crashes: CrashLog,
     frontend: Option<Running>,
     backend: Option<Running>,
 }
@@ -62,6 +64,7 @@ impl Preview {
             token: random_token()?,
             status,
             log: LogBook::default(),
+            crashes: CrashLog::default(),
             frontend: None,
             backend: None,
         })
@@ -79,6 +82,11 @@ impl Preview {
     /// The project's log; the preview writes its processes' output there.
     pub fn log(&self) -> LogBook {
         self.log.clone()
+    }
+
+    /// Crashes of the running backend (cleared when it starts again).
+    pub fn crashes(&self) -> CrashLog {
+        self.crashes.clone()
     }
 
     fn origin(&self) -> String {
@@ -199,6 +207,9 @@ impl Preview {
         // Our copies of the write end must close, or the reader never ends.
         drop(cmd);
         let pid = child.id();
+        if side == Side::Backend {
+            self.crashes.clear();
+        }
         set(&self.status, side, ServerState::Starting, None);
         let (tx, rx) = mpsc::unbounded_channel::<String>();
         read_lines(reader, tx);
@@ -211,6 +222,7 @@ impl Preview {
             port: self.port,
             stopping: stopping.clone(),
             log: self.log.clone(),
+            crashes: self.crashes.clone(),
         };
         let task = tokio::spawn(watcher.run(child, rx));
         Ok(Running {
@@ -289,6 +301,7 @@ struct Watcher {
     port: u16,
     stopping: Arc<AtomicBool>,
     log: LogBook,
+    crashes: CrashLog,
 }
 
 impl Watcher {
@@ -323,6 +336,7 @@ impl Watcher {
                             }
                         }
                         Side::Backend => {
+                            self.crashes.feed(&self.plan.backend_crash, &clean);
                             if !ready && clean.starts_with(ready_prefix) {
                                 ready = true;
                                 set(&self.status, self.side, ServerState::Ready, None);
@@ -337,7 +351,10 @@ impl Watcher {
                         tokio::time::timeout(DRAIN, rx.recv()).await
                     {
                         self.log.push(self.source(), &line);
-                        tail.push(&line);
+                        let clean = tail.push(&line);
+                        if self.side == Side::Backend {
+                            self.crashes.feed(&self.plan.backend_crash, &clean);
+                        }
                     }
                     self.exited(status.ok().and_then(|s| s.code()), &tail, ready);
                     return;

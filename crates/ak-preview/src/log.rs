@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use ak_types::log::{BuildProgress, LogLine, LogSource};
 use ak_types::preview::ServerState;
-use ak_types::stack::LogMarkers;
+use ak_types::stack::{CrashMarkers, LogMarkers};
 use tokio::sync::mpsc;
 
 /// Lines kept per build (compiler errors come before the failure line).
@@ -232,9 +232,115 @@ impl LogBook {
     }
 }
 
+/// Crash reports kept (the newest).
+const MAX_CRASHES: usize = 5;
+/// Message lines kept per report.
+const CRASH_LINES: usize = 4;
+
+/// Crashes in a running program's output (e.g. Rust panics in the backend),
+/// read by the agent: the app's own errors never reach the page. Cloning shares
+/// it.
+#[derive(Clone, Default)]
+pub struct CrashLog {
+    inner: Arc<Mutex<Crashes>>,
+}
+
+#[derive(Default)]
+struct Crashes {
+    reports: Vec<String>,
+    /// The report still reading its message, with its message line count.
+    open: Option<(String, usize)>,
+}
+
+impl Crashes {
+    fn close(&mut self) {
+        if let Some((report, _)) = self.open.take() {
+            if self.reports.len() == MAX_CRASHES {
+                self.reports.remove(0);
+            }
+            self.reports.push(report);
+        }
+    }
+}
+
+impl CrashLog {
+    /// Reads one line of output.
+    pub fn feed(&self, markers: &CrashMarkers, line: &str) {
+        let Ok(mut c) = self.inner.lock() else {
+            return;
+        };
+        let text = line.trim_end();
+        if text.contains(markers.start) {
+            c.close();
+            c.open = Some((text.trim_start().to_owned(), 0));
+        } else if let Some((report, lines)) = c.open.as_mut() {
+            if text.trim_start().starts_with(markers.end) || *lines == CRASH_LINES {
+                c.close();
+            } else if !text.trim().is_empty() {
+                report.push('\n');
+                report.push_str(text);
+                *lines += 1;
+            }
+        }
+    }
+
+    /// The reports, oldest first.
+    pub fn reports(&self) -> Vec<String> {
+        self.inner
+            .lock()
+            .map(|c| {
+                let mut all = c.reports.clone();
+                all.extend(c.open.as_ref().map(|(r, _)| r.clone()));
+                let older = all.len().saturating_sub(MAX_CRASHES);
+                all.split_off(older)
+            })
+            .unwrap_or_default()
+    }
+
+    /// Forgets them (the program started again).
+    pub fn clear(&self) {
+        if let Ok(mut c) = self.inner.lock() {
+            *c = Crashes::default();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn crash_reports_keep_the_panic_and_its_message() {
+        let markers = CrashMarkers {
+            start: " panicked at ",
+            end: "note: ",
+        };
+        let log = CrashLog::default();
+        for line in [
+            "Serving the app",
+            "thread 'tokio-runtime-worker' panicked at src\\main.rs:12:5:",
+            "called `Option::unwrap()` on a `None` value",
+            "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+            "still running",
+            "thread 'main' panicked at src\\main.rs:30:9:",
+        ] {
+            log.feed(&markers, line);
+        }
+        assert_eq!(
+            log.reports(),
+            [
+                "thread 'tokio-runtime-worker' panicked at src\\main.rs:12:5:\n\
+                 called `Option::unwrap()` on a `None` value",
+                "thread 'main' panicked at src\\main.rs:30:9:",
+            ]
+        );
+        for n in 0..10 {
+            log.feed(&markers, &format!("thread 'x' panicked at a.rs:{n}:1:"));
+        }
+        assert_eq!(log.reports().len(), MAX_CRASHES, "only the newest are kept");
+        log.clear();
+        assert!(log.reports().is_empty());
+    }
 
     #[test]
     fn the_book_keeps_clean_lines_and_tells_the_listener() {

@@ -42,6 +42,10 @@ pub trait PreviewAccess: Send + Sync {
     fn can_capture(&self) -> bool;
     /// A screenshot (image content part) of the page or of one element.
     fn screenshot(&self, ak_id: Option<String>) -> BoxFuture<'_, Result<ContentPart, String>>;
+    /// The backend's crash reports since it last started, oldest first.
+    fn backend_crashes(&self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 impl PreviewAccess for PreviewSession {
@@ -69,6 +73,10 @@ impl PreviewAccess for PreviewSession {
 
     fn can_capture(&self) -> bool {
         PreviewSession::can_capture(self)
+    }
+
+    fn backend_crashes(&self) -> Vec<String> {
+        PreviewSession::backend_crashes(self)
     }
 
     fn screenshot(&self, ak_id: Option<String>) -> BoxFuture<'_, Result<ContentPart, String>> {
@@ -125,6 +133,22 @@ pub fn describe_status(s: &PreviewStatus) -> String {
     text
 }
 
+/// The backend's crashes, for the agent ("" when there are none).
+pub fn describe_crashes(crashes: &[String]) -> String {
+    if crashes.is_empty() {
+        return String::new();
+    }
+    let mut text = "\nThe backend crashed while running (Rust panic; the file and line \
+                    are in each report). The command that crashed failed on the page. \
+                    Fix the cause, often an `unwrap()`, `expect()` or an index out of \
+                    range:\n"
+        .to_owned();
+    for c in crashes {
+        text.push_str(&format!("- {}\n", c.replace('\n', "\n  ")));
+    }
+    text
+}
+
 fn not_open(s: &PreviewStatus) -> Option<ToolOutput> {
     if s.frontend.is_ready() || s.url.is_some() {
         return None;
@@ -155,7 +179,7 @@ impl Tool for BuildStatus {
     fn call<'a>(&'a self, _: Value, _: &'a ToolContext) -> BoxFuture<'a, ToolOutput> {
         Box::pin(async move {
             let s = self.0.settled(BUILD_WAIT).await;
-            ToolOutput::text(describe_status(&s))
+            ToolOutput::text(describe_status(&s) + &describe_crashes(&self.0.backend_crashes()))
         })
     }
 }
@@ -182,10 +206,13 @@ impl Tool for DomSummaryTool {
             }
             match self.0.act(ControlAction::DomSummary).await {
                 Ok(v) => match serde_json::from_value::<DomSummary>(v) {
-                    Ok(summary) => ToolOutput::text(cap(&summary.render(), MAX_OUTPUT_CHARS)),
+                    Ok(summary) => ToolOutput::text(
+                        cap(&summary.render(), MAX_OUTPUT_CHARS)
+                            + &describe_crashes(&self.0.backend_crashes()),
+                    ),
                     Err(e) => ToolOutput::error(format!("Unexpected answer from the page: {e}")),
                 },
-                Err(e) => ToolOutput::error(e),
+                Err(e) => ToolOutput::error(e + &describe_crashes(&self.0.backend_crashes())),
             }
         })
     }
