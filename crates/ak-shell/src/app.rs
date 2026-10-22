@@ -53,6 +53,9 @@ pub fn App() -> impl IntoView {
     let preview = Preview::new();
     provide_context(preview);
     backend.listen_preview(move |status| preview.status.set(status));
+    backend.on(ak_types::ipc::PREVIEW_RELOAD_EVENT, move |()| {
+        preview.reloads.update(|n| *n += 1);
+    });
     let project_log = ProjectLog::new();
     provide_context(project_log);
     backend.listen_log(move |batch| project_log.append(batch));

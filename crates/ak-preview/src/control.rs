@@ -87,7 +87,7 @@ impl Controller {
                 *conn = None;
                 Err("The preview disconnected before answering (the app restarted?).".into())
             }
-            Err(_) => Err("The preview page did not answer in time.".into()),
+            Err(_) => Err(ak_types::preview::PAGE_TIMEOUT.into()),
         }
     }
 }

@@ -23,6 +23,8 @@ pub struct Preview {
     pub status: RwSignal<PreviewStatus>,
     /// Point-and-select is on.
     pub picking: RwSignal<bool>,
+    /// Counts the reloads AgentKnife asked for (the page stopped answering).
+    pub reloads: RwSignal<u32>,
 }
 
 impl Preview {
@@ -30,6 +32,7 @@ impl Preview {
         Preview {
             status: RwSignal::new(PreviewStatus::default()),
             picking: RwSignal::new(false),
+            reloads: RwSignal::new(0),
         }
     }
 }
@@ -205,6 +208,7 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
     let framed = move || device().size().is_some();
     let page = move || {
         reload.track();
+        preview.reloads.track();
         url().map(|u| {
             let demo = u == DEMO_URL;
             view! {

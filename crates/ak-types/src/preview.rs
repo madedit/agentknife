@@ -65,6 +65,10 @@ impl PreviewStatus {
 /// The bridge's answers when no page ran an action (`ak_bridge::protocol`).
 pub const PAGE_NOT_OPEN: &str = "the preview page is not open";
 pub const PAGE_CLOSED: &str = "the preview page closed";
+/// The page took too long to answer (AgentKnife's own; the bridge never sends it).
+pub const PAGE_TIMEOUT: &str = "the preview page did not answer in time";
+/// [`PAGE_TIMEOUT`], after which AgentKnife loaded the page again.
+pub const PAGE_RELOADED_STUCK: &str = "the preview page did not answer in time and was reloaded";
 /// The longest a `hold` or `key` action keeps something pressed.
 pub const MAX_HOLD_MS: u32 = 10_000;
 

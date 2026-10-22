@@ -57,9 +57,12 @@ connects to the backend and lets the user point at elements.
 // Lets AgentKnife read the app's state while checking the preview.
 ak_bridge::set_state_reader(move || serde_json::json!({ "todos": todos.get_untracked().len() }));
 ```
-(Needs `serde_json` in the screens' `[dependencies]`.) For apps that draw on a
-`<canvas>`, `ak_bridge::set_hit_test(|p| …)` tells AgentKnife what is at a point
-(`p.x`, `p.y` in canvas pixels). Both do nothing in the installed app.
+(Needs `serde_json` in the screens' `[dependencies]`.) For apps that run by
+themselves (games, timers), include a value that changes every step (a tick
+count, the falling piece's row): two readings then show whether it is running.
+For apps that draw on a `<canvas>`, `ak_bridge::set_hit_test(|p| …)` tells
+AgentKnife what is at a point (`p.x`, `p.y` in canvas pixels). Both do nothing in
+the installed app.
 
 ## Not available
 Backend → screen events (`app.emit` / `listen`) do not reach the preview. Instead,

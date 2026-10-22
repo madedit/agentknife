@@ -50,6 +50,22 @@ fn Page() -> impl IntoView {
   `expected bool, found f64`.
 - Events: `on:click=move |_| set_count.update(|n| *n += 1)`,
   `on:input=move |ev| text.set(event_target_value(&ev))`.
+- Comments: `// …` lines are fine inside `view!`.
+- Keys for the whole window (games), with `use leptos::ev;`:
+  ```rust
+  // Keys anywhere in the window, not only on a focused element (games).
+  let keys = window_event_listener(ev::keydown, move |e| {
+      match e.key().as_str() {
+          "ArrowLeft" => shift.set(-1),
+          "ArrowRight" => shift.set(1),
+          " " => paused.update(|p| *p = !*p),
+          _ => return,
+      }
+      // Otherwise arrows scroll the page and space presses the focused button.
+      e.prevent_default();
+  });
+  on_cleanup(move || keys.remove());
+  ```
 - Events that need a value (which arrow, which item): a small function that
   returns the handler, then call it per element:
   ```rust

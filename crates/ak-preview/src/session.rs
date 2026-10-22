@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use ak_types::preview::{
-    AppState, ControlAction, DomSummary, PAGE_CLOSED, PAGE_NOT_OPEN, Picked, PreviewStatus,
-    ScreenshotArea, ServerState,
+    AppState, ControlAction, DomSummary, PAGE_CLOSED, PAGE_NOT_OPEN, PAGE_RELOADED_STUCK,
+    PAGE_TIMEOUT, Picked, PreviewStatus, ScreenshotArea, ServerState,
 };
 use futures_util::future::BoxFuture;
 use tokio::sync::watch;
@@ -39,6 +39,8 @@ pub struct PreviewSession {
     selection: Mutex<Option<Picked>>,
     capturer: Option<Arc<dyn Capturer>>,
     crashes: crate::log::CrashLog,
+    /// Loads the page again in whoever shows it (the app's preview pane).
+    reloader: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 fn busy(s: &ServerState) -> bool {
@@ -51,6 +53,7 @@ impl PreviewSession {
             status: preview.subscribe(),
             controller: Controller::new(preview.controller_url()),
             crashes: preview.crashes(),
+            reloader: Mutex::new(None),
             preview: tokio::sync::Mutex::new(preview),
             selection: Mutex::new(None),
             capturer,
@@ -67,6 +70,14 @@ impl PreviewSession {
 
     pub fn status(&self) -> PreviewStatus {
         self.status.borrow().clone()
+    }
+
+    /// How to load the page again when it stops answering (e.g. an endless loop
+    /// in the screens: a rebuild cannot reach it either).
+    pub fn set_reloader(&self, reload: impl Fn() + Send + Sync + 'static) {
+        if let Ok(mut r) = self.reloader.lock() {
+            *r = Some(Arc::new(reload));
+        }
     }
 
     /// The backend's crash reports since it last started, oldest first.
@@ -119,6 +130,16 @@ impl PreviewSession {
                         && (e == PAGE_NOT_OPEN || (e == PAGE_CLOSED && action.is_read_only())) =>
                 {
                     tokio::time::sleep(Duration::from_millis(300)).await;
+                }
+                Err(e) if e == PAGE_TIMEOUT => {
+                    let reload = self.reloader.lock().ok().and_then(|r| r.clone());
+                    return Err(match reload {
+                        Some(reload) => {
+                            reload();
+                            PAGE_RELOADED_STUCK.into()
+                        }
+                        None => e,
+                    });
                 }
                 other => return other,
             }

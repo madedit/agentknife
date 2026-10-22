@@ -14,7 +14,7 @@ use ak_agent::{Agent, AgentConfig};
 use ak_types::agent::{AgentEvent, TurnOutcome};
 use ak_types::chat::{ContentPart, Conversation, Message, ToolSpec};
 use ak_types::preview::{
-    ControlAction, PAGE_CLOSED, Picked, PreviewStatus, Rect, ServerState, Size,
+    ControlAction, PAGE_CLOSED, PAGE_RELOADED_STUCK, Picked, PreviewStatus, Rect, ServerState, Size,
 };
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
@@ -96,6 +96,7 @@ impl PreviewAccess for FakePreview {
                 Err("no element with data-ak-id `missing` on the page".into())
             }
             ControlAction::Click { ak_id } if ak_id == "reloading" => Err(PAGE_CLOSED.into()),
+            ControlAction::Click { ak_id } if ak_id == "frozen" => Err(PAGE_RELOADED_STUCK.into()),
             ControlAction::AppState => Ok(json!({ "url": "u", "title": "t", "local_storage": {} })),
             _ => Ok(json!({ "done": true })),
         };
@@ -484,6 +485,9 @@ async fn holding_pressing_keys_and_reloads() {
         json!({ "action": "hold", "ak_id": "left-button", "ms": 99_999 }),
         json!({ "action": "key", "key": "ArrowLeft" }),
         json!({ "action": "key", "key": " ", "ms": 300 }),
+        // What models send for space: quoted, or by name.
+        json!({ "action": "key", "key": "\" \"" }),
+        json!({ "action": "key", "key": "Space" }),
     ] {
         let out = call(&r, "interact", args).await;
         assert!(!out.is_error, "{}", text_of(&out));
@@ -495,8 +499,28 @@ async fn holding_pressing_keys_and_reloads() {
     let key = |k: &str, ms| ControlAction::Key { key: k.into(), ms };
     assert_eq!(
         *fake.actions.lock().unwrap(),
-        [hold(1000), hold(10_000), key("ArrowLeft", 0), key(" ", 300)],
+        [
+            hold(1000),
+            hold(10_000),
+            key("ArrowLeft", 0),
+            key(" ", 300),
+            key(" ", 0),
+            key(" ", 0)
+        ],
         "defaults, and holds are capped"
+    );
+    let out = call(
+        &r,
+        "interact",
+        json!({ "action": "click", "ak_id": "frozen" }),
+    )
+    .await;
+    assert!(
+        out.is_error
+            && text_of(&out).contains("endless loop")
+            && text_of(&out).contains("started over"),
+        "{}",
+        text_of(&out)
     );
     let out = call(&r, "interact", json!({ "action": "key" })).await;
     assert!(out.is_error && text_of(&out).contains("`key` is required"));

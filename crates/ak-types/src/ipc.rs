@@ -199,6 +199,8 @@ pub struct BundleFailure {
 /// Tauri event carrying the open project's
 /// [`PreviewStatus`](crate::preview::PreviewStatus) whenever it changes.
 pub const PREVIEW_EVENT: &str = "preview-status";
+/// Tauri event (no payload): load the preview page again (it stopped answering).
+pub const PREVIEW_RELOAD_EVENT: &str = "preview-reload";
 /// Tauri event carrying new lines of the open project's log
 /// (`Vec<`[`LogLine`](crate::log::LogLine)`>`).
 pub const LOG_EVENT: &str = "project-log";

@@ -73,6 +73,43 @@ view! {
 }
 ```
 
+## Timers (things that move by themselves)
+`set_interval_with_handle` (in `leptos::prelude`) runs a closure every N
+milliseconds. Keep its handle to stop it, and stop it before starting a new one
+when the speed changes:
+```rust
+use std::time::Duration;
+
+let tick = RwSignal::new(0u32);
+// The running timer, kept to stop it or change its speed.
+let timer = StoredValue::new(None::<IntervalHandle>);
+let stop = move || {
+    if let Some(h) = timer.try_get_value().flatten() {
+        h.clear();
+    }
+};
+// Every `ms` milliseconds; calling it again replaces the old timer.
+let start = move |ms: u64| {
+    stop();
+    let h = set_interval_with_handle(move || tick.update(|t| *t += 1), Duration::from_millis(ms));
+    timer.set_value(h.ok());
+};
+start(500);
+on_cleanup(stop);
+```
+Run one step of the game in the timer (`step()`), not the whole game: a `loop`
+that never returns freezes the page. Once, later: `set_timeout(move || …,
+Duration::from_millis(800))`.
+
+## Game state in one signal
+Keep the whole state in one struct in an `RwSignal`. `update` changes it and
+returns nothing; to get a result out of the change, use `try_update`:
+```rust
+let cleared = game.try_update(|g| g.clear_full_rows()).unwrap_or(0);
+```
+A grid has both sizes in its type: `[[Cell; 10]; 20]` (20 rows of 10);
+`[[Cell; 10]]` is a slice and cannot be stored.
+
 ## Sharing state between components
 ```rust
 #[derive(Clone, Copy)]

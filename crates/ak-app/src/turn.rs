@@ -162,6 +162,9 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
     // Library sources the AI may read without asking (no keys or user data
     // there), and the folders the user allowed in the settings.
     config.reference_dirs = reference_dirs(&state.toolchain);
+    if let Some(system) = config.system.as_mut() {
+        system.push_str(&library_note(&state.toolchain.cargo_home()));
+    }
     let allowed = allowed_folders(&settings.read_folders);
     if let (Some(system), Some(note)) = (config.system.as_mut(), folders_note(&allowed)) {
         system.push_str(&note);
@@ -237,6 +240,16 @@ pub fn folders_note(folders: &[PathBuf]) -> Option<String> {
          for reading only: never change anything in them.\n{}",
         list.join("\n")
     ))
+}
+
+/// Tells the AI where the libraries' source code is (English: for the model).
+pub fn library_note(cargo_home: &std::path::Path) -> String {
+    format!(
+        "
+
+The source code of the project's libraries (crates) is in {}          (one folder per index, then `<crate>-<version>`, e.g. `leptos-0.8.22`). To check          a library's API, list_files, search_files and read_file take absolute paths          there. Read only.",
+        cargo_home.join("registry").join("src").display()
+    )
 }
 
 /// Tells the AI where the app saves its data (English: for the model).
@@ -638,6 +651,16 @@ mod tests {
         let note = folders_note(&allowed).unwrap_or_default();
         assert!(note.contains(&dir.path().display().to_string()) && note.contains("never change"));
         assert_eq!(folders_note(&[]), None);
+        let note = library_note(dir.path());
+        assert!(
+            note.contains(
+                &dir.path()
+                    .join("registry")
+                    .join("src")
+                    .display()
+                    .to_string()
+            )
+        );
         let note = app_data_note(dir.path());
         assert!(note.contains(&dir.path().display().to_string()) && note.contains("Read only"));
     }

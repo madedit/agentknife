@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.5"
+version = "0.2.6"
 
 [versions]
 tauri = "2.12.4"
@@ -21,13 +21,13 @@ file = "overview.md"
 [[topic]]
 id = "leptos-components"
 title = "Leptos components and view!"
-summary = "Components, props, children, the view! macro, events, attributes, classes, Show/For, if/else views."
+summary = "Components, props, children, the view! macro, events, keys for the whole window (games), attributes, classes, Show/For, if/else views."
 file = "leptos-components.md"
 
 [[topic]]
 id = "leptos-reactivity"
 title = "Signals and async in Leptos"
-summary = "RwSignal, derived values, Memo, Effect, context, spawn_local, LocalResource, avoiding move/Send errors."
+summary = "RwSignal, derived values, Memo, Effect, context, spawn_local, LocalResource, timers (set_interval_with_handle), game state in one signal (try_update), avoiding move/Send errors."
 file = "leptos-reactivity.md"
 
 [[topic]]

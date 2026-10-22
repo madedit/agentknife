@@ -7,7 +7,8 @@ use std::time::Duration;
 use ak_preview::PreviewSession;
 use ak_types::chat::{ContentPart, ToolSpec};
 use ak_types::preview::{
-    ControlAction, DomSummary, MAX_HOLD_MS, PAGE_CLOSED, Picked, PreviewStatus, ServerState,
+    ControlAction, DomSummary, MAX_HOLD_MS, PAGE_CLOSED, PAGE_RELOADED_STUCK, PAGE_TIMEOUT, Picked,
+    PreviewStatus, ServerState,
 };
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
@@ -128,7 +129,10 @@ pub fn describe_status(s: &PreviewStatus) -> String {
         text.push_str("\nCompiler output:\n");
         text.push_str(&cap(err, MAX_OUTPUT_CHARS));
     } else if s.ready() {
-        text.push_str("The app builds and runs.");
+        text.push_str(
+            "The app builds and runs. (This does not tell whether the page responds: \
+             dom_summary does.)",
+        );
     }
     text
 }
@@ -212,7 +216,9 @@ impl Tool for DomSummaryTool {
                     ),
                     Err(e) => ToolOutput::error(format!("Unexpected answer from the page: {e}")),
                 },
-                Err(e) => ToolOutput::error(e + &describe_crashes(&self.0.backend_crashes())),
+                Err(e) => {
+                    ToolOutput::error(page_error(e) + &describe_crashes(&self.0.backend_crashes()))
+                }
             }
         })
     }
@@ -243,7 +249,7 @@ impl Tool for Interact {
                     "ak_id": { "type": "string", "description": "data-ak-id of the element (click, hold, type)" },
                     "text": { "type": "string", "description": "What to type (replaces the field's text)" },
                     "enter": { "type": "boolean", "description": "Press Enter after typing" },
-                    "key": { "type": "string", "description": "The key to press (key), as KeyboardEvent.key" },
+                    "key": { "type": "string", "description": "The key to press (key), as KeyboardEvent.key: \"ArrowLeft\", \"a\", \"Enter\"; space is \" \" or \"Space\"" },
                     "ms": { "type": "integer", "description": "How long to hold (hold: default 1000; key: default 0, a tap), at most 10000" },
                     "wait_ms": { "type": "integer", "description": "read_state: wait this long first, at most 10000" },
                     "samples": { "type": "integer", "description": "read_state: read this many times (2 to 10), the first now and the last after wait_ms" },
@@ -268,11 +274,8 @@ impl Tool for Interact {
                     ak_id,
                     ms: ms(1000),
                 },
-                (Some("key"), _) => match args["key"].as_str().filter(|k| !k.is_empty()) {
-                    Some(key) => ControlAction::Key {
-                        key: key.to_owned(),
-                        ms: ms(0),
-                    },
+                (Some("key"), _) => match args["key"].as_str().and_then(key_name) {
+                    Some(key) => ControlAction::Key { key, ms: ms(0) },
                     None => return ToolOutput::error("`key` is required for key."),
                 },
                 (Some("type"), Some(ak_id)) => ControlAction::Type {
@@ -341,6 +344,24 @@ async fn read_over_time(
     Ok(Value::Array(out))
 }
 
+/// `KeyboardEvent.key` for what the model wrote: quotes it added around the
+/// key are dropped (`"\" \""` is a space), and `Space` is the space key.
+fn key_name(raw: &str) -> Option<String> {
+    let k = match raw.chars().count() {
+        3.. if (raw.starts_with('"') && raw.ends_with('"'))
+            || (raw.starts_with('\'') && raw.ends_with('\'')) =>
+        {
+            &raw[1..raw.len() - 1]
+        }
+        _ => raw,
+    };
+    match k {
+        "" => None,
+        "Space" | "space" | "Spacebar" => Some(" ".into()),
+        k => Some(k.to_owned()),
+    }
+}
+
 /// The page reloads after each rebuild; an action caught by that may or may
 /// not have happened, so say what to do instead of the bare bridge answer.
 fn page_error(e: String) -> String {
@@ -349,6 +370,18 @@ fn page_error(e: String) -> String {
          not have happened. Call dom_summary or read_state to see the page now, then try \
          again."
             .into()
+    } else if e == PAGE_RELOADED_STUCK || e == PAGE_TIMEOUT {
+        let after = if e == PAGE_RELOADED_STUCK {
+            "AgentKnife reloaded the page, so the app started over"
+        } else {
+            "Reload the preview to continue"
+        };
+        format!(
+            "The preview page did not answer for 15 seconds: the screens are probably stuck \
+             in an endless loop (a `loop`/`while` that never ends, or a signal update that \
+             triggers itself). A rebuild cannot reach a stuck page. {after}. Find and fix \
+             the loop before testing again."
+        )
     } else if e.starts_with("no element with data-ak-id") {
         // Usually a fresh page after a rebuild, which starts the app over.
         format!(

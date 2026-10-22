@@ -378,3 +378,61 @@ fn date_bits() -> (String, String, f64, u32) {
     let d = js_sys::Date::new_0();
     (today()[..7].to_owned(), String::from(d.to_iso_string()), js_sys::Date::now(), d.get_hours())
 }
+
+// ---- leptos-reactivity: timers, game state; leptos-components: window keys ----
+#[derive(Clone, Default)]
+struct Grid {
+    cells: [[u8; 10]; 20],
+}
+
+impl Grid {
+    fn clear_full_rows(&mut self) -> u32 {
+        0
+    }
+}
+
+#[component]
+fn Ticker() -> impl IntoView {
+    use leptos::ev;
+    use std::time::Duration;
+
+    let tick = RwSignal::new(0u32);
+    // The running timer, kept to stop it or change its speed.
+    let timer = StoredValue::new(None::<IntervalHandle>);
+    let stop = move || {
+        if let Some(h) = timer.try_get_value().flatten() {
+            h.clear();
+        }
+    };
+    // Every `ms` milliseconds; calling it again replaces the old timer.
+    let start = move |ms: u64| {
+        stop();
+        let h = set_interval_with_handle(move || tick.update(|t| *t += 1), Duration::from_millis(ms));
+        timer.set_value(h.ok());
+    };
+    start(500);
+    on_cleanup(stop);
+    set_timeout(move || tick.set(0), Duration::from_millis(800));
+    let game = RwSignal::new(Grid::default());
+    let cleared = game.try_update(|g| g.clear_full_rows()).unwrap_or(0);
+    let shift = RwSignal::new(0i32);
+    let paused = RwSignal::new(false);
+    // Keys anywhere in the window, not only on a focused element (games).
+    let keys = window_event_listener(ev::keydown, move |e| {
+        match e.key().as_str() {
+            "ArrowLeft" => shift.set(-1),
+            "ArrowRight" => shift.set(1),
+            " " => paused.update(|p| *p = !*p),
+            _ => return,
+        }
+        // Otherwise arrows scroll the page and space presses the focused button.
+        e.prevent_default();
+    });
+    on_cleanup(move || keys.remove());
+    let toaster = use_toaster();
+    let copies = (toaster, toaster);
+    view! {
+        // A comment inside view!
+        <p>{move || tick.get()} {cleared}</p>
+    }
+}

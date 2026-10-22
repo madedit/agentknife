@@ -129,3 +129,4 @@ toaster.error("Could not save");
 toaster.info("3 items");
 ```
 Toasts disappear after 4 seconds (`duration_ms` on `ToastHost` to change).
+`Toaster` is `Copy`: keep it in a struct or use it in many closures.
