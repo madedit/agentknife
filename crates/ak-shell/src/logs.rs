@@ -31,16 +31,30 @@ impl ProjectLog {
     }
 
     /// Adds new lines, skipping those already shown (a batch may overlap the
-    /// lines fetched when the tab opened). Progress reports update `progress`.
+    /// lines fetched when the tab opened). Progress reports update `progress`;
+    /// cargo's `Finished` line completes its part (its last report is short of
+    /// the total).
     pub fn append(&self, batch: Vec<LogLine>) {
         let (reports, batch): (Vec<_>, Vec<_>) =
             batch.into_iter().partition(|l| l.progress.is_some());
-        if !reports.is_empty() {
+        let finished: Vec<LogSource> = batch
+            .iter()
+            .filter(|l| l.text.trim_start().starts_with("Finished "))
+            .map(|l| l.source)
+            .collect();
+        if !reports.is_empty() || !finished.is_empty() {
             self.progress.update(|all| {
                 for r in reports {
                     let Some(p) = r.progress else { continue };
-                    all.retain(|(s, _)| *s != r.source);
-                    all.push((r.source, p));
+                    match all.iter_mut().find(|(s, _)| *s == r.source) {
+                        Some(entry) => entry.1 = p,
+                        None => all.push((r.source, p)),
+                    }
+                }
+                for (s, p) in all.iter_mut() {
+                    if finished.contains(s) {
+                        p.done = p.total;
+                    }
                 }
             });
         }
@@ -62,15 +76,15 @@ impl ProjectLog {
             .update(|all| all.retain(|(s, _)| !sources.contains(s)));
     }
 
-    /// The part of `sources` that reported last and how far it is, in whole
-    /// percent. Parts build one after the other (they share a target folder),
-    /// so a sum would jump back when the next one starts.
-    pub fn percent(&self, sources: &[LogSource]) -> Option<(LogSource, u32)> {
+    /// How far each part of `sources` that is building got, in whole percent,
+    /// in the order they started. Each is shown on its own: parts that are
+    /// already built do not rebuild, so a combined number would jump.
+    pub fn percents(&self, sources: &[LogSource]) -> Vec<(LogSource, u32)> {
         self.progress.with(|all| {
             all.iter()
-                .rev()
-                .find(|(s, _)| sources.contains(s))
+                .filter(|(s, _)| sources.contains(s))
                 .map(|(s, p)| (*s, p.percent()))
+                .collect()
         })
     }
 }
@@ -292,9 +306,9 @@ pub fn BuildLog(
         }
         on
     });
-    let percent = Memo::new(move |_| {
+    let percents = Memo::new(move |_| {
         let sources = sources.get();
-        log.percent(&sources)
+        log.percents(&sources)
     });
     #[cfg(target_arch = "wasm32")]
     Effect::new(move |_| {
@@ -337,11 +351,12 @@ pub fn BuildLog(
                 <header class="flex shrink-0 items-center gap-2 border-b border-gray-700 px-3 py-1.5">
                     <span class="h-2 w-2 shrink-0 animate-pulse rounded-full bg-blue-400"></span>
                     <span class="shrink-0 text-sm font-medium">{move || title.get()}</span>
-                    {move || percent.get().map(|(part, p)| view! {
+                    {move || percents.get().into_iter().map(|(part, p)| view! {
                         <span data-build-percent=p data-build-part=part.key() class="shrink-0 text-sm text-blue-300">
-                            {t(source_label(Some(part)))} " " <span class="font-mono">{format!("{p}%")}</span>
+                            {t(source_label(Some(part)))} " "
+                            <span class="font-mono">{if p >= 100 { "✓".to_owned() } else { format!("{p}%") }}</span>
                         </span>
-                    })}
+                    }).collect_view()}
                     <span data-build-latest="" class="min-w-0 flex-1 truncate font-mono text-xs text-gray-400">
                         {move || small.get().then(latest)}
                     </span>
@@ -361,11 +376,18 @@ pub fn BuildLog(
                         {move || if small.get() { t("build-log-expand")() } else { t("build-log-shrink")() }}
                     </button>
                 </header>
-                {move || percent.get().map(|(_, p)| view! {
-                    <div class="h-1 shrink-0 bg-gray-700">
-                        <div data-build-bar="" class="h-1 bg-blue-400 transition-all" style=format!("width:{p}%")></div>
-                    </div>
-                })}
+                {move || {
+                    let parts = percents.get();
+                    (!parts.is_empty()).then(|| view! {
+                        <div class="flex h-1 shrink-0 gap-1">
+                            {parts.into_iter().map(|(part, p)| view! {
+                                <div class="h-1 flex-1 bg-gray-700">
+                                    <div data-build-bar=part.key() class="h-1 bg-blue-400 transition-all" style=format!("width:{p}%")></div>
+                                </div>
+                            }).collect_view()}
+                        </div>
+                    })
+                }}
                 <Show when=move || !small.get()>
                     <div
                         node_ref=list
@@ -439,14 +461,28 @@ mod tests {
             assert_eq!(log.lines.with_untracked(Vec::len), 1);
             let both = [LogSource::Screens, LogSource::Backend];
             assert_eq!(
-                log.percent(&[LogSource::Screens]),
-                Some((LogSource::Screens, 50))
+                log.percents(&[LogSource::Screens]),
+                [(LogSource::Screens, 50)]
             );
-            // The part building now: the one that reported last.
-            assert_eq!(log.percent(&both), Some((LogSource::Backend, 0)));
-            assert_eq!(log.percent(&[LogSource::Window]), None);
+            // Every part, in the order they started; a report keeps its place.
+            log.append(vec![report(1, LogSource::Screens, 60, 100)]);
+            assert_eq!(
+                log.percents(&both),
+                [(LogSource::Screens, 60), (LogSource::Backend, 0)]
+            );
+            assert!(log.percents(&[LogSource::Window]).is_empty());
+            // cargo's last count is short of the total; "Finished" completes it.
+            log.append(vec![line(
+                2,
+                LogSource::Screens,
+                "    Finished `dev` profile [unoptimized] target(s) in 3.1s",
+            )]);
+            assert_eq!(
+                log.percents(&[LogSource::Screens]),
+                [(LogSource::Screens, 100)]
+            );
             log.reset_progress(&[LogSource::Backend]);
-            assert_eq!(log.percent(&both), Some((LogSource::Screens, 50)));
+            assert_eq!(log.percents(&both), [(LogSource::Screens, 100)]);
         });
     }
 

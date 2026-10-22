@@ -46,15 +46,25 @@ fn render(locale: Locale, status: PreviewStatus, device: Device, picked: Option<
                 text: text.into(),
                 progress: None,
             })
-            .chain([LogLine {
-                seq: 2,
-                at_ms: 0,
-                source: LogSource::Screens,
-                text: "tauri".into(),
-                progress: Some(BuildProgress {
-                    done: 137,
-                    total: 274,
+            .chain(
+                [
+                    (LogSource::Backend, 373, 374),
+                    (LogSource::Screens, 137, 274),
+                ]
+                .map(|(source, done, total)| LogLine {
+                    seq: 2,
+                    at_ms: 0,
+                    source,
+                    text: "tauri".into(),
+                    progress: Some(BuildProgress { done, total }),
                 }),
+            )
+            .chain([LogLine {
+                seq: 3,
+                at_ms: 0,
+                source: LogSource::Backend,
+                text: "    Finished `dev` profile [unoptimized] target(s) in 40s".into(),
+                progress: None,
             }])
             .collect(),
         );
@@ -222,10 +232,19 @@ fn a_build_shows_its_log_in_a_window_over_the_preview() {
     assert!(first.contains("Compiling serde"), "the build's lines");
     assert!(!first.contains("Writing main.rs"), "not the AI's steps");
     assert!(first.contains(r#"data-action="toggle-build-log""#) && first.contains("縮小"));
-    // cargo's counts as a percentage and a bar.
+    // cargo's counts as a percentage and a bar per part, in build order; a
+    // finished part is ticked.
     assert!(first.contains(r#"data-build-percent="50""#) && first.contains(">50%<"));
     assert!(first.contains(r#"data-build-part="screens""#) && first.contains("畫面"));
-    assert!(first.contains("width:50%"));
+    assert!(first.contains(r#"data-build-percent="100" data-build-part="backend""#));
+    assert!(
+        first.contains("背景程式") && first.contains(">✓<"),
+        "{first}"
+    );
+    let order = |s: &str| first.find(s).unwrap();
+    assert!(order(r#"data-build-part="backend""#) < order(r#"data-build-part="screens""#));
+    assert!(first.contains(r#"data-build-bar="screens""#) && first.contains("width:50%"));
+    assert!(first.contains(r#"data-build-bar="backend""#) && first.contains("width:100%"));
     assert!(
         !first.contains(">tauri<"),
         "a progress report is not a line"

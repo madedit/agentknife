@@ -484,9 +484,12 @@
   - Live: a template project with the topic's code — preview build 36 s; in Chrome the cube renders, a click scores, a drag turns the view, Restart resets, no console errors. Release `cargo tauri build --no-bundle` (98 s): in the WebView2 window the cube renders and a click scores. New example `preview_probe` (prints dom_summary while the page is open): injected errors show with `index.html:1`, the token never appears.
   - Not done: an end-to-end AI turn that builds a 3D game from scratch.
   - Tests: add_library (copy, restore, unknown id), policy (allowed; asks in ask-every-change), profile (library files, topic paths), protocol (errors rendered; error_file; redact_bridge), control.rs JSON parity, xtask libs (base64, version mark).
-- P1-APP-001 (follow-up) — (hash in next commit) — the build log window shows a percentage (user request).
+- P1-APP-001 (follow-up) — 68bd123 — the build log window shows a percentage (user request).
   - cargo prints its progress bar into a pipe with `CARGO_TERM_PROGRESS_WHEN=always` (`CARGO_PROGRESS_ENV`, set for the preview's screens and background part and for "Run in a real window"; not for packaging). `LogBook::push` parses it (`BuildProgress::parse`: done/total and what is compiling) and sends a `LogLine` with `progress` to the listener instead of a line.
   - Shell: `ProjectLog::progress` keeps the newest report per source; the build window shows the part that reported last with its percent ("Screens 45%") and a thin bar. A new build resets its sources. The parts build one after the other (shared target folder), so a sum would jump back.
   - Live (preview_probe, now also printing progress, on a fresh template project): background part 0→374 steps, then screens 8→274; reports every few crates.
   - Not checked by eye in the app window: the user's own AgentKnife was running and the dev build shares its state folder.
   - Tests: parse/percent (ak-types), LogBook (report reaches the listener, not the lines), ProjectLog (latest part, reset), preview render (percent, part, bar), profile (env on preview, not on packaging).
+- P1-APP-001 (follow-up) — (hash in next commit) — the build window shows every building part at once ("背景程式 ✓  畫面 45%") instead of only the last one (user choice over a 0–50/51–100 split, which would jump when only one part rebuilds).
+  - `ProjectLog::percents`: the parts of the window's sources that reported, in the order they started, each with a bar segment (`data-build-bar=<part>`). cargo's last count stops short of the total, so its `Finished` line completes the part (shown as ✓).
+  - Tests: ProjectLog (order kept, Finished completes, reset), preview render (both parts, order, tick, both bars). preview_probe also prints the `Finished` lines.

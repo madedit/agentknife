@@ -35,7 +35,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::spawn(async move {
         let mut shown = std::collections::HashMap::new();
         while let Some(line) = log.recv().await {
-            let Some(p) = line.progress else { continue };
+            let Some(p) = line.progress else {
+                // What completes a part in the build window.
+                if line.text.trim_start().starts_with("Finished ") {
+                    println!("finished {:?}: {}", line.source, line.text.trim());
+                }
+                continue;
+            };
             let step = p.percent() / 10;
             if shown.insert(line.source, step) != Some(step) {
                 println!(
