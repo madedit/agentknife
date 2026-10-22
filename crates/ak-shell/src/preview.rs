@@ -152,12 +152,30 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
     let build_sources = Signal::derive(move || {
         let mut sources = Vec::new();
         if building.get() {
-            sources.extend([LogSource::Screens, LogSource::Backend]);
+            // The order they build in (one after the other).
+            sources.extend([LogSource::Backend, LogSource::Screens]);
         }
         if opening.get() {
             sources.push(LogSource::Window);
         }
         sources
+    });
+    // The parts whose build is not done: the second one waits at 0%.
+    let build_running = Signal::derive(move || {
+        let mut parts = preview.status.with(|s| {
+            [
+                (LogSource::Backend, &s.backend),
+                (LogSource::Screens, &s.frontend),
+            ]
+            .into_iter()
+            .filter(|(_, state)| matches!(state, ServerState::Starting | ServerState::Building))
+            .map(|(part, _)| part)
+            .collect::<Vec<_>>()
+        });
+        if opening.get() {
+            parts.push(LogSource::Window);
+        }
+        parts
     });
     let build_title = Signal::derive(move || {
         if opening.get() {
@@ -298,7 +316,7 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
                     {highlight}
                 </div>
                 <CoverView chat />
-                <BuildLog sources=build_sources title=build_title open_log />
+                <BuildLog sources=build_sources building=build_running title=build_title open_log />
             </div>
         </div>
     }

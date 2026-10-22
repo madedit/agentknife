@@ -490,6 +490,9 @@
   - Live (preview_probe, now also printing progress, on a fresh template project): background part 0→374 steps, then screens 8→274; reports every few crates.
   - Not checked by eye in the app window: the user's own AgentKnife was running and the dev build shares its state folder.
   - Tests: parse/percent (ak-types), LogBook (report reaches the listener, not the lines), ProjectLog (latest part, reset), preview render (percent, part, bar), profile (env on preview, not on packaging).
-- P1-APP-001 (follow-up) — (hash in next commit) — the build window shows every building part at once ("背景程式 ✓  畫面 45%") instead of only the last one (user choice over a 0–50/51–100 split, which would jump when only one part rebuilds).
+- P1-APP-001 (follow-up) — 8799efc — the build window shows every building part at once ("背景程式 ✓  畫面 45%") instead of only the last one (user choice over a 0–50/51–100 split, which would jump when only one part rebuilds).
   - `ProjectLog::percents`: the parts of the window's sources that reported, in the order they started, each with a bar segment (`data-build-bar=<part>`). cargo's last count stops short of the total, so its `Finished` line completes the part (shown as ✓).
   - Tests: ProjectLog (order kept, Finished completes, reset), preview render (both parts, order, tick, both bars). preview_probe also prints the `Finished` lines.
+- P1-APP-001 (follow-up) — (hash in next commit) — the build window lists every part still building from the start (user request: on a first build the screens show 0% while the background part builds).
+  - `BuildLog` gets `building` (from PreviewStatus: parts Starting/Building, plus the real window while it opens); `ProjectLog::percents(sources, waiting)` shows those at 0% until cargo reports. Fixed order: background part, then screens (the order they build in).
+  - Tests: ProjectLog (fixed order, waiting part at 0%), preview render (first build: background 32% + screens 0%; screens-only rebuild lists only the screens).

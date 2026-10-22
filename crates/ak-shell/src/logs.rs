@@ -76,14 +76,19 @@ impl ProjectLog {
             .update(|all| all.retain(|(s, _)| !sources.contains(s)));
     }
 
-    /// How far each part of `sources` that is building got, in whole percent,
-    /// in the order they started. Each is shown on its own: parts that are
-    /// already built do not rebuild, so a combined number would jump.
-    pub fn percents(&self, sources: &[LogSource]) -> Vec<(LogSource, u32)> {
+    /// How far each part of `sources` got, in whole percent and in the order
+    /// of `sources`: those that reported, and those in `waiting` that have not
+    /// yet (0%: they wait for the shared target folder). Each is shown on its
+    /// own: parts that are already built do not rebuild, so a combined number
+    /// would jump.
+    pub fn percents(&self, sources: &[LogSource], waiting: &[LogSource]) -> Vec<(LogSource, u32)> {
         self.progress.with(|all| {
-            all.iter()
-                .filter(|(s, _)| sources.contains(s))
-                .map(|(s, p)| (*s, p.percent()))
+            sources
+                .iter()
+                .filter_map(|s| match all.iter().find(|(r, _)| r == s) {
+                    Some((_, p)) => Some((*s, p.percent())),
+                    None => waiting.contains(s).then_some((*s, 0)),
+                })
                 .collect()
         })
     }
@@ -282,6 +287,9 @@ pub fn last_lines(lines: &[LogLine], sources: &[LogSource], max: usize) -> Vec<L
 pub fn BuildLog(
     /// The sources to show; empty: nothing builds and the window is gone.
     sources: Signal<Vec<LogSource>>,
+    /// The sources whose build is still running (shown at 0% until cargo
+    /// reports).
+    building: Signal<Vec<LogSource>>,
     /// What is building, in words.
     title: Signal<String>,
     /// Opens the Log tab; `None` while there is no such tab (simple mode).
@@ -308,7 +316,7 @@ pub fn BuildLog(
     });
     let percents = Memo::new(move |_| {
         let sources = sources.get();
-        log.percents(&sources)
+        building.with(|b| log.percents(&sources, b))
     });
     #[cfg(target_arch = "wasm32")]
     Effect::new(move |_| {
@@ -459,18 +467,24 @@ mod tests {
                 report(1, LogSource::Backend, 0, 100),
             ]);
             assert_eq!(log.lines.with_untracked(Vec::len), 1);
-            let both = [LogSource::Screens, LogSource::Backend];
+            let both = [LogSource::Backend, LogSource::Screens];
             assert_eq!(
-                log.percents(&[LogSource::Screens]),
+                log.percents(&[LogSource::Screens], &[]),
                 [(LogSource::Screens, 50)]
             );
-            // Every part, in the order they started; a report keeps its place.
+            // Every part, in the order asked for.
             log.append(vec![report(1, LogSource::Screens, 60, 100)]);
             assert_eq!(
-                log.percents(&both),
-                [(LogSource::Screens, 60), (LogSource::Backend, 0)]
+                log.percents(&both, &[]),
+                [(LogSource::Backend, 0), (LogSource::Screens, 60)]
             );
-            assert!(log.percents(&[LogSource::Window]).is_empty());
+            assert!(log.percents(&[LogSource::Window], &[]).is_empty());
+            // A part still waiting to start shows 0%; one not building is left out.
+            let window = [LogSource::Window, LogSource::Bundle];
+            assert_eq!(
+                log.percents(&window, &[LogSource::Window]),
+                [(LogSource::Window, 0)]
+            );
             // cargo's last count is short of the total; "Finished" completes it.
             log.append(vec![line(
                 2,
@@ -478,11 +492,11 @@ mod tests {
                 "    Finished `dev` profile [unoptimized] target(s) in 3.1s",
             )]);
             assert_eq!(
-                log.percents(&[LogSource::Screens]),
+                log.percents(&[LogSource::Screens], &[]),
                 [(LogSource::Screens, 100)]
             );
             log.reset_progress(&[LogSource::Backend]);
-            assert_eq!(log.percents(&both), [(LogSource::Screens, 100)]);
+            assert_eq!(log.percents(&both, &[]), [(LogSource::Screens, 100)]);
         });
     }
 
