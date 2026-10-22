@@ -44,6 +44,16 @@ fn Page() -> impl IntoView {
   class string.
 - Events: `on:click=move |_| set_count.update(|n| *n += 1)`,
   `on:input=move |ev| text.set(event_target_value(&ev))`.
+- Events that need a value (which arrow, which item): a small function that
+  returns the handler, then call it per element:
+  ```rust
+  let press = move |dir: Dir| move |_| turn.set(dir);
+  view! {
+      <button data-ak-id="up-button" on:click=press(Dir::Up)>"▲"</button>
+      <button data-ak-id="down-button" on:click=press(Dir::Down)>"▼"</button>
+  }
+  ```
+  (`Dir` must be `Copy`: `#[derive(Clone, Copy)]`.)
 - Properties (current input value): `prop:value=move || text.get()`.
 - Two-way binding of inputs: `bind:value=text` (an `RwSignal<String>`),
   `bind:checked=done` (an `RwSignal<bool>`).

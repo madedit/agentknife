@@ -141,6 +141,15 @@ export class Game {
     this.onScore(0);
   }
 
+  // What AgentKnife sees of the game (dom_summary cannot look inside the
+  // canvas): everything needed to check the rules.
+  stateJson() {
+    return JSON.stringify({
+      score: this.score,
+      cubeColor: "#" + this.cube.material.color.getHexString(),
+    });
+  }
+
   dispose() {
     this.renderer.setAnimationLoop(null);
     this.resize.disconnect();
@@ -158,6 +167,13 @@ export class Game {
 `#[wasm_bindgen(module = "/src/game.js")]` declares what Rust may call (the path is
 from the project folder). Keep the `Closure`s alive as long as the game (here in the
 same `StoredValue`), or JS calls into freed memory.
+
+**Names must match exactly.** A JS method named in camelCase (`stateJson`,
+`setBest`, `togglePause`) needs `js_name` on the Rust side:
+`#[wasm_bindgen(method, js_name = setBest)] fn set_best(this: &Game, n: u32);`.
+A wrong name still builds; the page then fails with `….set_best is not a function`
+(often followed by `closure invoked recursively or after being dropped`, which is
+only a consequence). Call `dom_summary` to see such errors.
 
 ```rust
 //! The game screen: a <canvas> drawn by src/game.js (three.js), with the
@@ -182,6 +198,10 @@ extern "C" {
     #[wasm_bindgen(method)]
     fn restart(this: &Game);
 
+    // camelCase in JS: `js_name` gives the exact name.
+    #[wasm_bindgen(method, js_name = stateJson)]
+    fn state_json(this: &Game) -> String;
+
     #[wasm_bindgen(method)]
     fn dispose(this: &Game);
 }
@@ -202,6 +222,12 @@ pub fn GameScreen() -> impl IntoView {
         ak_bridge::set_hit_test(move |p| {
             game.with_value(|g| g.as_ref().and_then(|(g, _)| g.pick(p.x, p.y)))
                 .map(|name| serde_json::json!({ "object": name }))
+        });
+        // Lets AgentKnife check the game: dom_summary shows this state.
+        ak_bridge::set_state_reader(move || {
+            game.with_value(|g| g.as_ref().map(|(g, _)| g.state_json()))
+                .and_then(|json| serde_json::from_str(&json).ok())
+                .unwrap_or_default()
         });
     });
     on_cleanup(move || {
@@ -238,12 +264,20 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
 `leptos::mount::mount_to_body(game::GameScreen)` after `ak_bridge::start()`).
 
 ## Growing the game
+- **Plan the states first.** Before coding a game, write a table in a comment at
+  the top of `src/game.js`: each state (e.g. not started, playing, paused, over) ×
+  each input (arrow keys, pause, restart, a click) → what happens. Decide the
+  awkward cases up front (a key just after game over, turning back on oneself).
+- **Report the state.** Put everything the rules depend on into `stateJson()`
+  (positions, direction, state, score, lives) and keep it current: it is the only
+  way to check the game, since `dom_summary` cannot see inside the canvas.
 - **More data to Rust**: one callback per kind of news (`onScore`, `onGameOver`).
   Each is a `Closure` passed to the constructor and kept in the `StoredValue`.
   Numbers, strings and bools cross directly; for more, pass a JSON string and parse
   it with `serde_json` in Rust.
 - **Rust to the game**: add a method (`setLevel(n)`, `pause()`), declare it in the
-  `extern "C"` block, call it through `game.with_value`.
+  `extern "C"` block (`js_name` for camelCase names), call it through
+  `game.with_value`.
 - **Keyboard**: `window.addEventListener("keydown", this.onKey)` in the constructor,
   `removeEventListener` in `dispose()`. Keep pressed keys in a `Set` and read it in
   `frame()`.
@@ -260,8 +294,9 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
 
 ## Checking the preview
 - Changing `src/game.js` rebuilds and reloads the preview like Rust code.
-- JS errors do not stop the build. When the canvas stays empty, call `dom_summary`:
-  it ends with the page's errors (e.g. a misspelled three.js name, with file and
+- JS errors do not stop the build. After every change call `dom_summary`: it shows
+  the game state from `stateJson()` and ends with the page's errors (e.g. a
+  misspelled three.js name or a method name without `js_name`, with file and
   line). If the whole page is blank, check the import map and `vendor/three/`.
 - `pick` + `set_hit_test` make "this one" in the user's message name the 3D object
   under the pointer.

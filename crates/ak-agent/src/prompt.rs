@@ -98,7 +98,9 @@ pub fn system_prompt(base: Option<&str>, ui_locale: Locale, plan_mode: PlanMode)
     s.push_str(&format!(
         "## Language (most important rule)\n\
          Before you write anything, look at the user's most recent message and use its \
-         language for everything you write: replies, step `label`s, plans and questions. \
+         language for everything you write: replies, step `label`s, plans and questions, \
+         and also the text inside the app and comments in its code. For Chinese, keep to \
+         the script the user writes (Traditional or Simplified) and never mix the two. \
          Do this even if earlier messages used another language; if the user switches \
          language, you switch too. If that message has no words (only code, an image or \
          symbols), use {}. Messages starting with \"[AgentKnife\" are notes from \

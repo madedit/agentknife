@@ -28,6 +28,15 @@ builds again.
 - **`state not managed for field`** — add `.manage(MyState::default())` to the builder.
 - **`no method named path`** — add `use tauri::Manager;`.
 
+## Builds, but the page fails
+Call `dom_summary`: its last part lists the page's errors.
+- **`….some_name is not a function`** — Rust calls a JS function by the wrong
+  name: JS names are camelCase, so add `js_name = someName` to its
+  `#[wasm_bindgen(…)]` (topic `three-d`).
+- **`closure invoked recursively or after being dropped`** — usually follows
+  another error: fix that one first. Otherwise a `Closure` passed to JS was
+  dropped; keep it alive (topic `three-d`).
+
 ## Trunk / Tailwind
 - **A Tailwind class has no effect** — the full class name must appear in the code
   (topic `tailwind`); or a typo in the class.

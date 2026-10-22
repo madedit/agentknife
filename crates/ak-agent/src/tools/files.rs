@@ -137,14 +137,16 @@ impl Tool for EditFile {
         ToolSpec {
             name: "edit_file".into(),
             description: "Replace exact text in a file. `old_text` must match the file exactly \
-                          (copy it from read_file) and appear once, unless `replace_all` is true."
+                          (copy it from read_file) and appear once, unless `replace_all` is true. \
+                          To remove text, set `delete` instead of an empty `new_text`."
                 .into(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Project-relative path" },
                     "old_text": { "type": "string", "description": "Exact text to replace, with enough surrounding lines to be unique" },
-                    "new_text": { "type": "string", "description": "Replacement text" },
+                    "new_text": { "type": "string", "description": "Replacement text (not empty)" },
+                    "delete": { "type": "boolean", "description": "Remove `old_text` (with `new_text` empty). Default false." },
                     "replace_all": { "type": "boolean", "description": "Replace every occurrence. Default false." },
                 },
                 "required": ["path", "old_text", "new_text"],
@@ -160,8 +162,21 @@ impl Tool for EditFile {
                 let mut old = str_arg(&args, "old_text")?.to_owned();
                 let mut new = str_arg(&args, "new_text")?.to_owned();
                 let replace_all = args["replace_all"].as_bool().unwrap_or(false);
+                let delete = args["delete"].as_bool().unwrap_or(false);
                 if old.is_empty() {
                     return Err(ToolOutput::error("`old_text` must not be empty."));
+                }
+                // An empty replacement is a common slip that deletes working code.
+                if new.is_empty() && !delete {
+                    return Err(ToolOutput::error(
+                        "`new_text` is empty, which would delete `old_text`. Give the \
+                         replacement text, or set `delete` to true to remove it.",
+                    ));
+                }
+                if delete && !new.is_empty() {
+                    return Err(ToolOutput::error(
+                        "`delete` is true but `new_text` is not empty: use one or the other.",
+                    ));
                 }
                 let text = read_text(&path)?;
                 let mut count = text.matches(old.as_str()).count();
@@ -383,6 +398,31 @@ mod tests {
             .await;
         assert!(text(&miss).contains("not found"));
         assert_eq!(all.touched, ["a.css"]);
+    }
+
+    #[tokio::test]
+    async fn an_empty_replacement_needs_delete() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = ctx(&dir);
+        std::fs::write(dir.path().join("a.rs"), "fn a() {}\nfn b() {}\n").unwrap();
+        let read = || std::fs::read_to_string(dir.path().join("a.rs")).unwrap();
+        let slip = EditFile
+            .call(
+                json!({ "path": "a.rs", "old_text": "fn b() {}\n", "new_text": "" }),
+                &c,
+            )
+            .await;
+        assert!(slip.is_error && text(&slip).contains("delete"));
+        assert_eq!(read(), "fn a() {}\nfn b() {}\n", "nothing removed");
+        let both = EditFile
+            .call(json!({ "path": "a.rs", "old_text": "fn b() {}\n", "new_text": "x", "delete": true }), &c)
+            .await;
+        assert!(both.is_error);
+        let gone = EditFile
+            .call(json!({ "path": "a.rs", "old_text": "fn b() {}\n", "new_text": "", "delete": true }), &c)
+            .await;
+        assert!(!gone.is_error, "{}", text(&gone));
+        assert_eq!(read(), "fn a() {}\n");
     }
 
     #[tokio::test]

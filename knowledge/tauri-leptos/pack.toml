@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.0"
+version = "0.2.1"
 
 [versions]
 tauri = "2.12.4"
@@ -81,7 +81,7 @@ file = "example-todo.md"
 [[topic]]
 id = "three-d"
 title = "3D games and scenes (three.js)"
-summary = "3D graphics with three.js on a <canvas>: add_library, index.html, a game.js module called from Rust, input, score, cleanup."
+summary = "3D graphics with three.js on a <canvas>: add_library, index.html, a game.js module called from Rust (js_name), state for dom_summary, planning game states, input, cleanup."
 file = "three-d.md"
 
 [[topic]]

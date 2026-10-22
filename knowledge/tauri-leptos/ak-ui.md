@@ -10,6 +10,14 @@ get derived ids. Components have no built-in text: pass labels in the user's lan
 <Button ak_id="add-button" submit=true>"Add"</Button>            // submits its Form
 <Button ak_id="close-button" variant=ButtonVariant::Ghost label="Close">"✕"</Button>  // icon: give a label
 ```
+`Button` has no `class` prop: its looks come from `variant`. For a control that
+must look different (big see-through arrow keys over a game), use a plain element
+with Tailwind classes and give it its own `data-ak-id`:
+```rust
+<button type="button" data-ak-id="left-key" aria-label="Left"
+    class="h-16 w-16 rounded-full bg-white/30 text-2xl text-white active:bg-white/50"
+    on:click=move |_| turn(Dir::Left)>"◀"</button>
+```
 Variants: `Primary` (default, the main action), `Secondary`, `Danger` (cannot be
 undone), `Ghost` (low emphasis).
 
