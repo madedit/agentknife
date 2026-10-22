@@ -493,3 +493,27 @@ fn Picker() -> impl IntoView {
         <p>{next}</p>
     }
 }
+
+// ---- leptos-components: For rows with Show ----
+#[component]
+fn PhotoRows() -> impl IntoView {
+    let photos = RwSignal::new(vec![("a.jpg".to_string(), true)]);
+    let opened = RwSignal::new(None::<String>);
+    view! {
+        <For
+            each=move || photos.get()
+            key=|(path, _)| path.clone()
+            children=move |(path, starred)| {
+                // Copy: usable in any number of closures, also inside Show.
+                let path = StoredValue::new(path);
+                view! {
+                    <Show when=move || starred>
+                        <button on:click=move |_| opened.set(Some(path.get_value()))>
+                            {path.get_value()}
+                        </button>
+                    </Show>
+                }
+            }
+        />
+    }
+}

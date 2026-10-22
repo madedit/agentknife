@@ -72,7 +72,8 @@ fn Page() -> impl IntoView {
 - One handler used in several places (two events, many rows): a closure that
   captures a `String` can be used only once (`expected a closure that implements
   the Fn trait, but this closure only implements FnOnce`). Make it a `Callback`
-  (it is `Copy`) and call it with `.run(…)`:
+  (it is `Copy`) and call it with `.run(…)` (not `.call`; several arguments go in
+  one tuple):
   ```rust
   let pick = Callback::new(move |(path, index): (String, usize)| {
       selected.set(Some((path, index)));
@@ -144,6 +145,38 @@ move || if logged_in.get() {
 />
 ```
 ak-ui's `List` does this for you, with ids for each row (topic `ak-ui`).
+
+**`Show` (and `Suspense`, `ChildrenFn`) runs its children again every time it
+shows them**, so they may not move anything out: a row's `String` used in a
+handler inside `Show` fails with `FnOnce` errors that point at the whole `view!`.
+`Rc`, `Arc` and `AnyView` do not help. Turn the row's values into a `StoredValue`
+(it is `Copy`) at the top of `children`, and read it with `.get_value()`:
+```rust
+#[component]
+fn PhotoRows() -> impl IntoView {
+    let photos = RwSignal::new(vec![("a.jpg".to_string(), true)]);
+    let opened = RwSignal::new(None::<String>);
+    view! {
+        <For
+            each=move || photos.get()
+            key=|(path, _)| path.clone()
+            children=move |(path, starred)| {
+                // Copy: usable in any number of closures, also inside Show.
+                let path = StoredValue::new(path);
+                view! {
+                    <Show when=move || starred>
+                        <button on:click=move |_| opened.set(Some(path.get_value()))>
+                            {path.get_value()}
+                        </button>
+                    </Show>
+                }
+            }
+        />
+    }
+}
+```
+Or skip `Show`: `{move || starred.then(|| view! { … })}` builds the part afresh
+each time (clone what it needs inside the closure).
 
 ## Mounting
 `src/main.rs` already does it; keep `ak_bridge::start()` first:

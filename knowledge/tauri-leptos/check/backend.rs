@@ -118,3 +118,50 @@ pub fn register(b: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
 fn today() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
+
+// ---- images-dialogs ----
+use base64::Engine;
+use std::io::Cursor;
+
+/// A JPEG thumbnail of the picture at `path` (at most `size` pixels wide and high),
+/// as text the screens can put in `<img src=…>`.
+fn thumbnail_url(path: &std::path::Path, size: u32) -> Result<String, String> {
+    let picture = image::open(path)
+        .map_err(|e| format!("Could not open {}: {e}", path.display()))?;
+    // Keeps the proportions. JPEG has no transparency: convert to RGB first.
+    let small = image::DynamicImage::ImageRgb8(picture.thumbnail(size, size).to_rgb8());
+    let mut bytes = Vec::new();
+    small
+        .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Jpeg)
+        .map_err(|e| e.to_string())?;
+    let text = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:image/jpeg;base64,{text}"))
+}
+
+#[tauri::command]
+async fn thumbnail(path: String) -> Result<String, String> {
+    // Decoding pictures is slow: keep it off the window's thread.
+    tauri::async_runtime::spawn_blocking(move || thumbnail_url(std::path::Path::new(&path), 240))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+use tauri_plugin_dialog::DialogExt;
+
+#[tauri::command]
+async fn choose_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    // The dialog waits for the user: keep it off the window's thread.
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("Choose a photo folder")
+            .blocking_pick_folder()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(folder) = picked else {
+        return Ok(None); // the user cancelled
+    };
+    let path = folder.into_path().map_err(|e| e.to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}

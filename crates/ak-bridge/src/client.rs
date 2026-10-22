@@ -103,8 +103,12 @@ pub async fn invoke_value(cmd: &str, args: Value) -> Result<Value, InvokeError> 
 /// In the preview, a failed command is also listed among the page's errors:
 /// apps often ignore the error, and the button then silently does nothing.
 fn noted(cmd: &str, e: InvokeError) -> InvokeError {
+    // A lost connection means the backend is restarting after a rebuild (it
+    // comes back by itself); a crash is reported from the backend's own log.
     #[cfg(feature = "dev")]
-    crate::control::remember_error(format!("Command `{cmd}` failed: {e}"));
+    if !matches!(e, InvokeError::Transport(_)) {
+        crate::control::remember_error(format!("Command `{cmd}` failed: {e}"));
+    }
     #[cfg(not(feature = "dev"))]
     let _ = cmd;
     e

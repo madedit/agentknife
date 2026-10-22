@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.7"
+version = "0.2.8"
 
 [versions]
 tauri = "2.12.4"
@@ -59,6 +59,12 @@ id = "storage"
 title = "Saving data"
 summary = "Keeping the app's data between runs: a JSON file in the app data folder (recommended) or localStorage; exporting a CSV file for Excel (BOM, safe file names)."
 file = "storage.md"
+
+[[topic]]
+id = "images-dialogs"
+title = "Pictures and the system dialogs (backend)"
+summary = "Thumbnails with the image crate (thumbnail, write_to, data URLs for <img>), choosing a folder or file with the dialog plugin (set_title, FilePath)."
+file = "images-dialogs.md"
 
 [[topic]]
 id = "ak-bridge"

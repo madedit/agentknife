@@ -91,7 +91,7 @@ pub fn check_build(root: &Path) -> Result<()> {
     // What the docs tell the agent to add.
     add_deps(
         &out.join("src-tauri/Cargo.toml"),
-        "serde_json = \"1.0.154\"\nchrono = \"0.4.45\"\n",
+        "serde_json = \"1.0.154\"\nchrono = \"0.4.45\"\nimage = { version = \"0.25.10\", default-features = false, features = [\"jpeg\", \"png\", \"gif\", \"webp\"] }\nbase64 = \"0.22.1\"\ntauri-plugin-dialog = \"2.8.3\"\n",
     )?;
     add_deps(
         &out.join("Cargo.toml"),

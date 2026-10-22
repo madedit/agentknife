@@ -29,6 +29,11 @@ builds again.
 - **`use of moved value`** for a `String` shown in `view!` after another use —
   `.clone()` it for the earlier use, or show `{text.clone()}`.
 - **`mismatched types: expected &AppHandle, found AppHandle`** — pass a reference: `notes_path(&app)`.
+- **`expected a closure that implements the Fn trait, but this closure only
+  implements FnOnce`**, often pointing at the start or end of a whole `view!` —
+  a closure moves a `String` out each time it runs. Inside `Show`/`For` rows:
+  topic `leptos-components` ("Lists"). One handler for two events: a `Callback`,
+  called with `.run(…)`.
 - **`type mismatch in closure arguments`** on `Button`'s `on_click` — write
   `move |_| …`; `move |()| …` is for `Form`'s `on_submit`.
 
@@ -38,9 +43,14 @@ builds again.
   camelCase on the screen side (topic `ak-bridge`).
 - **`state not managed for field`** — add `.manage(MyState::default())` to the builder.
 - **`no method named path`** — add `use tauri::Manager;`.
+- **`no method named save_to` / `thumbnail` takes 2 arguments** (`image`), **`no
+  method named with_title` / `display` on `FilePath`** (dialogs) — topic
+  `images-dialogs`.
 
 ## Builds, but the page fails
-Call `dom_summary`: its last part lists the page's errors.
+Call `dom_summary`: its last part lists the page's errors. While the app is being
+rebuilt the preview may briefly fail (the backend restarts): check again after the
+build instead of changing code.
 - **`Rust panic: panicked at src/….rs:LINE:COL: …`** — the screens' Rust code
   crashed at that line (often `unwrap()`, `expect()` or an index out of range).
   Handle the `None`/`Err` or check the length instead. The page may stop
