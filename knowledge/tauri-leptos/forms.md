@@ -28,6 +28,12 @@ view! {
 ```
 
 ## Checkboxes and selects
+`bind:checked` ties a checkbox to its own `RwSignal<bool>`. When the state lives
+elsewhere (a set of chosen files), set the box from it with `prop:checked` and
+change the state on `change`:
+`<input type="checkbox" prop:checked=move || chosen.with(|c| c.contains(&path)) on:change=move |_| toggle.run(path.clone()) />`
+(`checked=` only sets the starting state).
+
 ```rust
 let done = RwSignal::new(false);
 let color = RwSignal::new("blue".to_string());

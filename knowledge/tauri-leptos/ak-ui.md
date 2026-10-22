@@ -3,6 +3,25 @@
 `use ak_ui::*;` Every component takes `ak_id` (rendered as `data-ak-id`); parts inside
 get derived ids. Components have no built-in text: pass labels in the user's language.
 
+What the props take ("follows" = a closure or signal keeps it up to date):
+
+| Component | Prop | Takes |
+|---|---|---|
+| all | `ak_id` | text, fixed |
+| Button | `variant`, `submit`, `label` | fixed values |
+| Button, Input, Toggle | `disabled` | follows (`Signal::derive(move \|\| …)`) |
+| Input | `value` | `RwSignal<String>` only: keep numbers as text, `parse()` when used |
+| Input | `label`, `placeholder` | text, or follows: `label=move \|\| …` |
+| Input | `kind` | fixed text |
+| Card | `title` | text, or follows |
+| Toggle | `checked` | `RwSignal<bool>` |
+| Toggle | `label` | text, or follows |
+| Dialog | `open` | `RwSignal<bool>` (it closes itself) |
+| Dialog | `title` | text, or follows |
+| Dialog | `close_label` | fixed text |
+| Nav | `items` | fixed list; `active`: `RwSignal<String>` |
+| List | `items` | follows (`RwSignal<Vec<T>>` or `Signal`) |
+
 ## Button
 ```rust
 <Button ak_id="save-button" on_click=move |_| save()>"Save"</Button>

@@ -44,10 +44,13 @@ fn Page() -> impl IntoView {
   closure returning the whole class string (every class written out in full):
   `class=move || format!("rounded p-2 {}", if hp.get() <= 3 { "bg-red-500" } else { "bg-gray-100" })`.
 - **Any attribute or prop value with `<` or `>` in it goes in braces**, on every
-  element and component: `when={move || total.get() > 0.0}`,
-  `disabled={move || hp.get() <= 0}`. Without them `view!` cuts the value at the
-  `<`/`>` and the error looks unrelated: `invalid tag name or attribute key`, or
-  `expected bool, found f64`.
+  element and component. That includes comparisons and types:
+  `when={move || total.get() > 0.0}`,
+  `each={move || items.get().into_iter().enumerate().collect::<Vec<_>>()}`.
+  Without them `view!` cuts the value at the `<`/`>` and the error looks unrelated
+  (`invalid tag name or attribute key`, `expected bool, found f64`, `expected
+  identifier, found keyword move`), often on a later line: check the other
+  attributes of the same element.
 - Events: `on:click=move |_| set_count.update(|n| *n += 1)`,
   `on:input=move |ev| text.set(event_target_value(&ev))`.
 - Comments: `// …` lines are fine inside `view!`.
@@ -65,6 +68,21 @@ fn Page() -> impl IntoView {
       e.prevent_default();
   });
   on_cleanup(move || keys.remove());
+  ```
+- One handler used in several places (two events, many rows): a closure that
+  captures a `String` can be used only once (`expected a closure that implements
+  the Fn trait, but this closure only implements FnOnce`). Make it a `Callback`
+  (it is `Copy`) and call it with `.run(…)`:
+  ```rust
+  let pick = Callback::new(move |(path, index): (String, usize)| {
+      selected.set(Some((path, index)));
+  });
+  let path = "a.jpg".to_string();
+  let path2 = path.clone();
+  view! {
+      <input type="checkbox" on:change=move |_| pick.run((path.clone(), 0)) />
+      <span on:click=move |_| pick.run((path2.clone(), 0))>"a.jpg"</span>
+  }
   ```
 - Events that need a value (which arrow, which item): a small function that
   returns the handler, then call it per element:

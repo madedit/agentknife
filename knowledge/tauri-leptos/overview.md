@@ -26,9 +26,18 @@ ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates 
   It works in the preview and in the installed app.
 - A backend change restarts the backend; a build error shows in the preview. Fix
   build errors before anything else.
+- **Only in the real window** (the user's "run in a window"), not in the preview
+  and not with `interact`: the system's open/save/folder dialogs, files dragged in
+  from the computer, tray icons, notifications. Give such features a fallback the
+  preview can use (a text field for a path, a list to pick from) and tell the user
+  to try the rest in the real window.
 
 ## Rules for every change
 - Read a file before changing it; change as little as needed.
+- Build often: write a screen a part at a time and check `build_status` after
+  each part. In a long `view!` one mistake hides the others.
+- `run_command` on Windows is `cmd`: no `grep`/`head`; search output with
+  `findstr /n /c:"text" file`.
 - Use ak-ui components (topic `ak-ui`) before writing your own.
 - Every meaningful element gets a stable `data-ak-id` (topic `data-ak-id`).
 - Text the user sees is in the user's language. Errors returned by commands are shown

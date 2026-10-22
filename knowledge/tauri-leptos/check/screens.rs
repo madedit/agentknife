@@ -436,3 +436,60 @@ fn Ticker() -> impl IntoView {
         <p>{move || tick.get()} {cleared}</p>
     }
 }
+
+// ---- browser ----
+use wasm_bindgen::JsCast;
+
+/// Copies `text` to the clipboard.
+async fn copy_text(text: &str) -> Result<(), String> {
+    let clipboard = web_sys::window().ok_or("no window")?.navigator().clipboard();
+    wasm_bindgen_futures::JsFuture::from(clipboard.write_text(text))
+        .await
+        .map(|_| ())
+        .map_err(|e| format!("Could not copy: {e:?}"))
+}
+
+/// The data-ak-id of the element that has the keyboard focus, if any.
+fn focused_id() -> Option<String> {
+    let el = web_sys::window()?.document()?.active_element()?;
+    el.get_attribute("data-ak-id")
+}
+
+/// The `<input>` an event came from (its value, checked state, files).
+fn input_of(ev: &web_sys::Event) -> Option<web_sys::HtmlInputElement> {
+    ev.target()?.dyn_into::<web_sys::HtmlInputElement>().ok()
+}
+
+// ---- leptos-components: one handler, several places; forms: prop:checked ----
+#[component]
+fn Picker() -> impl IntoView {
+    let selected = RwSignal::new(None::<(String, usize)>);
+    let chosen = RwSignal::new(std::collections::HashSet::<String>::new());
+    let toggle = Callback::new(move |p: String| {
+        chosen.update(|c| {
+            if !c.remove(&p) {
+                c.insert(p);
+            }
+        })
+    });
+    let pick = Callback::new(move |(path, index): (String, usize)| {
+        selected.set(Some((path, index)));
+    });
+    let path = "a.jpg".to_string();
+    let path2 = path.clone();
+    let path3 = path.clone();
+    let items = RwSignal::new(vec!["a".to_string()]);
+    let queue = RwSignal::new(vec![1u32]);
+    let next = queue.try_update(|q| q.pop()).flatten();
+    view! {
+        <input type="checkbox" on:change=move |_| pick.run((path.clone(), 0)) />
+        <span on:click=move |_| pick.run((path2.clone(), 0))>"a.jpg"</span>
+        <input type="checkbox" prop:checked=move || chosen.with(|c| c.contains("a.jpg")) on:change=move |_| toggle.run(path3.clone()) />
+        <For
+            each={move || items.get().into_iter().enumerate().collect::<Vec<_>>()}
+            key=|(i, _)| *i
+            children=move |(_, s)| view! { <p>{s}</p> }
+        />
+        <p>{next}</p>
+    }
+}

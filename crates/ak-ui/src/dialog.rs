@@ -8,7 +8,9 @@ use crate::part_id;
 pub fn Dialog(
     #[prop(into)] ak_id: String,
     open: RwSignal<bool>,
-    #[prop(into)] title: String,
+    /// May change (a signal or `Signal::derive`).
+    #[prop(into)]
+    title: Signal<String>,
     /// What a screen reader says for the × button (in the app's language).
     #[prop(into)]
     close_label: String,
@@ -35,13 +37,13 @@ pub fn Dialog(
                 <div
                     role="dialog"
                     aria-modal="true"
-                    aria-label=title.clone()
+                    aria-label=move || title.get()
                     data-ak-id=ak_id.clone()
                     class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900"
                     on:click=|ev| ev.stop_propagation()
                 >
                     <h2 class="mb-4 pr-8 text-lg font-semibold text-gray-900 dark:text-gray-100">
-                        {title.clone()}
+                        {move || title.get()}
                     </h2>
                     {children()}
                     <button

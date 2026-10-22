@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.6"
+version = "0.2.7"
 
 [versions]
 tauri = "2.12.4"
@@ -35,6 +35,12 @@ id = "forms"
 title = "Inputs and forms"
 summary = "Binding text, numbers, checkboxes and selects to signals; submitting forms; validation messages."
 file = "forms.md"
+
+[[topic]]
+id = "browser"
+title = "Browser features (web-sys)"
+summary = "Clipboard, focus, the input behind an event, promises: adding web-sys with the right features, dyn_into, JsFuture."
+file = "browser.md"
 
 [[topic]]
 id = "date-time"

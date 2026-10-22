@@ -1,11 +1,12 @@
 use leptos::prelude::*;
 
-/// An on/off switch bound to `checked` (a `role="switch"` button).
+/// An on/off switch bound to `checked` (a `role="switch"` button). The label may
+/// change.
 #[component]
 pub fn Toggle(
     #[prop(into)] ak_id: String,
     checked: RwSignal<bool>,
-    #[prop(into)] label: String,
+    #[prop(into)] label: Signal<String>,
     #[prop(optional, into)] disabled: Signal<bool>,
 ) -> impl IntoView {
     view! {
@@ -33,7 +34,7 @@ pub fn Toggle(
                     }
                 }></span>
             </button>
-            <span>{label}</span>
+            <span>{move || label.get()}</span>
         </label>
     }
 }

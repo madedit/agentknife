@@ -210,3 +210,37 @@ fn toasts_are_numbered_parts_of_their_host() {
     assert!(out.contains(r#"role="alert""#));
     assert!(out.contains("Could not sync"));
 }
+
+#[test]
+fn text_props_follow_signals() {
+    let out = html(|| {
+        let editing = RwSignal::new(true);
+        let name = RwSignal::new("photo.jpg".to_string());
+        let value = RwSignal::new(String::new());
+        let checked = RwSignal::new(false);
+        view! {
+            <Input
+                ak_id="name-input"
+                value=value
+                label=Signal::derive(move || if editing.get() { "Rename" } else { "Name" }.to_string())
+                placeholder=move || name.get()
+            />
+            <Card ak_id="info-card" title=move || format!("About {}", name.get())>
+                <p>"x"</p>
+            </Card>
+            <Toggle ak_id="keep-toggle" checked=checked label=move || format!("Keep {}", name.get()) />
+            <Dialog ak_id="rename" open=RwSignal::new(true) title=move || format!("Rename {}", name.get()) close_label="Close">
+                <p>"y"</p>
+            </Dialog>
+        }
+    });
+    for text in [
+        "Rename",
+        "placeholder=\"photo.jpg\"",
+        "About photo.jpg",
+        "Keep photo.jpg",
+        "Rename photo.jpg",
+    ] {
+        assert!(out.contains(text), "{text} in {out}");
+    }
+}

@@ -98,7 +98,8 @@ start(500);
 on_cleanup(stop);
 ```
 Run one step of the game in the timer (`step()`), not the whole game: a `loop`
-that never returns freezes the page. Once, later: `set_timeout(move || …,
+that never returns freezes the page. `set_interval` (without `_with_handle`)
+returns nothing and cannot be stopped. Once, later: `set_timeout(move || …,
 Duration::from_millis(800))`.
 
 ## Game state in one signal
@@ -106,6 +107,8 @@ Keep the whole state in one struct in an `RwSignal`. `update` changes it and
 returns nothing; to get a result out of the change, use `try_update`:
 ```rust
 let cleared = game.try_update(|g| g.clear_full_rows()).unwrap_or(0);
+// The closure returns an Option itself: flatten the two.
+let next = queue.try_update(|q| q.pop()).flatten();
 ```
 A grid has both sizes in its type: `[[Cell; 10]; 20]` (20 rows of 10);
 `[[Cell; 10]]` is a slice and cannot be stored.
@@ -129,3 +132,8 @@ Or pass signals as props (`todos: RwSignal<Vec<Todo>>`) — they are Copy.
 - "cannot be sent between threads": values captured by reactive closures must be
   `Send + Sync`; use signals instead of `Rc`/`RefCell`.
 - Reading a signal inside its own `update` panics: read first, then update.
+- `StoredValue` is for things the screen does not show (a timer handle, a JS
+  object): its methods are `get_value`, `set_value`, `with_value`,
+  `update_value` (not `get`/`with`/`update`: those give "the method exists but its
+  trait bounds were not satisfied"). Lists and sets the screen shows go in an
+  `RwSignal`.

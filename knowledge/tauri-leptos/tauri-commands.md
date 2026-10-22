@@ -57,7 +57,10 @@ async fn slow_task(seconds: u64) -> Result<String, String> {
 }
 ```
 Use `async` for anything that takes time (files, network) so the window stays
-responsive. Async commands that take `State` must return `Result`.
+responsive. Async commands that take `State` must return `Result` and write the
+lifetime: `state: State<'_, Library>`. Work that blocks (a dialog waiting for the
+user, a big folder scan) goes in
+`tauri::async_runtime::spawn_blocking(move || …).await`.
 
 ## Files in the app's own folder
 ```rust
