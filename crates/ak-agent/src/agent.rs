@@ -623,7 +623,50 @@ impl Agent {
                 };
             }
         }
+        self.report_progress(conversation, events, cancel).await;
         TurnOutcome::StepLimit
+    }
+
+    /// At the step limit: one more call, without acting, so the user hears what
+    /// was done before deciding whether to go on. Best effort.
+    async fn report_progress(
+        &self,
+        conversation: &mut Conversation,
+        events: &Events,
+        cancel: &CancellationToken,
+    ) {
+        conversation.push_context(
+            "You have used all the steps of this turn and must pause now. Do not call any \
+             tools. In the user's language and in a few short lines, tell them what you did \
+             so far, what works now, and what is still left to do. They will then choose \
+             whether you continue.",
+        );
+        let request = ChatRequest {
+            model: self.config.model.clone(),
+            system: Some(self.system.clone()),
+            messages: conversation.messages(),
+            tools: self.tool_specs(),
+            max_tokens: self.config.max_tokens,
+            effort: self.config.effort,
+        };
+        let Ok(assembled) = self.model_call(request, events, cancel).await else {
+            return;
+        };
+        self.record_usage(events, assembled.usage);
+        let Message::Assistant { thinking, text, .. } = assembled.message else {
+            return;
+        };
+        if text.trim().is_empty() {
+            return;
+        }
+        // Only the words: a tool call it made anyway is not run.
+        let message = Message::Assistant {
+            thinking,
+            text,
+            tool_calls: Vec::new(),
+            replay: None,
+        };
+        let _ = self.append(conversation, events, message);
     }
 
     /// Runs the id pass over the turn's changed files. Best effort: a file that

@@ -408,17 +408,29 @@ async fn provider_errors_refusals_and_limits() {
     let p = Arc::new(ScriptedProvider::new(vec![
         tool_calls(&[(&id, "read_file", &a1)]),
         tool_calls(&[(&id, "read_file", &a1)]),
+        // At the limit: what was done, for the user. A tool call is not run.
+        tool_calls(&[(&id, "read_file", &a1)]),
     ]));
     let mut config = AgentConfig::new("scripted");
     config.max_steps = 2;
     let a = Agent::new(
-        p,
+        p.clone(),
         ToolRegistry::new().with(FakeTool::new("read_file")),
         config,
     );
     let mut conv = Conversation::new();
     let (outcome, _) = run(&a, &mut conv, "x", &CancellationToken::new()).await;
     assert_eq!(outcome, TurnOutcome::StepLimit);
+    let asked = p.requests();
+    assert_eq!(asked.len(), 3, "one more call reports the progress");
+    assert!(
+        format!("{:?}", asked[2].messages).contains("what you did so far"),
+        "the last call asks for a summary"
+    );
+    assert!(
+        !matches!(conv.messages().last(), Some(Message::Assistant { tool_calls, .. }) if !tool_calls.is_empty()),
+        "its tool calls are dropped"
+    );
 }
 
 #[tokio::test]
