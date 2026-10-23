@@ -113,6 +113,26 @@ pub async fn run(action: ControlAction) -> Result<Value, String> {
             settle().await;
             Ok(json!({ "clicked": ak_id, "tag": tag(&el) }))
         }
+        ControlAction::Scroll { ak_id, by } => {
+            let el = match &ak_id {
+                Some(id) => find(id)?,
+                None => web_sys::window()
+                    .and_then(|w| w.document())
+                    .and_then(|d| d.scrolling_element())
+                    .ok_or("no page to scroll")?,
+            };
+            match by {
+                Some(dy) => el.scroll_by_with_x_and_y(0.0, f64::from(dy)),
+                None => el.scroll_into_view(),
+            }
+            settle().await;
+            Ok(json!({
+                "scrolled": ak_id.as_deref().unwrap_or("page"),
+                "top": el.scroll_top(),
+                "content_height": el.scroll_height(),
+                "visible_height": el.client_height(),
+            }))
+        }
         ControlAction::Hold { ak_id, ms } => {
             let (el, html) = pressable(&ak_id)?;
             let ms = ms.min(MAX_HOLD_MS);
@@ -487,7 +507,20 @@ fn loose_text(el: &Element, out: &mut String) {
 
 fn item(el: &Element, tag: String, ak_id: Option<String>, depth: usize) -> DomItem {
     let mut attrs = Vec::new();
-    for name in ["type", "role", "href", "placeholder", "aria-label", "name"] {
+    // The aria states show which button of a group is chosen, which tab is open.
+    for name in [
+        "type",
+        "role",
+        "href",
+        "placeholder",
+        "aria-label",
+        "name",
+        "aria-pressed",
+        "aria-checked",
+        "aria-selected",
+        "aria-expanded",
+        "aria-current",
+    ] {
         if let Some(v) = el.get_attribute(name).filter(|v| !v.is_empty()) {
             attrs.push((name.to_owned(), v));
         }

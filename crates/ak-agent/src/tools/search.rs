@@ -20,7 +20,8 @@ impl Tool for SearchFiles {
         ToolSpec {
             name: "search_files".into(),
             description: "Search project text files with a regular expression. Returns \
-                          `path:line: text` for each matching line."
+                          `path:line: text` for each matching line (at most 200), or with \
+                          `files_only` each matching file once with its number of matches."
                 .into(),
             input_schema: json!({
                 "type": "object",
@@ -29,6 +30,8 @@ impl Tool for SearchFiles {
                     "path": { "type": "string", "description": "Folder to search. Default: the project root." },
                     "glob": { "type": "string", "description": "Only files matching this glob, e.g. *.rs" },
                     "case_insensitive": { "type": "boolean" },
+                    "files_only": { "type": "boolean", "description": "List matching files and how many lines match, not the lines." },
+                    "max_per_file": { "type": "integer", "description": "Show at most this many lines per file (the rest are counted)." },
                 },
                 "required": ["pattern"],
             }),
@@ -68,6 +71,11 @@ impl Tool for SearchFiles {
                     .collect();
                 files.sort();
 
+                let files_only = args["files_only"].as_bool().unwrap_or(false);
+                let per_file = args["max_per_file"]
+                    .as_u64()
+                    .filter(|n| *n > 0)
+                    .map_or(usize::MAX, |n| n as usize);
                 let mut hits = Vec::new();
                 let mut truncated = false;
                 'files: for file in files {
@@ -75,15 +83,34 @@ impl Tool for SearchFiles {
                     let Ok(text) = std::fs::read_to_string(&file) else {
                         continue;
                     };
+                    let name = display(root, &file);
+                    let mut found = 0;
                     for (n, line) in text.lines().enumerate() {
-                        if re.is_match(line) {
-                            if hits.len() == MAX_MATCHES {
-                                truncated = true;
-                                break 'files;
-                            }
-                            let shown: String = line.trim().chars().take(MAX_LINE_CHARS).collect();
-                            hits.push(format!("{}:{}: {shown}", display(root, &file), n + 1));
+                        if !re.is_match(line) {
+                            continue;
                         }
+                        found += 1;
+                        if files_only || found > per_file {
+                            continue;
+                        }
+                        if hits.len() == MAX_MATCHES {
+                            truncated = true;
+                            break 'files;
+                        }
+                        let shown: String = line.trim().chars().take(MAX_LINE_CHARS).collect();
+                        hits.push(format!("{name}:{}: {shown}", n + 1));
+                    }
+                    if found == 0 {
+                        continue;
+                    }
+                    if files_only {
+                        if hits.len() == MAX_MATCHES {
+                            truncated = true;
+                            break;
+                        }
+                        hits.push(format!("{name}: {found} matching lines"));
+                    } else if found > per_file {
+                        hits.push(format!("{name}: … {} more", found - per_file));
                     }
                 }
                 let mut out = if hits.is_empty() {
@@ -93,7 +120,8 @@ impl Tool for SearchFiles {
                 };
                 if truncated {
                     out.push_str(&format!(
-                        "\n(stopped after {MAX_MATCHES} matches; narrow the search)"
+                        "\n(stopped after {MAX_MATCHES} results; narrow the search with `path` or \
+                         `glob`, or use `files_only` / `max_per_file`)"
                     ));
                 }
                 Ok(ToolOutput::text(out))
@@ -106,6 +134,26 @@ impl Tool for SearchFiles {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn files_only_and_max_per_file_keep_results_short() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = ToolContext::for_project(dir.path());
+        std::fs::write(dir.path().join("a.rs"), "x1\nx2\nx3\n").unwrap();
+        std::fs::write(dir.path().join("b.rs"), "y\nx4\n").unwrap();
+        let files = text(
+            &SearchFiles
+                .call(json!({ "pattern": "x", "files_only": true }), &c)
+                .await,
+        );
+        assert_eq!(files, "a.rs: 3 matching lines\nb.rs: 1 matching lines");
+        let few = text(
+            &SearchFiles
+                .call(json!({ "pattern": "x", "max_per_file": 1 }), &c)
+                .await,
+        );
+        assert_eq!(few, "a.rs:1: x1\na.rs: … 2 more\nb.rs:2: x4");
+    }
 
     fn text(out: &ToolOutput) -> String {
         match &out.content[0] {

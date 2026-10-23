@@ -92,6 +92,14 @@ pub enum ControlAction {
         #[serde(default)]
         enter: bool,
     },
+    /// Bring `ak_id` into view; with `by`, scroll its content (or the page)
+    /// by that many pixels instead (negative: up). Answers the position.
+    Scroll {
+        #[serde(default)]
+        ak_id: Option<String>,
+        #[serde(default)]
+        by: Option<i32>,
+    },
     DomSummary,
     AppState,
     /// Scroll `ak_id` (or nothing) into view, let the page paint, and report the

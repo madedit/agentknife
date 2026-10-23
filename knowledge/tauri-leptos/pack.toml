@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.8"
+version = "0.2.9"
 
 [versions]
 tauri = "2.12.4"
@@ -41,6 +41,12 @@ id = "browser"
 title = "Browser features (web-sys)"
 summary = "Clipboard, focus, the input behind an event, promises: adding web-sys with the right features, dyn_into, JsFuture."
 file = "browser.md"
+
+[[topic]]
+id = "network"
+title = "Data from the internet"
+summary = "Trying a service with curl first, fetch from the screens with a time limit (web-sys features, AbortController), CORS, encoding user text in URLs."
+file = "network.md"
 
 [[topic]]
 id = "date-time"

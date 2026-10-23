@@ -86,6 +86,12 @@ put them all in one `<div class="grid w-full gap-3 sm:grid-cols-2">` inside it.
 ```
 Rows are flex rows: put buttons at the end of `row`.
 
+The `key` must be unique and stable, and printable (`Display`: numbers, `String`).
+It becomes part of each row's `data-ak-id`: spaces and signs turn into `-`
+(`"New York"` → `city-list-New-York`, `-6` → `city-list-minus-6`). The ids of
+parts inside a row are yours to set: build them the same way,
+`ak_ui::part_id("choose", c.id)`.
+
 `row` runs once per key, when the item first appears: if an item is edited later
 (same id, new amount), the row still shows the old values. For rows whose content
 can change, read the latest values from the signal inside the row:

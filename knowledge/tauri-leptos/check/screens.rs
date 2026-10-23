@@ -517,3 +517,81 @@ fn PhotoRows() -> impl IntoView {
         />
     }
 }
+
+// ---- network ----
+use wasm_bindgen_futures::JsFuture;
+
+/// GETs `url` and returns the answer as text; gives up after `timeout_ms`.
+async fn fetch_text(url: &str, timeout_ms: u64) -> Result<String, String> {
+    let window = web_sys::window().ok_or("no window")?;
+    let abort = web_sys::AbortController::new().map_err(|e| format!("{e:?}"))?;
+    let init = web_sys::RequestInit::new();
+    init.set_signal(Some(&abort.signal()));
+    // Cancels the request when the time is up (harmless if it already finished).
+    set_timeout(
+        move || abort.abort(),
+        std::time::Duration::from_millis(timeout_ms),
+    );
+    let answer = JsFuture::from(window.fetch_with_str_and_init(url, &init))
+        .await
+        .map_err(|_| "Could not reach the server (no connection, or it took too long).".to_string())?;
+    let response: web_sys::Response = answer.dyn_into().map_err(|_| "No answer.".to_string())?;
+    if !response.ok() {
+        return Err(format!("The server answered with error {}.", response.status()));
+    }
+    let text = response.text().map_err(|e| format!("{e:?}"))?;
+    JsFuture::from(text)
+        .await
+        .map_err(|e| format!("{e:?}"))?
+        .as_string()
+        .ok_or_else(|| "The answer was not text.".to_string())
+}
+
+#[derive(serde::Deserialize, Clone)]
+struct Current {
+    temperature_2m: f64,
+    time: String, // the place's own clock, "2026-10-23T14:00"
+}
+
+#[derive(serde::Deserialize, Clone)]
+struct Forecast {
+    current: Current,
+}
+
+#[component]
+fn Weather() -> impl IntoView {
+    let toaster = use_toaster();
+    let now = RwSignal::new(None::<Current>);
+    let load = move || {
+        leptos::task::spawn_local(async move {
+            let url = "https://api.open-meteo.com/v1/forecast?latitude=25.03&longitude=121.56&current=temperature_2m&timezone=auto";
+            match fetch_text(url, 10_000).await.and_then(|t| {
+                serde_json::from_str::<Forecast>(&t).map_err(|e| format!("Unexpected answer: {e}"))
+            }) {
+                Ok(f) => now.set(Some(f.current)),
+                Err(e) => toaster.error(e),
+            }
+        });
+    };
+    load();
+    view! {
+        <p data-ak-id="weather-now">
+            {move || now.get().map(|c| format!("{}  {:.0}°C", &c.time[11..16], c.temperature_2m))}
+        </p>
+    }
+}
+
+// ---- date-time: another place's time ----
+/// The time now at a place `offset_seconds` from UTC (an API's
+/// `utc_offset_seconds`), as "14:05".
+fn time_at(offset_seconds: i32) -> String {
+    let ms = js_sys::Date::now() + f64::from(offset_seconds) * 1000.0;
+    let d = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(ms));
+    // On the shifted time, the UTC getters read that place's clock.
+    format!("{:02}:{:02}", d.get_utc_hours(), d.get_utc_minutes())
+}
+
+// ---- ak-ui: List keys ----
+fn choose_id(id: i64) -> String {
+    ak_ui::part_id("choose", id)
+}

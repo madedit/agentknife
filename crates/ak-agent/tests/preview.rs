@@ -225,6 +225,26 @@ async fn preview_tools() {
         }
     );
 
+    // Scrolling a list down; scrolling with nothing to scroll is refused.
+    call(
+        &r,
+        "interact",
+        json!({ "action": "scroll", "ak_id": "city-list", "by": 400 }),
+    )
+    .await;
+    assert_eq!(
+        fake.actions.lock().unwrap().last(),
+        Some(&ControlAction::Scroll {
+            ak_id: Some("city-list".into()),
+            by: Some(400)
+        })
+    );
+    assert!(
+        call(&r, "interact", json!({ "action": "scroll" }))
+            .await
+            .is_error
+    );
+
     let sel = text_of(&call(&r, "get_selection", json!({})).await);
     assert!(
         sel.contains("greet-button") && sel.contains("has no data-ak-id of its own"),

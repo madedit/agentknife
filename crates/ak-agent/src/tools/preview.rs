@@ -127,7 +127,7 @@ pub fn describe_status(s: &PreviewStatus) -> String {
     );
     if let Some(err) = s.error() {
         text.push_str("\nCompiler output:\n");
-        text.push_str(&cap(err, MAX_OUTPUT_CHARS));
+        text.push_str(&cap(&first_errors(err, SHOWN_ERRORS), MAX_OUTPUT_CHARS));
     } else if s.ready() {
         text.push_str(
             "The app builds and runs. (This does not tell whether the page responds: \
@@ -135,6 +135,43 @@ pub fn describe_status(s: &PreviewStatus) -> String {
         );
     }
     text
+}
+
+/// Compiler errors shown in full; the rest are only counted.
+const SHOWN_ERRORS: usize = 2;
+
+/// The first `keep` compiler errors of `output` and how many more there are, or
+/// `output` as it is when it has no more than that.
+fn first_errors(output: &str, keep: usize) -> String {
+    let starts = |l: &str| {
+        (l.starts_with("error[") || l.starts_with("error:"))
+            && !l.starts_with("error: could not compile")
+            && !l.starts_with("error: aborting")
+    };
+    let mut blocks: Vec<Vec<&str>> = Vec::new();
+    let mut open = false;
+    for line in output.lines() {
+        if starts(line) {
+            blocks.push(vec![line]);
+            open = true;
+        } else if open && !line.trim().is_empty() && !line.starts_with("warning") {
+            if let Some(b) = blocks.last_mut() {
+                b.push(line);
+            }
+        } else {
+            open = false;
+        }
+    }
+    if blocks.len() <= keep {
+        return output.to_owned();
+    }
+    let shown: Vec<String> = blocks[..keep].iter().map(|b| b.join("\n")).collect();
+    format!(
+        "{}\n\n… and {} more errors. Fix these first (later errors often follow from \
+         them), then call build_status again.",
+        shown.join("\n\n"),
+        blocks.len() - keep
+    )
 }
 
 /// The backend's crashes, for the agent ("" when there are none).
@@ -236,7 +273,10 @@ impl Tool for Interact {
                           let go (buttons that act while held). `key`: press a key on the \
                           focused element or the page (`key` like \"ArrowLeft\", \" \", \"a\"), \
                           held for `ms`. `type`: replace a field's text (optionally pressing \
-                          Enter). `read_state`: the app's saved state (localStorage and what \
+                          Enter). `scroll`: bring `ak_id` into view, or with `by` scroll the \
+                          content of `ak_id` (a scrolling list; without `ak_id` the page) by \
+                          that many pixels (negative: up); it answers where it is now. \
+                          `read_state`: the app's saved state (localStorage and what \
                           the app reports with set_state_reader); with `wait_ms` it waits \
                           first, with `samples` it reads several times spread over `wait_ms` \
                           (to watch a game run: no need to sleep with run_command). Check \
@@ -245,8 +285,9 @@ impl Tool for Interact {
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "action": { "type": "string", "enum": ["click", "hold", "key", "type", "read_state"] },
-                    "ak_id": { "type": "string", "description": "data-ak-id of the element (click, hold, type)" },
+                    "action": { "type": "string", "enum": ["click", "hold", "key", "type", "scroll", "read_state"] },
+                    "ak_id": { "type": "string", "description": "data-ak-id of the element (click, hold, type; scroll: optional)" },
+                    "by": { "type": "integer", "description": "scroll: pixels to scroll down (negative: up)" },
                     "text": { "type": "string", "description": "What to type (replaces the field's text)" },
                     "enter": { "type": "boolean", "description": "Press Enter after typing" },
                     "key": { "type": "string", "description": "The key to press (key), as KeyboardEvent.key: \"ArrowLeft\", \"a\", \"Enter\"; space is \" \" or \"Space\"" },
@@ -283,13 +324,22 @@ impl Tool for Interact {
                     text: args["text"].as_str().unwrap_or_default().to_owned(),
                     enter: args["enter"].as_bool().unwrap_or(false),
                 },
+                (Some("scroll"), ak_id) => {
+                    let by = args["by"]
+                        .as_i64()
+                        .map(|n| n.clamp(-100_000, 100_000) as i32);
+                    if ak_id.is_none() && by.is_none() {
+                        return ToolOutput::error("scroll needs `ak_id`, `by` or both.");
+                    }
+                    ControlAction::Scroll { ak_id, by }
+                }
                 (Some("read_state"), _) => ControlAction::AppState,
                 (Some("click" | "hold" | "type"), None) => {
                     return ToolOutput::error("`ak_id` is required for click, hold and type.");
                 }
                 _ => {
                     return ToolOutput::error(
-                        "`action` must be click, hold, key, type or read_state.",
+                        "`action` must be click, hold, key, type, scroll or read_state.",
                     );
                 }
             };
@@ -459,5 +509,24 @@ impl Tool for Screenshot {
                 Err(e) => ToolOutput::error(e),
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::first_errors;
+
+    #[test]
+    fn only_the_first_errors_are_shown() {
+        let one = "error[E0425]: cannot find value `x`\n --> src/main.rs:3:5\n  |\n\n";
+        let output = format!(
+            "   Compiling app-ui v0.1.0\n{one}{one}warning: unused\n --> a\n\n{one}\
+             error: could not compile `app-ui` due to 3 previous errors\n"
+        );
+        let short = first_errors(&output, 2);
+        assert_eq!(short.matches("error[E0425]").count(), 2, "{short}");
+        assert!(short.contains("src/main.rs:3:5") && short.contains("… and 1 more errors"));
+        assert!(!short.contains("warning") && !short.contains("Compiling"));
+        assert_eq!(first_errors(one, 2), one, "few errors: the output as it is");
     }
 }

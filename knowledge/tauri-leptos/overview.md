@@ -16,7 +16,8 @@ src-tauri/
   capabilities/       what the window may use
   icons/              app icons
   src/main.rs         backend commands (#[tauri::command])
-ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates them)
+ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates them;
+                      read their source here to check a component's props)
 ```
 
 ## How the preview works
@@ -39,6 +40,8 @@ ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates 
 - `run_command` on Windows is `cmd`: no `grep`/`head`; search output with
   `findstr /n /c:"text" file`.
 - Use ak-ui components (topic `ak-ui`) before writing your own.
+- Data from the internet: try the service with `curl` in `run_command` first,
+  then fetch it (topic `network`).
 - Every meaningful element gets a stable `data-ak-id` (topic `data-ak-id`).
 - Text the user sees is in the user's language. Errors returned by commands are shown
   to the user, so write them plainly too.

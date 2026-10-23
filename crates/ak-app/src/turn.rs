@@ -245,9 +245,12 @@ pub fn folders_note(folders: &[PathBuf]) -> Option<String> {
 /// Tells the AI where the libraries' source code is (English: for the model).
 pub fn library_note(cargo_home: &std::path::Path) -> String {
     format!(
-        "
-
-The source code of the project's libraries (crates) is in {}          (one folder per index, then `<crate>-<version>`, e.g. `leptos-0.8.22`). To check          a library's API, list_files, search_files and read_file take absolute paths          there. Read only.",
+        "\n\nThe source code of the project's downloaded libraries (crates) is in {} \
+         (one folder per index, then `<crate>-<version>`, e.g. `leptos-0.8.22`). To check \
+         a library's API, list_files, search_files and read_file take absolute paths \
+         there; search one crate's folder, not the whole registry. Read only. \
+         ak-ui and ak-bridge are not there: their source is in the project's `ak/` \
+         folder (`ak/ak-ui/src`, `ak/ak-bridge/src`).",
         cargo_home.join("registry").join("src").display()
     )
 }
@@ -659,7 +662,8 @@ mod tests {
                     .join("src")
                     .display()
                     .to_string()
-            )
+            ) && note.contains("ak/ak-ui/src")
+                && !note.contains("  ")
         );
         let note = app_data_note(dir.path());
         assert!(note.contains(&dir.path().display().to_string()) && note.contains("Read only"));

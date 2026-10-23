@@ -31,7 +31,37 @@ pub use nav::{Nav, NavItem};
 pub use toast::{ToastHost, ToastKind, Toaster, use_toaster};
 pub use toggle::Toggle;
 
-/// `<base>-<part>`: the id of a part inside a component.
+/// `<base>-<part>`: the id of a part inside a component. Spaces and signs in
+/// `part` become single `-` (`"New York"` → `New-York`, `-6` → `minus-6`), so
+/// any key gives a readable id.
 pub fn part_id(base: &str, part: impl std::fmt::Display) -> String {
-    format!("{base}-{part}")
+    let raw = part.to_string();
+    let mut clean = String::new();
+    if raw.starts_with('-') && raw[1..].starts_with(|c: char| c.is_ascii_digit()) {
+        clean.push_str("minus-");
+    }
+    for c in raw.chars() {
+        if c.is_alphanumeric() || c == '_' {
+            clean.push(c);
+        } else if !clean.is_empty() && !clean.ends_with('-') {
+            clean.push('-');
+        }
+    }
+    let clean = clean.trim_end_matches('-');
+    format!("{base}-{}", if clean.is_empty() { "item" } else { clean })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::part_id;
+
+    #[test]
+    fn keys_become_readable_ids() {
+        assert_eq!(part_id("choose", -6), "choose-minus-6");
+        assert_eq!(part_id("choose", 6), "choose-6");
+        assert_eq!(part_id("city", "New York"), "city-New-York");
+        assert_eq!(part_id("photo", "a.jpg"), "photo-a-jpg");
+        assert_eq!(part_id("city", "台北"), "city-台北");
+        assert_eq!(part_id("row", " / "), "row-item");
+    }
 }
