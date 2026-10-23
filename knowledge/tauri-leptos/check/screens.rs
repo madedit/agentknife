@@ -595,3 +595,137 @@ fn time_at(offset_seconds: i32) -> String {
 fn choose_id(id: i64) -> String {
     ak_ui::part_id("choose", id)
 }
+
+// ---- leptos-components: NodeRef ----
+#[component]
+fn NameField() -> impl IntoView {
+    // The element type is required: html::Input, html::Div, html::Canvas…
+    let field = NodeRef::<leptos::html::Input>::new();
+    view! {
+        <input data-ak-id="name-input" node_ref=field />
+        <button
+            data-ak-id="focus-button"
+            on:click=move |_| {
+                // None until the element is on the page.
+                if let Some(input) = field.get() {
+                    let _ = input.focus();
+                }
+            }
+        >
+            "Focus"
+        </button>
+    }
+}
+
+// ---- rich-text ----
+/// Runs a formatting command on the editor's selected text: "bold", "italic",
+/// "underline", "insertUnorderedList", or with a value "foreColor" / "hiliteColor"
+/// ("#fde047"), "fontSize" ("5").
+fn format_text(editor: NodeRef<leptos::html::Div>, command: &str, value: Option<&str>) {
+    let Some(div) = editor.get_untracked() else {
+        return;
+    };
+    // The command works on the focused editor only.
+    let _ = div.focus();
+    let Some(doc) = html_document() else {
+        return;
+    };
+    let _ = match value {
+        Some(v) => doc.exec_command_with_show_ui_and_value(command, false, v),
+        None => doc.exec_command(command),
+    };
+}
+
+/// Whether the selected text has `command` on ("bold"…), for toolbar buttons.
+fn is_on(command: &str) -> bool {
+    html_document().is_some_and(|d| d.query_command_state(command).unwrap_or(false))
+}
+
+fn html_document() -> Option<web_sys::HtmlDocument> {
+    web_sys::window()?.document()?.dyn_into().ok()
+}
+
+#[component]
+fn Editor() -> impl IntoView {
+    let editor = NodeRef::<leptos::html::Div>::new();
+    let bold = RwSignal::new(false);
+    let refresh = move || bold.set(is_on("bold"));
+    view! {
+        <button
+            data-ak-id="bold-button"
+            aria-pressed=move || bold.get().to_string()
+            // Pressing a button takes the focus and the selection from the editor:
+            // keep them where they are.
+            on:mousedown=|e: leptos::ev::MouseEvent| e.prevent_default()
+            on:click=move |_| {
+                format_text(editor, "bold", None);
+                refresh();
+            }
+        >
+            "B"
+        </button>
+        <div
+            data-ak-id="editor"
+            node_ref=editor
+            contenteditable="true"
+            class="min-h-40 rounded border p-3"
+            on:keyup=move |_| refresh()
+            on:mouseup=move |_| refresh()
+        ></div>
+    }
+}
+
+/// Where `needle` appears in `text`, ignoring case, as byte ranges that are safe
+/// to slice `text` with (also for Chinese and other non-ASCII text).
+fn find_ignore_case(text: &str, needle: &str) -> Vec<std::ops::Range<usize>> {
+    let needle: Vec<char> = needle.chars().flat_map(char::to_lowercase).collect();
+    let chars: Vec<(usize, char)> = text.char_indices().collect();
+    let mut found = Vec::new();
+    let mut i = 0;
+    while !needle.is_empty() && i < chars.len() {
+        let mut lowered = Vec::new();
+        let mut j = i;
+        while j < chars.len() && lowered.len() < needle.len() {
+            lowered.extend(chars[j].1.to_lowercase());
+            j += 1;
+        }
+        if lowered == needle {
+            let end = chars.get(j).map_or(text.len(), |c| c.0);
+            found.push(chars[i].0..end);
+            i = j;
+        } else {
+            i += 1;
+        }
+    }
+    found
+}
+
+/// Replaces match number `which` (counted from 0) of `needle` in `text`.
+fn replace_nth(text: &str, needle: &str, which: usize, with: &str) -> Option<String> {
+    let range = find_ignore_case(text, needle).into_iter().nth(which)?;
+    Some(format!("{}{with}{}", &text[..range.start], &text[range.end..]))
+}
+
+// ---- browser: exact types ----
+/// Text inside a node: methods live on the exact type (`Text`, `HtmlElement`…).
+fn add_text(node: &web_sys::Node, more: &str) {
+    match node.dyn_ref::<web_sys::Text>() {
+        Some(text) => {
+            let _ = text.append_data(more);
+        }
+        None => {
+            let old = node.text_content().unwrap_or_default();
+            node.set_text_content(Some(&format!("{old}{more}")));
+        }
+    }
+}
+
+// ---- ak-ui: an event prop whose work returns a value ----
+#[component]
+fn CountButton() -> impl IntoView {
+    let n = RwSignal::new(0);
+    let bump = move |_| {
+        n.try_update(|x| *x += 1);
+    };
+    view! { <Button ak_id="count-button" on_click=bump>"+1"</Button> }
+}

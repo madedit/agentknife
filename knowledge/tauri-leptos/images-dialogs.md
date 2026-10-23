@@ -76,5 +76,21 @@ async fn choose_folder(app: tauri::AppHandle) -> Result<Option<String>, String> 
   `blocking_pick_folder` or `blocking_save_file`.
 - They return a `FilePath` (a path or a URL), not a `PathBuf`: `into_path()` gives
   the `PathBuf` (`?`), or `to_string()` the text. It has no `.display()`.
+- Without the plugin, `rfd = "0.16.1"` (what the plugin uses) opens the same
+  dialogs and returns a plain `PathBuf`:
+  ```rust
+  #[tauri::command]
+  async fn choose_folder_rfd() -> Option<String> {
+      tauri::async_runtime::spawn_blocking(|| {
+          rfd::FileDialog::new()
+              .set_title("Choose a folder")
+              .pick_folder()
+              .map(|p| p.to_string_lossy().into_owned())
+      })
+      .await
+      .ok()
+      .flatten()
+  }
+  ```
 - Dialogs only open in the real window, not in the preview (topic `overview`):
   next to the button, offer a text field where a path can be typed.

@@ -91,11 +91,11 @@ pub fn check_build(root: &Path) -> Result<()> {
     // What the docs tell the agent to add.
     add_deps(
         &out.join("src-tauri/Cargo.toml"),
-        "serde_json = \"1.0.154\"\nchrono = \"0.4.45\"\nimage = { version = \"0.25.10\", default-features = false, features = [\"jpeg\", \"png\", \"gif\", \"webp\"] }\nbase64 = \"0.22.1\"\ntauri-plugin-dialog = \"2.8.3\"\n",
+        "serde_json = \"1.0.154\"\nchrono = \"0.4.45\"\nimage = { version = \"0.25.10\", default-features = false, features = [\"jpeg\", \"png\", \"gif\", \"webp\"] }\nbase64 = \"0.22.1\"\ntauri-plugin-dialog = \"2.8.3\"\nrfd = \"0.16.1\"\n",
     )?;
     add_deps(
         &out.join("Cargo.toml"),
-        "serde_json = \"1.0.154\"\njs-sys = \"0.3.106\"\nwasm-bindgen-futures = \"0.4.79\"\nweb-sys = { version = \"0.3.106\", features = [\"HtmlCanvasElement\", \"Storage\", \"Window\", \"Navigator\", \"Clipboard\", \"Document\", \"Element\", \"HtmlInputElement\", \"EventTarget\", \"Request\", \"RequestInit\", \"Response\", \"AbortController\", \"AbortSignal\"] }\n",
+        "serde_json = \"1.0.154\"\njs-sys = \"0.3.106\"\nwasm-bindgen-futures = \"0.4.79\"\nweb-sys = { version = \"0.3.106\", features = [\"HtmlCanvasElement\", \"Storage\", \"Window\", \"Navigator\", \"Clipboard\", \"Document\", \"Element\", \"HtmlInputElement\", \"EventTarget\", \"Request\", \"RequestInit\", \"Response\", \"AbortController\", \"AbortSignal\", \"HtmlDocument\", \"Node\", \"Text\", \"CharacterData\"] }\n",
     )?;
 
     let pinned = Pinned::builtin()?;

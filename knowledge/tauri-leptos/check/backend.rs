@@ -165,3 +165,17 @@ async fn choose_folder(app: tauri::AppHandle) -> Result<Option<String>, String> 
     let path = folder.into_path().map_err(|e| e.to_string())?;
     Ok(Some(path.to_string_lossy().into_owned()))
 }
+
+// ---- images-dialogs: rfd ----
+#[tauri::command]
+async fn choose_folder_rfd() -> Option<String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        rfd::FileDialog::new()
+            .set_title("Choose a folder")
+            .pick_folder()
+            .map(|p| p.to_string_lossy().into_owned())
+    })
+    .await
+    .ok()
+    .flatten()
+}

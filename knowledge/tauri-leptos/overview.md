@@ -31,7 +31,9 @@ ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates 
   and not with `interact`: the system's open/save/folder dialogs, files dragged in
   from the computer, tray icons, notifications. Give such features a fallback the
   preview can use (a text field for a path, a list to pick from) and tell the user
-  to try the rest in the real window.
+  to try the rest in the real window. The fallback must do everything the real
+  path does (save, add to the recent files…): make both call the same function,
+  and check its effects in the preview.
 
 ## Rules for every change
 - Read a file before changing it; change as little as needed.

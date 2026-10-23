@@ -34,6 +34,17 @@ builds again.
   a closure moves a `String` out each time it runs. Inside `Show`/`For` rows:
   topic `leptos-components` ("Lists"). One handler for two events: a `Callback`,
   called with `.run(…)`.
+- **`expected Option<()>, found ()`** pointing into `effect_function.rs` — `.run(…)`
+  called on a plain closure: call it as `f(x)` (only a `Callback` has `.run`).
+- **`IntoReactiveValue<Callback<MouseEvent>, _> is not satisfied`** — an ak-ui
+  event prop got a closure that returns a value: end it with `;`,
+  `move |_| { save(); }` (topic `ak-ui`).
+- **`type annotations needed`** on a method of a `NodeRef`'s element — name the
+  element: `NodeRef::<leptos::html::Div>::new()`.
+- **`no method named append_data found for Node`** (or another web-sys method
+  "not found") — it lives on a more exact type: `dyn_ref::<web_sys::Text>()`,
+  `dyn_into::<web_sys::HtmlDocument>()` (topic `browser`), or its feature is
+  missing.
 - **`type mismatch in closure arguments`** on `Button`'s `on_click` — write
   `move |_| …`; `move |()| …` is for `Form`'s `on_submit`.
 
@@ -51,6 +62,9 @@ builds again.
 Call `dom_summary`: its last part lists the page's errors. While the app is being
 rebuilt the preview may briefly fail (the backend restarts): check again after the
 build instead of changing code.
+- **`byte index N is out of bounds` / `is not a char boundary`** (a panic) — a
+  position found in one string (often a lowercased copy) was used on another, or
+  cut through a Chinese character: search the original text (topic `rich-text`).
 - **`Rust panic: panicked at src/….rs:LINE:COL: …`** — the screens' Rust code
   crashed at that line (often `unwrap()`, `expect()` or an index out of range).
   Handle the `None`/`Err` or check the length instead. The page may stop
@@ -68,6 +82,9 @@ build instead of changing code.
   dropped; keep it alive (topic `three-d`).
 
 ## Trunk / Tailwind
+- **`internal compiler error: … unstable fingerprints`** — the compiler's cache
+  tripped, usually next to a real error. Fix the real error and build again; it
+  goes away. Do not `cargo clean` (a full rebuild takes many minutes).
 - **A Tailwind class has no effect** — the full class name must appear in the code
   (topic `tailwind`); or a typo in the class.
 - **`wasm-bindgen` version mismatch** — do not change `wasm-bindgen` in Cargo.toml.

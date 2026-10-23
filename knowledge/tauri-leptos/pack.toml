@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.9"
+version = "0.2.10"
 
 [versions]
 tauri = "2.12.4"
@@ -47,6 +47,12 @@ id = "network"
 title = "Data from the internet"
 summary = "Trying a service with curl first, fetch from the screens with a time limit (web-sys features, AbortController), CORS, encoding user text in URLs."
 file = "network.md"
+
+[[topic]]
+id = "rich-text"
+title = "Text editors (formatting, find and replace)"
+summary = "contenteditable with NodeRef, execCommand (bold, colours) without losing focus, toolbar state, saving HTML, finding text safely in non-ASCII text."
+file = "rich-text.md"
 
 [[topic]]
 id = "date-time"

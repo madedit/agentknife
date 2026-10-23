@@ -12,10 +12,27 @@ wasm-bindgen-futures = "0.4.79"
 web-sys = { version = "0.3.106", features = ["Window", "Navigator", "Clipboard", "Document", "Element", "HtmlInputElement", "EventTarget"] }
 ```
 Every web-sys type and method needs its feature, named after the type that has
-it: `navigator().clipboard()` needs `Navigator` and `Clipboard`,
-`active_element()` needs `Document` and `Element`. "no method named …" or
-"cannot find type … in web_sys" means a missing feature. To check where a method
-lives, search the web-sys source in the libraries folder (see the system prompt).
+it. "no method named …" or "cannot find type … in web_sys" means a missing
+feature. Add all you need at once:
+
+| Need | Features |
+|---|---|
+| the window, the page | `Window`, `Document` |
+| an element, its attributes, focus | `Element`, `HtmlElement` |
+| one kind of element | `HtmlInputElement`, `HtmlTextAreaElement`, `HtmlSelectElement`, `HtmlDivElement`, `HtmlCanvasElement` |
+| events | `Event`, `EventTarget`, `KeyboardEvent`, `MouseEvent` |
+| clipboard | `Navigator`, `Clipboard` |
+| saved settings in the page | `Storage` |
+| nodes and their text | `Node`, `Text`, `CharacterData` |
+| the selection | `Selection`, `Range` |
+| editing commands (`execCommand`) | `HtmlDocument` |
+| fetching from the internet | topic `network` |
+
+Methods live on the exact type, and a general type must be turned into it with
+`dyn_into`/`dyn_ref` first: `Node` has `set_text_content` but no `append_data`
+(that is on `Text`); `Document` has no `exec_command` (that is on
+`HtmlDocument`). To check where a method lives, search the web-sys source
+(`src/features/gen_<Type>.rs`) in the libraries folder (see the system prompt).
 
 ## Common pieces
 ```rust
@@ -41,6 +58,8 @@ fn input_of(ev: &web_sys::Event) -> Option<web_sys::HtmlInputElement> {
     ev.target()?.dyn_into::<web_sys::HtmlInputElement>().ok()
 }
 ```
+- Text editors (`contenteditable`, bold/colour buttons, find and replace): topic
+  `rich-text`.
 - Promises (`write_text`, `read_text`) become futures with `JsFuture::from(…)`;
   await them inside `spawn_local`.
 - A general `Element`/`EventTarget` becomes a specific one with

@@ -99,6 +99,35 @@ fn Page() -> impl IntoView {
   it), then `move |e: ev::MouseEvent| …`, `ev::KeyboardEvent`, `ev::PointerEvent`.
   Usually `|_|` is enough.
 - Properties (current input value): `prop:value=move || text.get()`.
+- Reaching the element itself (focus it, read its HTML, a canvas): a `NodeRef`
+  with the element type, `node_ref=` on the element, `.get()` (or
+  `.get_untracked()` in handlers) gives it once it is on the page:
+  ```rust
+  #[component]
+  fn NameField() -> impl IntoView {
+      // The element type is required: html::Input, html::Div, html::Canvas…
+      let field = NodeRef::<leptos::html::Input>::new();
+      view! {
+          <input data-ak-id="name-input" node_ref=field />
+          <button
+              data-ak-id="focus-button"
+              on:click=move |_| {
+                  // None until the element is on the page.
+                  if let Some(input) = field.get() {
+                      let _ = input.focus();
+                  }
+              }
+          >
+              "Focus"
+          </button>
+      }
+  }
+  ```
+  Write the type: with `NodeRef::new()` alone, calling a method on what `.get()`
+  returns fails with "type annotations needed".
+- A plain closure is called like a function, `save(x)`. Only a `Callback` has
+  `.run(x)`; `.run` on a closure gives `expected Option<()>, found ()` pointing
+  into Leptos's `effect_function.rs`.
 - Two-way binding of inputs: `bind:value=text` (an `RwSignal<String>`),
   `bind:checked=done` (an `RwSignal<bool>`).
 - Several root elements are fine: `view! { <h1>"A"</h1> <p>"B"</p> }`.

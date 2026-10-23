@@ -3,6 +3,12 @@
 `use ak_ui::*;` Every component takes `ak_id` (rendered as `data-ak-id`); parts inside
 get derived ids. Components have no built-in text: pass labels in the user's language.
 
+Event props (`on_click`, `on_submit`, `on_change`) take a closure that returns
+nothing. One that ends in a value (`move |_| items.try_update(…)`, which returns
+an `Option`) fails with `IntoReactiveValue<Callback<MouseEvent>, _> is not
+satisfied`, pointing at the prop: end it with `;` inside braces,
+`move |_| { items.try_update(…); }`.
+
 What the props take ("follows" = a closure or signal keeps it up to date):
 
 | Component | Prop | Takes |
