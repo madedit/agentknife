@@ -49,5 +49,5 @@ version = "=0.2.129"
 version = "0.4.79"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
-features = ["Window", "console", "Location", "Storage", "UrlSearchParams", "WebSocket", "MessageEvent", "CloseEvent", "Event", "EventTarget", "AddEventListenerOptions", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "HtmlCollection", "CssStyleDeclaration", "DomRect", "MouseEvent", "MouseEventInit", "PointerEvent", "PointerEventInit", "KeyboardEvent", "KeyboardEventInit", "EventInit", "HtmlInputElement", "HtmlTextAreaElement", "HtmlSelectElement", "HtmlFormElement", "Node", "NodeList", "DomRectList"]
+features = ["Window", "console", "Location", "Storage", "UrlSearchParams", "WebSocket", "MessageEvent", "CloseEvent", "Event", "EventTarget", "AddEventListenerOptions", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "HtmlCollection", "CssStyleDeclaration", "DomRect", "MouseEvent", "MouseEventInit", "DragEvent", "DragEventInit", "DataTransfer", "PointerEvent", "PointerEventInit", "KeyboardEvent", "KeyboardEventInit", "EventInit", "HtmlInputElement", "HtmlTextAreaElement", "HtmlSelectElement", "HtmlFormElement", "Node", "NodeList", "DomRectList"]
 version = "0.3.106"

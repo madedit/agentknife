@@ -36,6 +36,11 @@ fn Page() -> impl IntoView {
 - A prop with `#[prop(into)]` takes the value as it is: `note="Welcome back"`.
   **Not** `"text".into()`: that fails with `type annotations needed: multiple impls
   satisfying _: From<&str>` (the compiler's `<&str as Into<T>>` hint does not help).
+- An event prop of your own component: `#[prop(into)] on_click: Callback<()>` (or
+  `Callback<ev::MouseEvent>`) so it takes `on_click=move |_| …`. Without `into`
+  it fails with `expected Callback<()>, found closure`. Inside, call
+  `on_click.run(())`. Optional: `#[prop(optional, into)] on_click:
+  Option<Callback<()>>`.
 - A `String` prop without `into` needs `"Ada".to_string()` (`expected String, found
   &str`). In your own components give text props `#[prop(into)]`, so
   `ak_id="save-button"` works as with ak-ui.
@@ -53,6 +58,13 @@ fn Page() -> impl IntoView {
   in it (`bg-[#535353]`, `text-[12px]`, `bg-blue-500/35`) fails with `invalid tag
   name or attribute key` and `tokens was ignored during parsing`: put it in the
   closure that returns the whole class string, as above.
+- **A value used by several `move` closures** (a column's `String` id in three
+  `class:…={move || …}` and a `when={move || …}`) is moved into the first one:
+  the error is `expected a closure that implements the Fn trait, but this closure
+  only implements FnOnce`, pointing at the whole `view!` or at an unrelated
+  element. Use values that are `Copy` there (numbers, signals, `StoredValue`):
+  `let id = StoredValue::new(id);` then `id.get_value()` inside each closure; or
+  `.clone()` it into each closure (`let id2 = id.clone();`).
 - Attribute and prop values are moved in: one `String` for two attributes,
   `width=px height=px`, fails with `use of moved value`: `width=px.clone() height=px`.
 - **Any attribute or prop value with `<` or `>` in it goes in braces**, on every

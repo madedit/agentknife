@@ -50,9 +50,20 @@ builds again.
 - **`mismatched types: expected &AppHandle, found AppHandle`** — pass a reference: `notes_path(&app)`.
 - **`expected a closure that implements the Fn trait, but this closure only
   implements FnOnce`**, often pointing at the start or end of a whole `view!` —
-  a closure moves a `String` out each time it runs. Inside `Show`/`For` rows:
+  a closure moves a `String` out each time it runs, or one `String` is used by
+  several `move ||` closures (`class:x={move || …}`, `when`): make it a
+  `StoredValue` or clone it per closure. Inside `Show`/`For` rows:
   topic `leptos-components` ("Lists"). One handler for two events: a `Callback`,
   called with `.run(…)`.
+- **`expected Callback<()>, found closure`** on your own component — give the prop
+  `#[prop(into)]` (topic `leptos-components`).
+- **`cannot assign to *n, which is behind a & reference`** in `with_value`, or
+  **`expected (), found u64`** from `update_value` — change a `StoredValue` with
+  `update_value(|n| *n += 1)`, then read it with `get_value()`.
+- **`no method named data_transfer found for DragEvent`** — add the web-sys
+  features `DragEvent` and `DataTransfer` (topic `drag-drop`).
+- **Dragging does nothing in the installed app on Windows** — `"dragDropEnabled":
+  false` in `tauri.conf.json` (topic `drag-drop`).
 - **`expected Option<()>, found ()`** pointing into `effect_function.rs` — `.run(…)`
   called on a plain closure: call it as `f(x)` (only a `Callback` has `.run`).
 - **`IntoReactiveValue<Callback<MouseEvent>, _> is not satisfied`** — an ak-ui

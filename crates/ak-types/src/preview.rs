@@ -102,6 +102,12 @@ pub enum ControlAction {
         #[serde(default)]
         by: Option<i32>,
     },
+    /// Drags `ak_id` onto `to`: HTML5 drag events when `ak_id` is draggable,
+    /// else pointer and mouse down, move and up.
+    Drag {
+        ak_id: String,
+        to: String,
+    },
     DomSummary,
     AppState,
     PrepareScreenshot {

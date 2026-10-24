@@ -3,7 +3,8 @@ use leptos::prelude::*;
 use crate::part_id;
 
 /// A modal dialog shown while `open` is true. Escape, the close button and a
-/// click on the backdrop close it. Parts: `<ak_id>-close`, `<ak_id>-backdrop`.
+/// click on the backdrop close it, then `on_close` runs (clear what the dialog
+/// was editing there). Parts: `<ak_id>-close`, `<ak_id>-backdrop`.
 #[component]
 pub fn Dialog(
     #[prop(into)] ak_id: String,
@@ -14,13 +15,22 @@ pub fn Dialog(
     /// What a screen reader says for the × button (in the app's language).
     #[prop(into)]
     close_label: String,
+    /// Runs when the dialog closes itself (Escape, ×, backdrop).
+    #[prop(optional, into)]
+    on_close: Option<Callback<()>>,
     children: ChildrenFn,
 ) -> impl IntoView {
+    let close = move || {
+        open.set(false);
+        if let Some(cb) = on_close {
+            cb.run(());
+        }
+    };
     #[cfg(target_arch = "wasm32")]
     {
         let handle = window_event_listener(leptos::ev::keydown, move |ev| {
             if ev.key() == "Escape" && open.get_untracked() {
-                open.set(false);
+                close();
             }
         });
         on_cleanup(move || handle.remove());
@@ -32,7 +42,7 @@ pub fn Dialog(
             <div
                 data-ak-id=backdrop_id.clone()
                 class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-                on:click=move |_| open.set(false)
+                on:click=move |_| close()
             >
                 <div
                     role="dialog"
@@ -51,7 +61,7 @@ pub fn Dialog(
                         data-ak-id=close_id.clone()
                         aria-label=close_label.clone()
                         class="absolute right-3 top-3 rounded-lg p-2 leading-none text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                        on:click=move |_| open.set(false)
+                        on:click=move |_| close()
                     >
                         "×"
                     </button>

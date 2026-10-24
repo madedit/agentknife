@@ -792,3 +792,125 @@ fn Swatches() -> impl IntoView {
         />
     }
 }
+
+// ---- drag-drop ----
+#[derive(Clone, PartialEq)]
+struct Card {
+    id: u32,
+    column: usize,
+    text: String,
+}
+
+const COLUMNS: [&str; 3] = ["To do", "Doing", "Done"];
+
+#[component]
+fn Board() -> impl IntoView {
+    let cards = RwSignal::new(vec![Card { id: 1, column: 0, text: "Buy milk".into() }]);
+    // The card being dragged: set on dragstart, cleared on dragend.
+    let dragging = RwSignal::new(None::<u32>);
+    // Only signals inside: `Copy`, usable in every handler below.
+    let move_card = move |id: u32, column: usize| {
+        cards.update(|v| {
+            if let Some(c) = v.iter_mut().find(|c| c.id == id) {
+                c.column = column;
+            }
+        });
+        // Save here (topic `storage`).
+    };
+    let columns = COLUMNS.iter().enumerate().map(|(col, name)| {
+        view! {
+            <section
+                data-ak-id=ak_ui::part_id("column", col)
+                class="min-h-40 rounded-xl bg-gray-100 p-3"
+                // A place that takes drops calls prevent_default on dragover.
+                on:dragover=move |e| e.prevent_default()
+                on:drop=move |e| {
+                    e.prevent_default();
+                    // Move only here, on a real drop (not on dragend).
+                    if let Some(id) = dragging.get_untracked() {
+                        move_card(id, col);
+                    }
+                    dragging.set(None);
+                }
+            >
+                <h2 class="mb-2 font-semibold">{*name}</h2>
+                <For
+                    each={move || cards.get().into_iter().filter(|c| c.column == col).collect::<Vec<_>>()}
+                    key=|c| c.id
+                    children=move |c: Card| {
+                        let id = c.id;
+                        view! {
+                            <div
+                                data-ak-id=ak_ui::part_id("card", id)
+                                draggable="true"
+                                class="mb-2 flex cursor-grab items-center justify-between rounded-lg bg-white p-2 shadow"
+                                class:opacity-50=move || dragging.get() == Some(id)
+                                on:dragstart=move |e| {
+                                    dragging.set(Some(id));
+                                    // Some browsers start a drag only with data in it.
+                                    if let Some(data) = e.data_transfer() {
+                                        let _ = data.set_data("text/plain", &id.to_string());
+                                    }
+                                }
+                                on:dragend=move |_| dragging.set(None)
+                            >
+                                {c.text}
+                                // The way without dragging: keyboard users, and AgentKnife's checks.
+                                <button
+                                    data-ak-id=ak_ui::part_id("card-right", id)
+                                    aria-label="Move right"
+                                    class="rounded px-1 hover:bg-gray-100"
+                                    on:click=move |_| move_card(id, (col + 1).min(COLUMNS.len() - 1))
+                                >
+                                    "→"
+                                </button>
+                            </div>
+                        }
+                    }
+                />
+            </section>
+        }
+    });
+    view! { <div class="grid grid-cols-3 gap-4">{columns.collect_view()}</div> }
+}
+
+// ---- leptos-reactivity: StoredValue counter; ak-ui: Dialog on_close, small ----
+#[component]
+fn EditDialog() -> impl IntoView {
+    let seq = StoredValue::new(0u64);
+    let next_id = move || {
+        seq.update_value(|n| *n += 1);
+        seq.get_value()
+    };
+    let _ = next_id();
+    let editing = RwSignal::new(None::<u32>);
+    let open = RwSignal::new(false);
+    let edit = move |id: u32| {
+        editing.set(Some(id));
+        open.set(true);
+    };
+    view! {
+        <Button ak_id="card-edit" variant=ButtonVariant::Ghost small=true on_click=move |_| edit(1)>"Edit"</Button>
+        <Dialog ak_id="edit-dialog" open=open title="Edit card" close_label="Close"
+            on_close=move |_| editing.set(None)>
+            <p>{move || editing.get().map(|id| format!("Card {id}"))}</p>
+        </Dialog>
+    }
+}
+
+#[component]
+fn MiniButton(#[prop(into)] ak_id: String, #[prop(into)] on_click: Callback<()>) -> impl IntoView {
+    view! { <button data-ak-id=ak_id on:click=move |_| on_click.run(())>"+"</button> }
+}
+
+#[component]
+fn UsesMiniButton() -> impl IntoView {
+    let n = RwSignal::new(0);
+    let id = StoredValue::new("todo".to_string());
+    view! {
+        <MiniButton ak_id="mini" on_click=move |_| n.update(|x| *x += 1) />
+        <p class:font-bold=move || id.get_value() == "todo" class:italic=move || id.get_value().is_empty()>
+            {move || n.get()}
+        </p>
+    }
+}

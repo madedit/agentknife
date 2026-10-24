@@ -32,6 +32,18 @@ impl ButtonVariant {
     }
 }
 
+/// The classes of a button (`small`: less padding, smaller text).
+fn button_class(variant: ButtonVariant, small: bool) -> String {
+    if small {
+        variant
+            .class()
+            .replace("px-4 py-2 text-sm", "px-2 py-1 text-xs")
+            .replace("px-3 py-2 text-sm", "px-2 py-1 text-xs")
+    } else {
+        variant.class().to_owned()
+    }
+}
+
 /// A button. `submit` makes it submit its [`crate::Form`].
 #[component]
 pub fn Button(
@@ -39,17 +51,21 @@ pub fn Button(
     #[prop(optional)] variant: ButtonVariant,
     #[prop(optional, into)] disabled: Signal<bool>,
     #[prop(optional)] submit: bool,
+    /// Smaller text and padding (toolbars, a row's own buttons).
+    #[prop(optional)]
+    small: bool,
     /// For icon-only buttons: what a screen reader says.
     #[prop(optional, into)]
     label: Option<String>,
     #[prop(optional, into)] on_click: Option<Callback<MouseEvent>>,
     children: Children,
 ) -> impl IntoView {
+    let class = button_class(variant, small);
     view! {
         <button
             type=if submit { "submit" } else { "button" }
             data-ak-id=ak_id
-            class=variant.class()
+            class=class
             aria-label=label
             disabled=move || disabled.get()
             on:click=move |ev| {
@@ -60,5 +76,21 @@ pub fn Button(
         >
             {children()}
         </button>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn small_buttons_are_small_in_every_variant() {
+        use ButtonVariant::*;
+        for v in [Primary, Secondary, Danger, Ghost] {
+            let small = button_class(v, true);
+            assert!(small.contains("px-2 py-1 text-xs"), "{v:?}: {small}");
+            assert!(!small.contains("text-sm"), "{v:?}: {small}");
+            assert_eq!(button_class(v, false), v.class());
+        }
     }
 }

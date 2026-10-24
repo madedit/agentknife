@@ -7,9 +7,9 @@ use serde_json::{Value, json};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    Element, Event, EventInit, HtmlElement, HtmlInputElement, HtmlSelectElement,
-    HtmlTextAreaElement, KeyboardEvent, KeyboardEventInit, MouseEvent, MouseEventInit,
-    PointerEvent, PointerEventInit,
+    DataTransfer, DragEvent, DragEventInit, Element, Event, EventInit, HtmlElement,
+    HtmlInputElement, HtmlSelectElement, HtmlTextAreaElement, KeyboardEvent, KeyboardEventInit,
+    MouseEvent, MouseEventInit, PointerEvent, PointerEventInit,
 };
 
 use crate::protocol::{
@@ -131,6 +131,19 @@ pub async fn run(action: ControlAction) -> Result<Value, String> {
                 "top": el.scroll_top(),
                 "content_height": el.scroll_height(),
                 "visible_height": el.client_height(),
+            }))
+        }
+        ControlAction::Drag { ak_id, to } => {
+            let (from, html) = pressable(&ak_id)?;
+            let target = find(&to)?;
+            let draggable = html.draggable();
+            let dropped = drag(&from, draggable, &target).await?;
+            settle().await;
+            Ok(json!({
+                "dragged": ak_id,
+                "to": to,
+                "kind": if draggable { "html5 drag and drop" } else { "pointer down, move, up" },
+                "dropped": dropped,
             }))
         }
         ControlAction::Hold { ak_id, ms } => {
@@ -293,21 +306,86 @@ fn pressable(ak_id: &str) -> Result<(Element, HtmlElement), String> {
     Ok((el, html))
 }
 
+/// The element's centre on the screen.
+fn centre(el: &Element) -> (i32, i32) {
+    let r = el.get_bounding_client_rect();
+    #[allow(clippy::cast_possible_truncation)]
+    (
+        (r.x() + r.width() / 2.0) as i32,
+        (r.y() + r.height() / 2.0) as i32,
+    )
+}
+
 /// What a mouse button sends going down or up at the element's centre:
 /// `pointerdown`/`mousedown` or `pointerup`/`mouseup`.
 fn press(el: &Element, down: bool) {
-    let r = el.get_bounding_client_rect();
-    #[allow(clippy::cast_possible_truncation)]
-    let (x, y) = (
-        (r.x() + r.width() / 2.0) as i32,
-        (r.y() + r.height() / 2.0) as i32,
-    );
-    let buttons = u16::from(down);
     let (pointer, mouse) = if down {
         ("pointerdown", "mousedown")
     } else {
         ("pointerup", "mouseup")
     };
+    pointer_event(el, pointer, mouse, centre(el), u16::from(down));
+}
+
+/// Drags `from` onto `to`: whether the drop was accepted (HTML5 drag and drop,
+/// `from` draggable), or `None` (pointer moves; the app decides).
+async fn drag(from: &Element, draggable: bool, to: &Element) -> Result<Option<bool>, String> {
+    let (start, end) = (centre(from), centre(to));
+    if !draggable {
+        pointer_event(from, "pointerdown", "mousedown", start, 1);
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .ok_or("no document")?;
+        const STEPS: i32 = 5;
+        for i in 1..=STEPS {
+            let at = (
+                start.0 + (end.0 - start.0) * i / STEPS,
+                start.1 + (end.1 - start.1) * i / STEPS,
+            );
+            // What is under the pointer gets the move, as with a real mouse.
+            #[allow(clippy::cast_precision_loss)]
+            let under = document
+                .element_from_point(at.0 as f32, at.1 as f32)
+                .unwrap_or_else(|| to.clone());
+            pointer_event(&under, "pointermove", "mousemove", at, 1);
+            settle().await;
+        }
+        pointer_event(to, "pointerup", "mouseup", end, 0);
+        return Ok(None);
+    }
+    let data = DataTransfer::new().map_err(|_| "drag and drop is not available")?;
+    // Whether the page let it happen (no preventDefault).
+    let send = |el: &Element, kind: &str, (x, y): (i32, i32)| {
+        let init = DragEventInit::new();
+        init.set_bubbles(true);
+        init.set_cancelable(true);
+        init.set_client_x(x);
+        init.set_client_y(y);
+        init.set_data_transfer(Some(&data));
+        DragEvent::new_with_event_init_dict(kind, &init)
+            .map(|ev| el.dispatch_event(&ev).unwrap_or(true))
+            .unwrap_or(true)
+    };
+    if !send(from, "dragstart", start) {
+        return Ok(Some(false));
+    }
+    settle().await;
+    send(to, "dragenter", end);
+    // A target that takes drops calls preventDefault on dragover.
+    let accepted = !send(to, "dragover", end);
+    if accepted {
+        data.set_drop_effect("move");
+        send(to, "drop", end);
+    } else {
+        data.set_drop_effect("none");
+        send(to, "dragleave", end);
+    }
+    send(from, "dragend", start);
+    Ok(Some(accepted))
+}
+
+/// A pointer event and the matching mouse event at `(x, y)` on `el`.
+fn pointer_event(el: &Element, pointer: &str, mouse: &str, (x, y): (i32, i32), buttons: u16) {
     let init = PointerEventInit::new();
     init.set_bubbles(true);
     init.set_cancelable(true);

@@ -136,4 +136,14 @@ Or pass signals as props (`todos: RwSignal<Vec<Todo>>`) — they are Copy.
   object): its methods are `get_value`, `set_value`, `with_value`,
   `update_value` (not `get`/`with`/`update`: those give "the method exists but its
   trait bounds were not satisfied"). Lists and sets the screen shows go in an
-  `RwSignal`.
+  `RwSignal`. `with_value` lends it read-only (`*n += 1` there: `cannot assign to
+  *n, which is behind a & reference`); `update_value` changes it and returns
+  nothing (`let n = seq.update_value(…)`: `expected (), found u64`). A running
+  number for new ids:
+  ```rust
+  let seq = StoredValue::new(0u64);
+  let next_id = move || {
+      seq.update_value(|n| *n += 1);
+      seq.get_value()
+  };
+  ```

@@ -50,7 +50,8 @@ ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates 
   Every label in that language and its script (Traditional Chinese: 縮小, 導覽, not
   缩小, 导航), with no English or other placeholders left behind; read the labels
   over once when a screen is done.
-- Keep data the user enters: save it (topic `storage`).
+- Keep data the user enters: save it (topic `storage`). Sample content shown on
+  the first start is saved too, so the file matches what the user sees.
 - Splitting code: put screens in `src/` modules (`mod todos;` in `src/main.rs` and
   `src/todos.rs`) and backend code in `src-tauri/src/` modules.
 - Do not change `[features]`, the `ak/` folder, `index.html`'s trunk links (adding

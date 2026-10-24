@@ -298,6 +298,9 @@ impl Tool for Interact {
                           Enter). `scroll`: bring `ak_id` into view, or with `by` scroll the \
                           content of `ak_id` (a scrolling list; without `ak_id` the page) by \
                           that many pixels (negative: up); it answers where it is now. \
+                          `drag`: drag `ak_id` onto the element `to` (HTML5 drag and drop \
+                          for draggable elements, else pointer down, move, up); it answers \
+                          whether the target accepted the drop. \
                           `read_state`: the app's saved state (localStorage and what \
                           the app reports with set_state_reader); with `wait_ms` it waits \
                           first, with `samples` it reads several times spread over `wait_ms` \
@@ -307,8 +310,9 @@ impl Tool for Interact {
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "action": { "type": "string", "enum": ["click", "hold", "key", "type", "scroll", "read_state"] },
-                    "ak_id": { "type": "string", "description": "data-ak-id of the element (click, hold, type; scroll: optional)" },
+                    "action": { "type": "string", "enum": ["click", "hold", "key", "type", "scroll", "drag", "read_state"] },
+                    "ak_id": { "type": "string", "description": "data-ak-id of the element (click, hold, type, drag: what is dragged; scroll: optional)" },
+                    "to": { "type": "string", "description": "drag: data-ak-id of the element to drop on" },
                     "by": { "type": "integer", "description": "scroll: pixels to scroll down (negative: up)" },
                     "text": { "type": "string", "description": "What to type (replaces the field's text)" },
                     "enter": { "type": "boolean", "description": "Press Enter after typing" },
@@ -355,13 +359,26 @@ impl Tool for Interact {
                     }
                     ControlAction::Scroll { ak_id, by }
                 }
+                (Some("drag"), Some(ak_id)) => match args["to"].as_str() {
+                    Some(to) => ControlAction::Drag {
+                        ak_id,
+                        to: to.to_owned(),
+                    },
+                    None => {
+                        return ToolOutput::error(
+                            "drag needs `to`: the data-ak-id of the element to drop on.",
+                        );
+                    }
+                },
                 (Some("read_state"), _) => ControlAction::AppState,
-                (Some("click" | "hold" | "type"), None) => {
-                    return ToolOutput::error("`ak_id` is required for click, hold and type.");
+                (Some("click" | "hold" | "type" | "drag"), None) => {
+                    return ToolOutput::error(
+                        "`ak_id` is required for click, hold, type and drag.",
+                    );
                 }
                 _ => {
                     return ToolOutput::error(
-                        "`action` must be click, hold, key, type, scroll or read_state.",
+                        "`action` must be click, hold, key, type, scroll, drag or read_state.",
                     );
                 }
             };

@@ -14,7 +14,7 @@ What the props take ("follows" = a closure or signal keeps it up to date):
 | Component | Prop | Takes |
 |---|---|---|
 | all | `ak_id` | text, fixed |
-| Button | `variant`, `submit`, `label` | fixed values |
+| Button | `variant`, `submit`, `label`, `small` | fixed values |
 | Button, Input, Toggle | `disabled` | follows (`Signal::derive(move \|\| …)`) |
 | Input | `value` | `RwSignal<String>` only: keep numbers as text, `parse()` when used |
 | Input | `label`, `placeholder` | text, or follows: `label=move \|\| …` |
@@ -25,6 +25,7 @@ What the props take ("follows" = a closure or signal keeps it up to date):
 | Dialog | `open` | `RwSignal<bool>` (it closes itself) |
 | Dialog | `title` | text, or follows |
 | Dialog | `close_label` | fixed text |
+| Dialog | `on_close` | optional closure `move \|_\| …`: runs when it closes itself |
 | Nav | `items` | fixed list; `active`: `RwSignal<String>` |
 | List | `items` | follows (`RwSignal<Vec<T>>` or `Signal`) |
 
@@ -48,7 +49,10 @@ inside the handler and in the label, reading signals:
 `on_click` takes a closure `move |_| …` (the event is an `ev::MouseEvent`); not
 `move |()|`, which is only for `Form`'s `on_submit`.
 
-`Button` has no `class` prop: its looks come from `variant`. For a control that
+`small=true` gives a smaller button (toolbars, a card's own buttons):
+`<Button ak_id="card-edit" variant=ButtonVariant::Ghost small=true>"Edit"</Button>`.
+
+`Button` has no `class` prop: its looks come from `variant` and `small`. For a control that
 must look different (big see-through arrow keys over a game), use a plain element
 with Tailwind classes and give it its own `data-ak-id`:
 ```rust
@@ -127,6 +131,26 @@ let open = RwSignal::new(false);
 ```
 Escape, the × and a click outside close it. Ids: `clear-dialog-close`,
 `clear-dialog-backdrop`.
+
+`open` is the one truth about whether it shows. A dialog that edits something
+keeps what it edits in a second signal; clear that in `on_close`, which runs when
+the dialog closes itself (Escape, ×, backdrop), so nothing is left behind:
+```rust
+let editing = RwSignal::new(None::<u32>);
+let open = RwSignal::new(false);
+let edit = move |id: u32| {
+    editing.set(Some(id));
+    open.set(true);
+};
+<Dialog ak_id="edit-dialog" open=open title="Edit card" close_label="Close"
+    on_close=move |_| editing.set(None)>
+    <p>{move || editing.get().map(|id| format!("Card {id}"))}</p>
+</Dialog>
+```
+Your own buttons that close it (Save, Cancel) set `open` to false and clear
+`editing` themselves. (`small` and `on_close` are in ak-ui since pack 0.2.12; an
+older project's `ak/ak-ui/src` may not have them: use an `Effect` that clears
+`editing` when `open` turns false.)
 
 ## Nav (tabs)
 ```rust

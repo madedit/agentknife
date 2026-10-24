@@ -17,7 +17,8 @@
         "title": "My App",
         "width": 900,
         "height": 700,
-        "visible": false
+        "visible": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {

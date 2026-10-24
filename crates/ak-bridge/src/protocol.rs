@@ -100,6 +100,14 @@ pub enum ControlAction {
         #[serde(default)]
         by: Option<i32>,
     },
+    /// Drag `ak_id` onto `to`. A `draggable` element gets the HTML5 drag events
+    /// (`dragstart`, `dragenter`, `dragover`, `drop` if the target accepts,
+    /// `dragend`) sharing one `DataTransfer`; others get pointer and mouse down,
+    /// moves and up. Answers whether it was dropped.
+    Drag {
+        ak_id: String,
+        to: String,
+    },
     DomSummary,
     AppState,
     /// Scroll `ak_id` (or nothing) into view, let the page paint, and report the

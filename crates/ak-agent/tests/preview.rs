@@ -245,6 +245,28 @@ async fn preview_tools() {
             .is_error
     );
 
+    // Dragging a card onto a column; without `to` it is refused.
+    call(
+        &r,
+        "interact",
+        json!({ "action": "drag", "ak_id": "card-1", "to": "column-done" }),
+    )
+    .await;
+    assert_eq!(
+        fake.actions.lock().unwrap().last(),
+        Some(&ControlAction::Drag {
+            ak_id: "card-1".into(),
+            to: "column-done".into()
+        })
+    );
+    let out = call(
+        &r,
+        "interact",
+        json!({ "action": "drag", "ak_id": "card-1" }),
+    )
+    .await;
+    assert!(out.is_error && text_of(&out).contains("drag needs `to`"));
+
     let sel = text_of(&call(&r, "get_selection", json!({})).await);
     assert!(
         sel.contains("greet-button") && sel.contains("has no data-ak-id of its own"),

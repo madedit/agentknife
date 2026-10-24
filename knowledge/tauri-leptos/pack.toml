@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.11"
+version = "0.2.12"
 
 [versions]
 tauri = "2.12.4"
@@ -41,6 +41,12 @@ id = "browser"
 title = "Browser features (web-sys)"
 summary = "Clipboard, focus, the input behind an event, promises: adding web-sys with the right features, dyn_into, JsFuture."
 file = "browser.md"
+
+[[topic]]
+id = "drag-drop"
+title = "Drag and drop"
+summary = "Dragging cards between columns or sorting a list: Tauri's dragDropEnabled on Windows, the web-sys features, dragstart/dragover/drop, moving only on drop, a way without dragging, checking with interact drag."
+file = "drag-drop.md"
 
 [[topic]]
 id = "network"
