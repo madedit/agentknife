@@ -91,8 +91,20 @@ pub fn check_build(root: &Path) -> Result<()> {
     // What the docs tell the agent to add.
     add_deps(
         &out.join("src-tauri/Cargo.toml"),
-        "serde_json = \"1.0.154\"\nchrono = \"0.4.45\"\nimage = { version = \"0.25.10\", default-features = false, features = [\"jpeg\", \"png\", \"gif\", \"webp\"] }\nbase64 = \"0.22.1\"\ntauri-plugin-dialog = \"2.8.3\"\nrfd = \"0.16.1\"\n",
+        "serde_json = \"1.0.154\"\nchrono = \"0.4.45\"\nimage = { version = \"0.25.10\", default-features = false, features = [\"jpeg\", \"png\", \"gif\", \"webp\"] }\nbase64 = \"0.22.1\"\ntauri-plugin-dialog = \"2.8.3\"\nrfd = \"0.16.1\"\nencoding_rs = \"0.8.42\"\ntauri-plugin-notification = \"2.6.0\"\ntauri-plugin-autostart = \"2.7.0\"\n",
     )?;
+    // Topic `desktop`: the tray icon needs this tauri feature.
+    let backend = out.join("src-tauri/Cargo.toml");
+    let manifest = std::fs::read_to_string(&backend)?;
+    let tray = manifest.replacen(
+        "tauri = { version = \"=2.12.4\", features = [] }",
+        "tauri = { version = \"=2.12.4\", features = [\"tray-icon\"] }",
+        1,
+    );
+    if tray == manifest {
+        return Err("template src-tauri/Cargo.toml: the tauri line was not found".into());
+    }
+    std::fs::write(&backend, tray)?;
     add_deps(
         &out.join("Cargo.toml"),
         "serde_json = \"1.0.154\"\njs-sys = \"0.3.106\"\nwasm-bindgen-futures = \"0.4.79\"\nweb-sys = { version = \"0.3.106\", features = [\"HtmlCanvasElement\", \"Storage\", \"Window\", \"Navigator\", \"Clipboard\", \"Document\", \"Element\", \"HtmlInputElement\", \"EventTarget\", \"Request\", \"RequestInit\", \"Response\", \"AbortController\", \"AbortSignal\", \"HtmlDocument\", \"Node\", \"Text\", \"CharacterData\", \"DragEvent\", \"DataTransfer\", \"DomRect\", \"AddEventListenerOptions\", \"WheelEvent\", \"PointerEvent\", \"HtmlElement\"] }\n",

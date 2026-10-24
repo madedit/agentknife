@@ -90,6 +90,17 @@ builds again.
   `leptos-reactivity`).
 - **Delete in a text field deletes the selected item** — shortcut keys must skip
   fields (`is_typing`, topic `canvas`).
+- **The page's title changes or an SVG part does not show** after adding
+  `<title>` inside `<svg>` — `view!` makes `title` the HTML title: write the text
+  on the chart instead (topic `reports`).
+- **`the trait bound …: PartialEq is not satisfied`** on `Memo::new` — derive
+  `PartialEq` on the rows' type (topic `long-lists`).
+- **Imported Chinese text is garbage** — the CSV is Big5 (Excel's plain "CSV"):
+  decode it (topic `import-backup`).
+- **`no method named notification` / `autolaunch`** — add the plugin's `use`
+  (`NotificationExt`, `ManagerExt`) and its `.plugin(…)` (topic `desktop`).
+- **`could not find tray in tauri`** — add the `tray-icon` feature to tauri
+  (topic `desktop`).
 
 ## Tauri backend
 - **`command X not found`** at runtime — add it to `tauri::generate_handler![…]`.

@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.13"
+version = "0.2.14"
 
 [versions]
 tauri = "2.12.4"
@@ -85,6 +85,36 @@ summary = "Keeping the app's data between runs: a JSON file in the app data fold
 file = "storage.md"
 
 [[topic]]
+id = "import-backup"
+title = "Importing, backups, moving computers"
+summary = "Importing CSV from Excel (UTF-8 and Big5, quoted cells, header names, numbers and dates, a summary before adding), .xlsx via CSV UTF-8, backing up and restoring the data file safely, moving to another computer."
+file = "import-backup.md"
+
+[[topic]]
+id = "reports"
+title = "Charts, printing and PDF"
+summary = "Bar, pie and line charts in SVG without a library, totals in a Memo, printing with window.print and print: classes, PDF through Microsoft Print to PDF, saving a chart as an SVG picture."
+file = "reports.md"
+
+[[topic]]
+id = "long-lists"
+title = "Long lists: search, sort and pages"
+summary = "Thousands of rows: filter and sort once in a Memo, one page at a time, numbers sorted as numbers, resetting the page, testing with many rows."
+file = "long-lists.md"
+
+[[topic]]
+id = "undo-autosave"
+title = "Undo, redo and saving by itself"
+summary = "A history of copies for Ctrl+Z / Ctrl+Y, typing and dragging as one step, the shortcut keys, saving after a pause (dirty, Saving…/Saved), drafts kept in localStorage."
+file = "undo-autosave.md"
+
+[[topic]]
+id = "desktop"
+title = "Windows features (notifications, tray, autostart, logs)"
+summary = "Notifications (plugin), a tray icon that keeps the app running, hiding on close, starting with Windows (plugin, not in the preview), a second window, a log file with crashes, why no signing or updater."
+file = "desktop.md"
+
+[[topic]]
 id = "images-dialogs"
 title = "Pictures and the system dialogs (backend)"
 summary = "Thumbnails with the image crate (thumbnail, write_to, data URLs for <img>), choosing a folder or file with the dialog plugin (set_title, FilePath)."
@@ -111,7 +141,7 @@ file = "data-ak-id.md"
 [[topic]]
 id = "tailwind"
 title = "Styling with Tailwind CSS 4"
-summary = "Utility classes, layout, colors, dark mode, responsive design, and why class names must be written out in full."
+summary = "Utility classes, layout, colors, dark mode, responsive design, why class names must be written out in full, and usable with the keyboard and easy to read (buttons, focus, labels, contrast)."
 file = "tailwind.md"
 
 [[topic]]

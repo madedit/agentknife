@@ -206,6 +206,44 @@ pub fn key_code(key: &str) -> String {
     }
 }
 
+/// A key with the modifiers held while it is pressed.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct KeyPress {
+    pub key: String,
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
+    pub meta: bool,
+}
+
+/// "Control+Shift+z" → `z` with Ctrl and Shift (the key as the browser reports
+/// it then: "Z"). A lone "+" or an unknown prefix is the key itself.
+pub fn parse_key(raw: &str) -> KeyPress {
+    let mut press = KeyPress::default();
+    let mut rest = raw;
+    while let Some((modifier, tail)) = rest.split_once('+') {
+        if tail.is_empty() {
+            break;
+        }
+        let held = match modifier.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => &mut press.ctrl,
+            "shift" => &mut press.shift,
+            "alt" => &mut press.alt,
+            "meta" | "cmd" | "win" => &mut press.meta,
+            _ => break,
+        };
+        *held = true;
+        rest = tail;
+    }
+    press.key = match rest.chars().next() {
+        Some(c) if press.shift && rest.len() == 1 && c.is_ascii_alphabetic() => {
+            c.to_ascii_uppercase().to_string()
+        }
+        _ => rest.to_owned(),
+    };
+    press
+}
+
 /// `text` with every `ak_bridge=…` value cut out (an error message may quote the
 /// page's URL, which carries the bridge token).
 pub fn redact_bridge(text: &str) -> String {
@@ -573,6 +611,38 @@ mod tests {
         assert_eq!(key_code(" "), "Space");
         assert_eq!(key_code("ArrowLeft"), "ArrowLeft");
         assert_eq!(key_code("Enter"), "Enter");
+    }
+
+    #[test]
+    fn keys_can_carry_modifiers() {
+        let undo = parse_key("Control+z");
+        assert_eq!(
+            (undo.key.as_str(), undo.ctrl, undo.shift),
+            ("z", true, false)
+        );
+        let redo = parse_key("ctrl+shift+z");
+        assert_eq!(
+            (redo.key.as_str(), redo.ctrl, redo.shift),
+            ("Z", true, true)
+        );
+        assert_eq!(parse_key("Alt+ArrowLeft").key, "ArrowLeft");
+        assert!(parse_key("Meta+s").meta);
+        assert_eq!(
+            parse_key("+"),
+            KeyPress {
+                key: "+".into(),
+                ..KeyPress::default()
+            }
+        );
+        assert_eq!(parse_key("Control++").key, "+");
+        assert_eq!(
+            parse_key("a"),
+            KeyPress {
+                key: "a".into(),
+                ..KeyPress::default()
+            }
+        );
+        assert_eq!(parse_key("Fn+a").key, "Fn+a");
     }
 
     #[test]

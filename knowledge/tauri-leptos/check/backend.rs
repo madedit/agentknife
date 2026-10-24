@@ -179,3 +179,206 @@ async fn choose_folder_rfd() -> Option<String> {
     .ok()
     .flatten()
 }
+
+// ==== generated from new topics (compose_checks.py) ====
+
+// ---- import-backup ----
+/// The rows of a CSV file, each a list of cells.
+#[tauri::command]
+async fn import_csv(path: String) -> Result<Vec<Vec<String>>, String> {
+    let path = path.trim().trim_matches('"'); // "Copy as path" adds quotes
+    let bytes = std::fs::read(path).map_err(|e| format!("Cannot read {path}: {e}"))?;
+    Ok(parse_csv(&decode_text(&bytes)))
+}
+
+/// UTF-8 (with or without a BOM), else the old encoding of Excel's "CSV".
+fn decode_text(bytes: &[u8]) -> String {
+    let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
+    match std::str::from_utf8(bytes) {
+        Ok(text) => text.to_owned(),
+        // Traditional Chinese Windows. Simplified: GBK; Japanese: SHIFT_JIS.
+        Err(_) => encoding_rs::BIG5.decode(bytes).0.into_owned(),
+    }
+}
+
+/// Splits CSV text into rows. Quoted cells may hold commas, line breaks and
+/// doubled quotes (""); empty lines are skipped.
+fn parse_csv(text: &str) -> Vec<Vec<String>> {
+    let mut rows = Vec::new();
+    let mut row = Vec::new();
+    let mut cell = String::new();
+    let mut quoted = false;
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match (quoted, c) {
+            (true, '"') if chars.peek() == Some(&'"') => {
+                cell.push('"');
+                chars.next();
+            }
+            (true, '"') => quoted = false,
+            (true, c) => cell.push(c),
+            (false, '"') => quoted = true,
+            (false, ',') => row.push(std::mem::take(&mut cell)),
+            (false, '\r') => {}
+            (false, '\n') => {
+                row.push(std::mem::take(&mut cell));
+                if row.iter().any(|c| !c.is_empty()) {
+                    rows.push(std::mem::take(&mut row));
+                }
+                row.clear();
+            }
+            (false, c) => cell.push(c),
+        }
+    }
+    row.push(cell);
+    if row.iter().any(|c| !c.is_empty()) {
+        rows.push(row);
+    }
+    rows
+}
+
+/// Copies the saved notes to `folder`; returns the backup's full path.
+#[tauri::command]
+fn backup_notes(app: tauri::AppHandle, folder: String) -> Result<String, String> {
+    let from = notes_path(&app)?;
+    if !from.exists() {
+        return Err("Nothing has been saved yet.".into());
+    }
+    let name = format!("notes-backup-{}.json", chrono::Local::now().format("%Y-%m-%d-%H%M"));
+    let to = std::path::Path::new(folder.trim().trim_matches('"')).join(name);
+    std::fs::copy(&from, &to).map_err(|e| format!("Cannot write the backup: {e}"))?;
+    Ok(to.display().to_string())
+}
+
+/// Replaces the notes with a backup and returns them for the screen.
+#[tauri::command]
+fn restore_notes(app: tauri::AppHandle, path: String) -> Result<Vec<Note>, String> {
+    let text = std::fs::read_to_string(path.trim().trim_matches('"'))
+        .map_err(|e| format!("Cannot read the backup: {e}"))?;
+    // Check it before touching the current data.
+    let notes: Vec<Note> =
+        serde_json::from_str(&text).map_err(|_| "This file is not a backup of this app.".to_string())?;
+    let current = notes_path(&app)?;
+    if current.exists() {
+        std::fs::copy(&current, current.with_extension("json.bak")).map_err(|e| e.to_string())?;
+    }
+    let tmp = current.with_extension("json.tmp");
+    std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &current).map_err(|e| e.to_string())?;
+    Ok(notes)
+}
+
+// ---- desktop ----
+use tauri_plugin_notification::NotificationExt;
+
+/// Shows a Windows notification (the small box at the bottom right).
+#[tauri::command]
+fn notify(app: tauri::AppHandle, title: String, body: String) -> Result<(), String> {
+    app.notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .map_err(|e| e.to_string())
+}
+
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+/// The tray icon with "Open" and "Quit"; a left click opens the window.
+fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
+    let open = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &quit])?;
+    let mut tray = TrayIconBuilder::new()
+        .tooltip("My app")
+        .menu(&menu)
+        .show_menu_on_left_click(false) // left click opens, right click shows the menu
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "open" => show_main(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                show_main(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
+fn show_main(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// Closing the window hides it; "Quit" in the tray ends the app.
+fn hide_on_close(window: &tauri::Window, event: &tauri::WindowEvent) {
+    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        api.prevent_close();
+        let _ = window.hide();
+    }
+}
+
+fn desktop_builder(b: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    b.plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
+        .on_window_event(|window, event| if !ak_bridge::is_preview() { hide_on_close(window, event) })
+        .setup(|app| {
+            log_crashes(app);
+            if !ak_bridge::is_preview() {
+                setup_tray(app)?;
+            }
+            Ok(())
+        })
+}
+
+use tauri_plugin_autostart::ManagerExt;
+
+/// Turns "start with Windows" on or off; returns the new state.
+#[tauri::command]
+fn set_autostart(app: tauri::AppHandle, on: bool) -> Result<bool, String> {
+    if ak_bridge::is_preview() {
+        // It would register the preview's build, which moves with every change.
+        return Err("This can be set in the installed app only.".into());
+    }
+    let launcher = app.autolaunch();
+    let done = if on { launcher.enable() } else { launcher.disable() };
+    done.map_err(|e| e.to_string())?;
+    launcher.is_enabled().map_err(|e| e.to_string())
+}
+
+use std::io::Write;
+
+/// Appends a line with the time to `app.log` in the app's log folder.
+fn log_line(app: &tauri::AppHandle, text: &str) {
+    if let Ok(dir) = app.path().app_log_dir() {
+        let _ = std::fs::create_dir_all(&dir);
+        append(&dir.join("app.log"), text);
+    }
+}
+
+fn append(file: &std::path::Path, text: &str) {
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(file) {
+        let _ = writeln!(f, "{} {text}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
+    }
+}
+
+/// Call first thing in `.setup(…)`: crashes are written to the log too.
+fn log_crashes(app: &tauri::App) {
+    let Ok(dir) = app.path().app_log_dir() else { return };
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("app.log");
+    let before = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        append(&file, &format!("crash: {info}"));
+        before(info); // keeps the preview's crash report
+    }));
+}

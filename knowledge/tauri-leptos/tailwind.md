@@ -43,3 +43,29 @@ In `style/input.css`, after `@import "tailwindcss";` (keep the `@source` lines):
 }
 ```
 Then use `bg-brand-500`, `font-display`.
+
+## Usable with the keyboard, easy to read
+Some users do not use a mouse, see less well, or need larger text. The rules are
+few:
+- Anything clickable is a `<button>` (or ak-ui's `Button`), not a `<div on:click>`:
+  buttons get Tab, Enter and Space for free. A link to another page in the app
+  is a button too.
+- Never remove the focus outline (`outline-none` alone). Own controls get the same
+  ring as ak-ui's: `focus-visible:outline-2 focus-visible:outline-offset-2
+  focus-visible:outline-blue-600`.
+- A button with only an icon or a sign (×, ⋯, a picture) gets a name:
+  `aria-label="Delete"` and `title="Delete"` (the mouse shows it), in the user's
+  language.
+- Every field has a visible label (`<label for=…>` or ak-ui's `Input label=…`);
+  a placeholder is not a label.
+- Text contrast: normal text `text-gray-700` or darker on white
+  (`dark:text-gray-200` on dark); `text-gray-400` only for hints, never for
+  content. Do not show a state by colour alone: add a word or a sign ("✓ Paid",
+  "Late").
+- Sizes: text at least `text-sm`; things to click at least `h-8` (32 px).
+- Order: Tab moves through the screen in reading order; do not reorder with CSS
+  what the user tabs through. A dialog puts the focus in its first field and
+  closes with Esc (ak-ui's `Dialog` does).
+- Check: press `Tab` with `interact` `key` a few times; each answer's `focus` is
+  the `data-ak-id` that has the focus now. Ask the user to try the screen without
+  the mouse too.

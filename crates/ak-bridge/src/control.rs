@@ -14,7 +14,7 @@ use web_sys::{
 
 use crate::protocol::{
     AppState, ControlAction, DomItem, DomSummary, MAX_HOLD_MS, Rect, ScreenshotArea, Size,
-    error_file, key_code, redact_bridge, short_text, strip_bridge_param,
+    error_file, key_code, parse_key, redact_bridge, short_text, strip_bridge_param,
 };
 
 /// More than this many items is a sign of a list; the agent gets the start.
@@ -166,19 +166,33 @@ pub async fn run(action: ControlAction) -> Result<Value, String> {
                 .or_else(|| document.body().map(Into::into))
                 .ok_or("no page body")?;
             let ms = ms.min(MAX_HOLD_MS);
+            let press = parse_key(&key);
             let init = KeyboardEventInit::new();
-            init.set_key(&key);
-            init.set_code(&key_code(&key));
+            init.set_key(&press.key);
+            init.set_code(&key_code(&press.key));
+            init.set_ctrl_key(press.ctrl);
+            init.set_shift_key(press.shift);
+            init.set_alt_key(press.alt);
+            init.set_meta_key(press.meta);
             init.set_bubbles(true);
             init.set_cancelable(true);
             for (kind, wait) in [("keydown", ms), ("keyup", 0)] {
                 if let Ok(ev) = KeyboardEvent::new_with_keyboard_event_init_dict(kind, &init) {
-                    let _ = target.dispatch_event(&ev);
+                    let not_prevented = target.dispatch_event(&ev).unwrap_or(false);
+                    // A made-up Tab does not move the focus: do what a real one does.
+                    if kind == "keydown" && press.key == "Tab" && not_prevented {
+                        move_focus(&document, press.shift);
+                    }
                 }
                 sleep(wait).await;
             }
             settle().await;
-            Ok(json!({ "pressed": key, "ms": ms, "on": tag(&target) }))
+            // Where the focus is now (Tab moves it): the nearest data-ak-id.
+            let focus = document
+                .active_element()
+                .and_then(|el| el.closest("[data-ak-id]").ok().flatten())
+                .and_then(|el| el.get_attribute("data-ak-id"));
+            Ok(json!({ "pressed": key, "ms": ms, "on": tag(&target), "focus": focus }))
         }
         ControlAction::Type { ak_id, text, enter } => {
             let el = find(&ak_id)?;
@@ -241,6 +255,42 @@ pub async fn run(action: ControlAction) -> Result<Value, String> {
             .map_err(|e| e.to_string())
         }
     }
+}
+
+/// Elements Tab stops at (unless hidden, disabled or `tabindex="-1"`).
+const FOCUSABLE: &str = "a[href], button, input, select, textarea, [tabindex], [contenteditable]";
+
+/// Moves the focus to the next (`back`: previous) element Tab stops at, in page
+/// order, wrapping around like the browser.
+fn move_focus(document: &web_sys::Document, back: bool) {
+    let Ok(all) = document.query_selector_all(FOCUSABLE) else {
+        return;
+    };
+    let stops: Vec<HtmlElement> = (0..all.length())
+        .filter_map(|i| all.item(i))
+        .filter_map(|n| n.dyn_into::<HtmlElement>().ok())
+        .filter(|el| {
+            let rect = el.get_bounding_client_rect();
+            el.tab_index() >= 0
+                && !el.has_attribute("disabled")
+                && (rect.width() > 0.0 || rect.height() > 0.0)
+        })
+        .collect();
+    let n = stops.len();
+    if n == 0 {
+        return;
+    }
+    let current = document.active_element();
+    let at = stops
+        .iter()
+        .position(|el| current.as_ref() == Some(el.unchecked_ref::<Element>()));
+    let next = match (at, back) {
+        (Some(i), false) => (i + 1) % n,
+        (Some(i), true) => (i + n - 1) % n,
+        (None, false) => 0,
+        (None, true) => n - 1,
+    };
+    let _ = stops[next].focus();
 }
 
 fn tag(el: &Element) -> String {

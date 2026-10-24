@@ -29,7 +29,7 @@ ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates 
   build errors before anything else.
 - **Only in the real window** (the user's "run in a window"), not in the preview
   and not with `interact`: the system's open/save/folder dialogs, files dragged in
-  from the computer, tray icons, notifications. Give such features a fallback the
+  from the computer, tray icons, notifications, printing. Give such features a fallback the
   preview can use (a text field for a path, a list to pick from) and tell the user
   to try the rest in the real window. The fallback must do everything the real
   path does (save, add to the recent files…): make both call the same function,
@@ -42,6 +42,11 @@ ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates 
 - `run_command` on Windows is `cmd`: no `grep`/`head`; search output with
   `findstr /n /c:"text" file`.
 - Use ak-ui components (topic `ak-ui`) before writing your own.
+- Topics for what users ask next: charts, printing, PDF (`reports`); importing
+  from Excel, backups (`import-backup`); thousands of rows (`long-lists`);
+  Ctrl+Z and saving by itself (`undo-autosave`: plan it before writing the
+  editor); notifications, tray icon, starting with Windows, a log (`desktop`);
+  keyboard use and readable colours (`tailwind`).
 - Data from the internet: try the service with `curl` in `run_command` first,
   then fetch it (topic `network`).
 - Every meaningful element gets a stable `data-ak-id` (topic `data-ak-id`).
