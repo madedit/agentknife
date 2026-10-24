@@ -18,7 +18,7 @@ use serde_json::Value;
 
 use crate::permission::{Decision, PermissionGate};
 use crate::tool::ToolContext;
-use crate::tools::path::{resolve, resolve_read};
+use crate::tools::path::{is_outside_refusal, resolve, resolve_read};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -98,8 +98,9 @@ impl PermissionGate for ProjectPolicy {
         match tool {
             "read_file" | "list_files" | "search_files" => {
                 match resolve_read(root, &self.references, path_arg) {
-                    Ok(_) => Decision::Allow,
-                    Err(_) => deny(ConfirmKind::PathEscape, path_arg),
+                    Err(e) if is_outside_refusal(&e) => deny(ConfirmKind::PathEscape, path_arg),
+                    // A missing file: the tool resolves again and says what is wrong.
+                    _ => Decision::Allow,
                 }
             }
             "write_file" | "edit_file" => change(file_decision(root, path_arg, true), path_arg),
@@ -574,6 +575,13 @@ mod tests {
             assert_eq!(tool(&policy, t, path), "allow", "{t}");
             assert_eq!(tool(&plain, t, path), "deny:PathEscape", "{t}");
         }
+        // A wrong folder name there is the tool's to report ("does not exist").
+        let missing = lib
+            .path()
+            .join("tauri-9.9.9")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(tool(&policy, "search_files", &missing), "allow");
         // Writing, deleting or redirecting there still asks; other folders too.
         for c in [
             format!("copy src\\a.rs \"{folder}\""),

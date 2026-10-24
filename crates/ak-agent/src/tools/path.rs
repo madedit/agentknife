@@ -51,9 +51,19 @@ pub fn resolve(root: &Path, rel: &str) -> Result<PathBuf, String> {
 pub fn resolve_read(root: &Path, references: &[PathBuf], rel: &str) -> Result<PathBuf, String> {
     let p = Path::new(rel.trim());
     if p.is_absolute() {
-        let real = p
-            .canonicalize()
-            .map_err(|e| format!("Cannot access that path: {e}"))?;
+        let real = p.canonicalize().map_err(|_| {
+            // A wrong name in a reference folder (a crate's version, say): say so,
+            // not that the path is outside the project.
+            if references.iter().any(|r| lexically_within(r, p)) {
+                format!(
+                    "That path does not exist: {}. Look up the exact folder names \
+                     with list_files on its parent folder.",
+                    p.display()
+                )
+            } else {
+                OUTSIDE.into()
+            }
+        })?;
         let inside = references
             .iter()
             .filter_map(|r| r.canonicalize().ok())
@@ -65,6 +75,33 @@ pub fn resolve_read(root: &Path, references: &[PathBuf], rel: &str) -> Result<Pa
         };
     }
     resolve(root, rel)
+}
+
+/// Whether `path` names something under `root` by its parts alone (it may not
+/// exist; no `..`; case-insensitive on Windows).
+fn lexically_within(root: &Path, path: &Path) -> bool {
+    let parts = |p: &Path| -> Option<Vec<String>> {
+        p.components()
+            .filter(|c| !matches!(c, Component::CurDir))
+            .map(|c| match c {
+                Component::ParentDir => None,
+                c => {
+                    let s = c.as_os_str().to_string_lossy().replace('/', "\\");
+                    Some(if cfg!(windows) { s.to_lowercase() } else { s })
+                }
+            })
+            .collect()
+    };
+    match (parts(root), parts(path)) {
+        (Some(r), Some(p)) => p.starts_with(&r),
+        _ => false,
+    }
+}
+
+/// Whether `message` is the refusal for a path outside the project and the
+/// reference folders (other errors are the tools' to report).
+pub fn is_outside_refusal(message: &str) -> bool {
+    message == OUTSIDE
 }
 
 /// Project-relative display form with `/` separators (absolute for files outside
@@ -102,6 +139,25 @@ mod tests {
         // Writing tools keep using `resolve`, which never allows it.
         assert!(resolve(project.path(), abs).is_err());
         assert_eq!(display(project.path(), Path::new(abs)), abs);
+
+        // A wrong name there: "does not exist", not "outside the project".
+        let missing = lib.path().join("leptos-9.9.9").join("src");
+        let missing = missing.to_str().unwrap();
+        let err = resolve_read(project.path(), &refs, missing).unwrap_err();
+        assert!(
+            err.contains("does not exist") && !is_outside_refusal(&err),
+            "{err}"
+        );
+        let escape = lib.path().join("..").join("..").join("secret.txt");
+        let escape = escape.to_str().unwrap();
+        assert!(is_outside_refusal(
+            &resolve_read(project.path(), &refs, escape).unwrap_err()
+        ));
+        let elsewhere = project.path().join("..").join("nope").join("x.rs");
+        let elsewhere = elsewhere.to_str().unwrap();
+        assert!(is_outside_refusal(
+            &resolve_read(project.path(), &refs, elsewhere).unwrap_err()
+        ));
     }
 
     #[test]

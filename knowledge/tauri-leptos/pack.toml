@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.10"
+version = "0.2.11"
 
 [versions]
 tauri = "2.12.4"
@@ -21,7 +21,7 @@ file = "overview.md"
 [[topic]]
 id = "leptos-components"
 title = "Leptos components and view!"
-summary = "Components, props, children, the view! macro, events, keys for the whole window (games), attributes, classes, Show/For, if/else views."
+summary = "Components, props (into, no .into()), children, the view! macro, events and their types, keys for the whole window (games), attributes, classes (Tailwind arbitrary values), Show/For (each, key), menus that close on a click outside, if/else views."
 file = "leptos-components.md"
 
 [[topic]]

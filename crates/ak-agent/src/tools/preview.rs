@@ -166,13 +166,35 @@ fn first_errors(output: &str, keep: usize) -> String {
         return output.to_owned();
     }
     let shown: Vec<String> = blocks[..keep].iter().map(|b| b.join("\n")).collect();
+    // The others in one line each: what and where.
+    let rest: Vec<String> = blocks[keep..]
+        .iter()
+        .take(LISTED_ERRORS)
+        .map(|b| {
+            let at = b.iter().find_map(|l| l.trim_start().strip_prefix("--> "));
+            match at {
+                Some(at) => format!("- {} ({at})", b[0]),
+                None => format!("- {}", b[0]),
+            }
+        })
+        .collect();
+    let unlisted = (blocks.len() - keep).saturating_sub(LISTED_ERRORS);
     format!(
-        "{}\n\n… and {} more errors. Fix these first (later errors often follow from \
-         them), then call build_status again.",
+        "{}\n\n… and {} more errors:\n{}{}\nFix the first ones (later errors often \
+         follow from them), then call build_status again.",
         shown.join("\n\n"),
-        blocks.len() - keep
+        blocks.len() - keep,
+        rest.join("\n"),
+        if unlisted > 0 {
+            format!("\n- … {unlisted} more")
+        } else {
+            String::new()
+        }
     )
 }
+
+/// Errors after the shown ones that are listed by their first line and place.
+const LISTED_ERRORS: usize = 10;
 
 /// The backend's crashes, for the agent ("" when there are none).
 pub fn describe_crashes(crashes: &[String]) -> String {
@@ -524,8 +546,17 @@ mod tests {
              error: could not compile `app-ui` due to 3 previous errors\n"
         );
         let short = first_errors(&output, 2);
-        assert_eq!(short.matches("error[E0425]").count(), 2, "{short}");
+        assert_eq!(
+            short.matches(" --> src/main.rs:3:5\n").count(),
+            2,
+            "{short}"
+        );
         assert!(short.contains("src/main.rs:3:5") && short.contains("… and 1 more errors"));
+        // The rest: one line each, with the place.
+        assert!(
+            short.contains("- error[E0425]: cannot find value `x` (src/main.rs:3:5)"),
+            "{short}"
+        );
         assert!(!short.contains("warning") && !short.contains("Compiling"));
         assert_eq!(first_errors(one, 2), one, "few errors: the output as it is");
     }

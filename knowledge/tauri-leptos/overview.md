@@ -47,6 +47,9 @@ ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates 
 - Every meaningful element gets a stable `data-ak-id` (topic `data-ak-id`).
 - Text the user sees is in the user's language. Errors returned by commands are shown
   to the user, so write them plainly too.
+  Every label in that language and its script (Traditional Chinese: 縮小, 導覽, not
+  缩小, 导航), with no English or other placeholders left behind; read the labels
+  over once when a screen is done.
 - Keep data the user enters: save it (topic `storage`).
 - Splitting code: put screens in `src/` modules (`mod todos;` in `src/main.rs` and
   `src/todos.rs`) and backend code in `src-tauri/src/` modules.

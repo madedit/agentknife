@@ -33,6 +33,12 @@ fn Page() -> impl IntoView {
     view! { <Greeting name="Ada".to_string() excited=true note="Welcome back" /> }
 }
 ```
+- A prop with `#[prop(into)]` takes the value as it is: `note="Welcome back"`.
+  **Not** `"text".into()`: that fails with `type annotations needed: multiple impls
+  satisfying _: From<&str>` (the compiler's `<&str as Into<T>>` hint does not help).
+- A `String` prop without `into` needs `"Ada".to_string()` (`expected String, found
+  &str`). In your own components give text props `#[prop(into)]`, so
+  `ak_id="save-button"` works as with ak-ui.
 
 ## The view! macro
 - Text in quotes: `"Hello"`. Rust values in braces: `{name}`.
@@ -43,6 +49,12 @@ fn Page() -> impl IntoView {
 - Class toggles: `class:hidden=move || !open.get()`. For several conditions use one
   closure returning the whole class string (every class written out in full):
   `class=move || format!("rounded p-2 {}", if hp.get() <= 3 { "bg-red-500" } else { "bg-gray-100" })`.
+  After `class:` only a plain class name works. A Tailwind class with `[ ] # . / %`
+  in it (`bg-[#535353]`, `text-[12px]`, `bg-blue-500/35`) fails with `invalid tag
+  name or attribute key` and `tokens was ignored during parsing`: put it in the
+  closure that returns the whole class string, as above.
+- Attribute and prop values are moved in: one `String` for two attributes,
+  `width=px height=px`, fails with `use of moved value`: `width=px.clone() height=px`.
 - **Any attribute or prop value with `<` or `>` in it goes in braces**, on every
   element and component. That includes comparisons and types:
   `when={move || total.get() > 0.0}`,
@@ -95,9 +107,19 @@ fn Page() -> impl IntoView {
   }
   ```
   (`Dir` must be `Copy`: `#[derive(Clone, Copy)]`.)
-- Naming the event's type: `use leptos::ev;` first (the prelude does not bring
-  it), then `move |e: ev::MouseEvent| …`, `ev::KeyboardEvent`, `ev::PointerEvent`.
-  Usually `|_|` is enough.
+- The event's type: leave it out, `move |e| …`, and Leptos picks the right one.
+  When you write it (`use leptos::ev;` first, the prelude does not bring it), it
+  must match the event, or you get `type mismatch in closure arguments: expected
+  closure signature fn(PointerEvent), found fn(MouseEvent)` plus an `IntoView is
+  not satisfied` wall:
+
+  | Events | Type |
+  |---|---|
+  | `click`, `dblclick`, `mousedown`, `mouseup`, `mousemove`, `contextmenu` | `ev::MouseEvent` |
+  | `pointerdown`, `pointerup`, `pointermove`, `pointerover`, `pointerleave` | `ev::PointerEvent` |
+  | `keydown`, `keyup` | `ev::KeyboardEvent` |
+  | `wheel` | `ev::WheelEvent` |
+  | `input`, `change`, `submit` | `ev::Event`; `submit`: `ev::SubmitEvent` (or leave the type out) |
 - Properties (current input value): `prop:value=move || text.get()`.
 - Reaching the element itself (focus it, read its HTML, a canvas): a `NodeRef`
   with the element type, `node_ref=` on the element, `.get()` (or
@@ -165,6 +187,48 @@ move || if logged_in.get() {
 }
 ```
 
+## Menus and pop-ups (open, close, close on a click outside)
+Small layers that open and close often (a drop-down menu, a tooltip, a colour
+picker) stay on the page and are hidden with `class:hidden`; do not put them in
+`Show`. Built again on every opening, a menu whose item closes it can fail at run
+time with `closure invoked recursively or after being dropped`.
+```rust
+#[component]
+fn ViewMenu() -> impl IntoView {
+    let open = RwSignal::new(false);
+    // A press anywhere else closes it, and so does Esc.
+    let outside = window_event_listener(leptos::ev::pointerdown, move |_| open.set(false));
+    let esc = window_event_listener(leptos::ev::keydown, move |e| {
+        if e.key() == "Escape" {
+            open.set(false);
+        }
+    });
+    on_cleanup(move || {
+        outside.remove();
+        esc.remove();
+    });
+    view! {
+        // Presses inside the menu do not reach the window's listener above.
+        <div class="relative" on:pointerdown=|e| e.stop_propagation()>
+            // Open and close on click, not on pointerdown.
+            <button data-ak-id="view-menu-button" on:click=move |_| open.update(|o| *o = !*o)>
+                "View"
+            </button>
+            <div
+                data-ak-id="view-menu"
+                class="absolute z-10 mt-1 w-40 rounded-lg border bg-white shadow"
+                class:hidden=move || !open.get()
+            >
+                <button data-ak-id="zoom-in-item" class="block w-full px-3 py-2 text-left"
+                    on:click=move |_| open.set(false)>
+                    "Zoom in"
+                </button>
+            </div>
+        </div>
+    }
+}
+```
+
 ## Lists
 ```rust
 <For
@@ -174,6 +238,11 @@ move || if logged_in.get() {
 />
 ```
 ak-ui's `List` does this for you, with ids for each row (topic `ak-ui`).
+- `each` is always a closure: `each=rows` fails with `expected an Fn() closure,
+  found Vec<…>`; write `each=move || rows.get()` (or `move || rows.clone()`).
+- `key` must be `Eq + Hash`: give it a number or a `String` (`key=|r| r.id`,
+  `key=|(name, _)| name.clone()`). A struct of your own in the key fails with
+  `the trait bound …: Eq / Hash is not satisfied`.
 
 **`Show` (and `Suspense`, `ChildrenFn`) runs its children again every time it
 shows them**, so they may not move anything out: a row's `String` used in a

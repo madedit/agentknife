@@ -11,6 +11,25 @@ builds again.
   signal (signals are `Copy`).
 - **`the trait bound … IntoView is not satisfied` / `if and else have incompatible
   types`** — branches return different views: end each branch with `.into_any()`.
+- **A wall of `HtmlElement<…>: IntoView`, `ShowPropsBuilder` / `ForPropsBuilder`,
+  `Render`, `RenderHtml`, `ReactiveFunction` bounds** for a whole `view!` — the real
+  error is inside the children. Look for: branches of an `if`/`match` returning
+  different views (`.into_any()`), `each=` without a closure, a handler with the
+  wrong event type (`type mismatch in closure arguments`, usually listed too).
+  Still unclear: move the children into a small component of their own; the error
+  then points at the line.
+- **`invalid tag name or attribute key` + `tokens was ignored during parsing`** on
+  `class:bg-[#…]` — `class:` takes plain class names only: return the whole class
+  string from a closure (topic `leptos-components`).
+- **`type annotations needed: multiple impls satisfying _: From<&str>`** on a prop —
+  drop the `.into()`: `name="marquee"` (the prop has `#[prop(into)]`).
+- **`the trait bound …: Eq` / `Hash is not satisfied`** on `<For key=…>` — key by a
+  number or a `String`, not by a struct.
+- **`closure invoked recursively or after being dropped`** in the page's errors —
+  a part was removed while one of its handlers ran (a menu in `Show` that its own
+  item closes): keep it on the page and hide it with `class:hidden`.
+- **`unterminated raw string` (E0748)** — the closing `"#` of an `r#"…"#` is
+  missing or misplaced (long SVG or HTML text): check it ends with `"#`.
 - **`expected a closure … found …` on an attribute** — reactive attributes need a
   closure: `disabled=move || busy.get()`.
 - **The screen does not update** — a value was read once: wrap it, `{move || x.get()}`.

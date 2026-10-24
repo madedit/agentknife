@@ -729,3 +729,66 @@ fn CountButton() -> impl IntoView {
     };
     view! { <Button ak_id="count-button" on_click=bump>"+1"</Button> }
 }
+
+// ---- leptos-components: menus, class strings, event types, into props ----
+#[component]
+fn ViewMenu() -> impl IntoView {
+    let open = RwSignal::new(false);
+    let outside = window_event_listener(leptos::ev::pointerdown, move |_| open.set(false));
+    let esc = window_event_listener(leptos::ev::keydown, move |e| {
+        if e.key() == "Escape" {
+            open.set(false);
+        }
+    });
+    on_cleanup(move || {
+        outside.remove();
+        esc.remove();
+    });
+    view! {
+        <div class="relative" on:pointerdown=|e| e.stop_propagation()>
+            <button data-ak-id="view-menu-button" on:click=move |_| open.update(|o| *o = !*o)>
+                "View"
+            </button>
+            <div
+                data-ak-id="view-menu"
+                class="absolute z-10 mt-1 w-40 rounded-lg border bg-white shadow"
+                class:hidden=move || !open.get()
+            >
+                <button data-ak-id="zoom-in-item" class="block w-full px-3 py-2 text-left"
+                    on:click=move |_| open.set(false)>
+                    "Zoom in"
+                </button>
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn Swatch(#[prop(into)] ak_id: String, #[prop(into)] name: String) -> impl IntoView {
+    let on = RwSignal::new(false);
+    let px = "24".to_string();
+    view! {
+        <canvas
+            data-ak-id=ak_id
+            width=px.clone()
+            height=px
+            class=move || format!("rounded {}", if on.get() { "bg-[#535353]" } else { "bg-blue-500/35" })
+            on:pointerdown=move |_e: leptos::ev::PointerEvent| on.set(true)
+            on:wheel=move |_e: leptos::ev::WheelEvent| {}
+        ></canvas>
+        <span>{name}</span>
+    }
+}
+
+#[component]
+fn Swatches() -> impl IntoView {
+    let rows = vec![("red".to_string(), 1u32)];
+    view! {
+        <Swatch ak_id="main-swatch" name="marquee" />
+        <For
+            each=move || rows.clone()
+            key=|(name, _)| name.clone()
+            children=move |(name, _)| view! { <span>{name}</span> }
+        />
+    }
+}
