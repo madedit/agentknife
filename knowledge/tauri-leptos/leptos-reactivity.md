@@ -43,6 +43,10 @@ Effect::new(move |_| {
 });
 ```
 Use effects for syncing (e.g. saving), not for computing values to show.
+Two effects that copy between the same values (the selected item's name → the
+field, the field → the item) set each other off without end. Let one side be
+the truth (`bind:value` on the field, a handler writes it back), or write only
+when the value really differs: `if item_name != text { … }`.
 
 ## Async work (calling the backend)
 Event handlers cannot be `async`; start a task:

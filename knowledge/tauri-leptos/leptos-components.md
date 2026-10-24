@@ -93,6 +93,8 @@ fn Page() -> impl IntoView {
   });
   on_cleanup(move || keys.remove());
   ```
+  Apps with text fields: skip the shortcut keys while the user types (Delete in
+  a name field must not delete the selected item): topic `canvas`, `is_typing`.
 - One handler used in several places (two events, many rows): a closure that
   captures a `String` can be used only once (`expected a closure that implements
   the Fn trait, but this closure only implements FnOnce`). Make it a `Callback`
@@ -156,6 +158,18 @@ fn Page() -> impl IntoView {
           </button>
       }
   }
+  ```
+  An element inside `Show` (or a part just opened) is not on the page yet in the
+  handler that opened it. To focus it as soon as it appears, use an `Effect`
+  that reads the `NodeRef` (it runs again when the element arrives), not a
+  timer:
+  ```rust
+  let name_field = NodeRef::<leptos::html::Input>::new();
+  Effect::new(move |_| {
+      if let Some(input) = name_field.get() {
+          let _ = input.focus();
+      }
+  });
   ```
   Write the type: with `NodeRef::new()` alone, calling a method on what `.get()`
   returns fails with "type annotations needed".

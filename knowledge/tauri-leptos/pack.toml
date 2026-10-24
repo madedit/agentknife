@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.12"
+version = "0.2.13"
 
 [versions]
 tauri = "2.12.4"
@@ -41,6 +41,12 @@ id = "browser"
 title = "Browser features (web-sys)"
 summary = "Clipboard, focus, the input behind an event, promises: adding web-sys with the right features, dyn_into, JsFuture."
 file = "browser.md"
+
+[[topic]]
+id = "canvas"
+title = "Canvas editors"
+summary = "Flow charts, diagrams, maps: a stage with pointer capture, pan and zoom with one transform, screen to drawing coordinates, wheel zoom with a non-passive listener, SVG lines with a wide hit path, fit-zoom limits, shortcut keys that skip fields."
+file = "canvas.md"
 
 [[topic]]
 id = "drag-drop"

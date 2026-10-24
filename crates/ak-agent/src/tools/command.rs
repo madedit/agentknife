@@ -168,8 +168,8 @@ impl Tool for RunCommand {
                 .status
                 .code()
                 .map_or_else(|| "none (killed)".to_owned(), |c| c.to_string());
-            let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
-            let stderr = String::from_utf8_lossy(&output.stderr);
+            let mut text = output_text(&output.stdout);
+            let stderr = output_text(&output.stderr);
             if !stderr.trim().is_empty() {
                 text.push_str("\n[stderr]\n");
                 text.push_str(&stderr);
@@ -185,6 +185,70 @@ impl Tool for RunCommand {
             }
         })
     }
+}
+
+/// A command's output as text. UTF-8 lines stay as they are; other lines are
+/// cmd's own commands (`cd`, `echo`, `dir`), which write the system's ANSI code
+/// page (Big5 on Traditional Chinese Windows) whatever `chcp` says.
+fn output_text(bytes: &[u8]) -> String {
+    decode_lines(bytes, ansi_encoding())
+}
+
+fn decode_lines(bytes: &[u8], legacy: Option<&'static encoding_rs::Encoding>) -> String {
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return text.to_owned();
+    }
+    bytes
+        .split_inclusive(|b| *b == b'\n')
+        .map(|line| match (std::str::from_utf8(line), legacy) {
+            (Ok(text), _) => text.to_owned(),
+            (Err(_), Some(enc)) => enc.decode_without_bom_handling(line).0.into_owned(),
+            (Err(_), None) => String::from_utf8_lossy(line).into_owned(),
+        })
+        .collect()
+}
+
+/// The system's ANSI code page (read once from the registry with `reg`).
+#[cfg(windows)]
+fn ansi_encoding() -> Option<&'static encoding_rs::Encoding> {
+    use std::os::windows::process::CommandExt;
+    static ENCODING: std::sync::OnceLock<Option<&'static encoding_rs::Encoding>> =
+        std::sync::OnceLock::new();
+    *ENCODING.get_or_init(|| {
+        let out = std::process::Command::new("reg")
+            .args([
+                "query",
+                r"HKLM\SYSTEM\CurrentControlSet\Control\Nls\CodePage",
+                "/v",
+                "ACP",
+            ])
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(0x0800_0000)
+            .output()
+            .ok()?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        code_page_encoding(text.split_whitespace().last()?.parse().ok()?)
+    })
+}
+
+#[cfg(not(windows))]
+fn ansi_encoding() -> Option<&'static encoding_rs::Encoding> {
+    None
+}
+
+/// The encoding of a Windows code page, for the ones Windows uses as ANSI.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn code_page_encoding(cp: u16) -> Option<&'static encoding_rs::Encoding> {
+    let label = match cp {
+        950 => "big5".to_owned(),
+        936 => "gbk".to_owned(),
+        932 => "shift_jis".to_owned(),
+        949 => "euc-kr".to_owned(),
+        874 | 1250..=1258 => format!("windows-{cp}"),
+        _ => return None,
+    };
+    encoding_rs::Encoding::for_label(label.as_bytes())
 }
 
 #[cfg(test)]
@@ -206,6 +270,26 @@ mod tests {
     const PRINT_VAR: &str = "echo %AK_TEST_VAR%";
     #[cfg(not(windows))]
     const PRINT_VAR: &str = "echo $AK_TEST_VAR";
+    #[test]
+    fn code_page_lines_are_decoded_next_to_utf8_lines() {
+        let big5 = code_page_encoding(950).unwrap();
+        // `cd` in C:\專案 (Big5), then cargo's UTF-8 line.
+        let mut bytes = b"C:\\".to_vec();
+        bytes.extend(big5.encode("專案").0.iter());
+        bytes.extend("\r\n   Compiling 中文 v0.1.0\n".as_bytes());
+        assert_eq!(
+            decode_lines(&bytes, Some(big5)),
+            "C:\\專案\r\n   Compiling 中文 v0.1.0\n"
+        );
+        assert_eq!(
+            decode_lines("已是 UTF-8".as_bytes(), Some(big5)),
+            "已是 UTF-8"
+        );
+        assert!(decode_lines(&[0xB1, 0x4D], None).contains('\u{FFFD}'));
+        assert_eq!(code_page_encoding(1252).unwrap().name(), "windows-1252");
+        assert!(code_page_encoding(65001).is_none());
+    }
+
     #[cfg(windows)]
     const SLEEP: &str = "ping -n 30 127.0.0.1 >nul";
     #[cfg(not(windows))]

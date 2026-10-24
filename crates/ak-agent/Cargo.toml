@@ -18,6 +18,7 @@ tokio = { workspace = true, features = ["macros", "sync", "process", "time"] }
 tokio-util.workspace = true
 tracing.workspace = true
 chrono.workspace = true
+encoding_rs.workspace = true
 
 [dev-dependencies]
 # Live examples: a real project, toolchain and preview.

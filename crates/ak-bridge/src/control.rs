@@ -109,7 +109,7 @@ pub async fn run(action: ControlAction) -> Result<Value, String> {
             let (el, html) = pressable(&ak_id)?;
             press(&el, true);
             press(&el, false);
-            html.click();
+            click(&el, html.as_ref());
             settle().await;
             Ok(json!({ "clicked": ak_id, "tag": tag(&el) }))
         }
@@ -136,7 +136,7 @@ pub async fn run(action: ControlAction) -> Result<Value, String> {
         ControlAction::Drag { ak_id, to } => {
             let (from, html) = pressable(&ak_id)?;
             let target = find(&to)?;
-            let draggable = html.draggable();
+            let draggable = html.is_some_and(|h| h.draggable());
             let dropped = drag(&from, draggable, &target).await?;
             settle().await;
             Ok(json!({
@@ -152,7 +152,7 @@ pub async fn run(action: ControlAction) -> Result<Value, String> {
             press(&el, true);
             sleep(ms).await;
             press(&el, false);
-            html.click();
+            click(&el, html.as_ref());
             settle().await;
             Ok(json!({ "held": ak_id, "ms": ms, "tag": tag(&el) }))
         }
@@ -291,19 +291,37 @@ fn set_text(el: &Element, text: &str) -> Option<()> {
     Some(())
 }
 
-/// The element to press, scrolled into view and focused.
-fn pressable(ak_id: &str) -> Result<(Element, HtmlElement), String> {
+/// The element to press, scrolled into view and focused (HTML elements; SVG
+/// shapes have no focus).
+fn pressable(ak_id: &str) -> Result<(Element, Option<HtmlElement>), String> {
     let el = find(ak_id)?;
     if el.has_attribute("disabled") {
         return Err(format!("`{ak_id}` is disabled"));
     }
     el.scroll_into_view();
-    let html: HtmlElement = el
-        .clone()
-        .dyn_into()
-        .map_err(|_| format!("`{ak_id}` cannot be clicked"))?;
-    let _ = html.focus();
+    let html = el.dyn_ref::<HtmlElement>().cloned();
+    if let Some(html) = &html {
+        let _ = html.focus();
+    }
     Ok((el, html))
+}
+
+/// The `click` after down and up: the element's own (HTML), else a dispatched
+/// one (an SVG shape).
+fn click(el: &Element, html: Option<&HtmlElement>) {
+    if let Some(html) = html {
+        html.click();
+        return;
+    }
+    let (x, y) = centre(el);
+    let init = MouseEventInit::new();
+    init.set_bubbles(true);
+    init.set_cancelable(true);
+    init.set_client_x(x);
+    init.set_client_y(y);
+    if let Ok(ev) = MouseEvent::new_with_mouse_event_init_dict("click", &init) {
+        let _ = el.dispatch_event(&ev);
+    }
 }
 
 /// The element's centre on the screen.
@@ -489,7 +507,8 @@ const INTERACTIVE: &[&str] = &["a", "button", "input", "select", "textarea", "la
 const TEXT_BLOCKS: &[&str] = &[
     "h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "td", "th", "img", "canvas",
 ];
-const SKIP: &[&str] = &["script", "style", "noscript", "template", "svg", "head"];
+const SKIP: &[&str] = &["script", "style", "noscript", "template", "head"];
+const SVG_NS: &str = "http://www.w3.org/2000/svg";
 
 fn dom_summary() -> Result<DomSummary, String> {
     let window = web_sys::window().ok_or("no window")?;
@@ -555,6 +574,10 @@ fn walk(el: &Element, depth: usize, out: &mut Vec<DomItem>, omitted: &mut usize)
 
 /// Elements that get their own line in the summary.
 fn reported(el: &Element) -> bool {
+    // Inside an SVG only the shapes the app named (not icons' paths).
+    if el.namespace_uri().as_deref() == Some(SVG_NS) {
+        return el.has_attribute("data-ak-id");
+    }
     let tag = tag(el);
     el.has_attribute("data-ak-id")
         || INTERACTIVE.contains(&tag.as_str())

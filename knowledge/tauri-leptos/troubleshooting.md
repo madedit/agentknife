@@ -78,6 +78,19 @@ builds again.
 - **`type mismatch in closure arguments`** on `Button`'s `on_click` — write
   `move |_| …`; `move |()| …` is for `Form`'s `on_submit`.
 
+- **The page panics about a missing context (`Toaster`)** — `use_toaster()` was
+  called outside a component's body or outside `ToastHost`: pass the `Toaster` in
+  (topic `ak-ui`).
+- **The page scrolls although the wheel handler calls `prevent_default`** — add
+  the listener yourself with `passive: false` (topic `canvas`).
+- **A dragged box stops or sticks to the mouse** — `set_pointer_capture` on the
+  stage at `pointerdown` (topic `canvas`).
+- **The screen freezes or updates without end** after adding an `Effect` — two
+  effects write each other's values: write only on a real change (topic
+  `leptos-reactivity`).
+- **Delete in a text field deletes the selected item** — shortcut keys must skip
+  fields (`is_typing`, topic `canvas`).
+
 ## Tauri backend
 - **`command X not found`** at runtime — add it to `tauri::generate_handler![…]`.
 - **`missing required key itemId`** — the screen sent the wrong argument name: use

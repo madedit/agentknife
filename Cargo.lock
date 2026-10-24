@@ -38,6 +38,7 @@ dependencies = [
  "ak-providers",
  "ak-types",
  "chrono",
+ "encoding_rs",
  "futures-util",
  "ignore",
  "regex",

@@ -61,7 +61,11 @@ ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates 
   project already has in `Cargo.lock` (already downloaded, known to fit):
   `serde_json = "1.0.154"`, `js-sys = "0.3.106"`, `web-sys = "0.3.106"` (add the
   features you use), `chrono = "0.4.45"` (backend), `uuid = "1.28.0"`,
-  `regex = "1.13.1"`. For another crate, search `Cargo.lock` for its version first.
+  `regex = "1.13.1"`. For another crate, search `Cargo.lock` for its version first;
+  a crate the project never used is not there. Then look in the libraries folder
+  (its path is in your instructions): `list_files` on its `index.crates.io-…`
+  folder, or `search_files` for `^name = "rfd"` in it. A folder such as
+  `rfd-0.16.1` means that version is downloaded and builds without internet.
   Crates must work in WebAssembly if the screens use them.
 
 ## The window

@@ -93,4 +93,8 @@ async fn choose_folder(app: tauri::AppHandle) -> Result<Option<String>, String> 
   }
   ```
 - Dialogs only open in the real window, not in the preview (topic `overview`):
-  next to the button, offer a text field where a path can be typed.
+  next to the button, offer a text field where a path can be typed. The field
+  must do the whole job, so it can be tried in the preview: Import = the
+  "Choose…" button or a typed path, both calling the same `import_from(path)`
+  (which reads, checks, shows the result or the error); Export the same with
+  `export_to(path)`.

@@ -16,6 +16,18 @@ fn add(a: i64, b: i64) -> Result<i64, String> {
   `Option`, and your own `#[derive(Serialize, Deserialize)]` structs).
 - Return `Result<T, String>` so mistakes reach the user instead of crashing.
 
+## One data model for both sides
+The screens and the backend can use the same file, so their JSON always fits.
+Keep it in `src/model.rs` (screens: `mod model;`) and in `src-tauri/src/main.rs`:
+```rust
+#[path = "../../src/model.rs"]
+#[allow(dead_code)] // methods only the screens use
+mod model;
+```
+The path is from `src-tauri/src/`; move the file and change it too. Both
+`Cargo.toml` need `serde` with `derive`; nothing in the file may use web-only
+crates (`web-sys`, `leptos`).
+
 ## Registering
 Every command must be listed in `generate_handler!` in `main()`:
 ```rust
@@ -79,5 +91,7 @@ saved data (topic `storage`).
 ## Do not
 - Do not use `println!` to talk to the screens; return values instead.
 - Do not panic (`unwrap()` on user data): return `Err("…")`.
-- Do not add Tauri plugins unless the user's request needs them (each needs
-  `capabilities/default.json` permissions).
+- Do not add Tauri plugins unless the user's request needs them. A plugin used
+  only from Rust (`app.dialog()` in a command) needs no
+  `capabilities/default.json` entry: capabilities limit what the page's
+  JavaScript may call, and the screens here call only your own commands.

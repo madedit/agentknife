@@ -178,10 +178,16 @@ Wrap the app once (the template already does), then show messages anywhere insid
 ```rust
 view! { <ToastHost ak_id="toasts"> <App /> </ToastHost> }
 
-let toaster = use_toaster();   // call in the component body, not in a handler
+let toaster = use_toaster();   // in a component's body, inside ToastHost
 toaster.success("Saved");
 toaster.error("Could not save");
 toaster.info("3 items");
 ```
+**Call `use_toaster()` only in the body of a component inside `ToastHost`.** In a
+handler, or in a plain function of another module (`store.rs`), it finds no
+toaster and the page panics at run time (it still builds). To show messages from
+there, get the `Toaster` in the component and pass it on as an argument
+(`Store::new(data, use_toaster())`).
+
 Toasts disappear after 4 seconds (`duration_ms` on `ToastHost` to change).
 `Toaster` is `Copy`: keep it in a struct or use it in many closures.
