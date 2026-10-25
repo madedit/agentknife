@@ -105,6 +105,10 @@ pub mod cmd {
     pub const GET_LOG: &str = "get_log";
     /// `()` → `()`: empties the open project's log.
     pub const CLEAR_LOG: &str = "clear_log";
+    /// `Option<`[`Picked`](crate::preview::Picked)`>` → `()`: what the user
+    /// points at in the preview now, for `get_selection` (also another AI
+    /// tool's, which sends no message through the chat).
+    pub const SET_SELECTION: &str = "set_selection";
     /// `()` → [`McpStatus`](super::McpStatus); changes then arrive as
     /// [`MCP_EVENT`](super::MCP_EVENT).
     pub const MCP_STATUS: &str = "mcp_status";
@@ -153,6 +157,7 @@ pub mod cmd {
         CLEAR_LOG,
         MCP_STATUS,
         SET_MCP,
+        SET_SELECTION,
     ];
 }
 

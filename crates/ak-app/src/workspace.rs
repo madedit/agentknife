@@ -10,7 +10,7 @@ use ak_preview::process::{kill_tree, read_lines};
 use ak_project::{CheckpointKind, Timeline};
 use ak_types::ipc::{FileEntry, FileText, MarkVersion, SaveFile, TimelineRow};
 use ak_types::log::{LogLine, LogSource};
-use ak_types::preview::PreviewStatus;
+use ak_types::preview::{Picked, PreviewStatus};
 use ak_types::stack::{CommandSpec, Tool};
 use tauri::State;
 use tokio::sync::mpsc;
@@ -181,6 +181,15 @@ pub async fn mark_version(state: State<'_, AppState>, request: MarkVersion) -> R
     .await
     .map_err(fail)?
     .map_err(fail)
+}
+
+/// What the user points at in the preview, as soon as they pick it.
+#[tauri::command]
+pub async fn set_selection(state: State<'_, AppState>, request: Option<Picked>) -> Res<()> {
+    if let Some(o) = state.inner.lock().await.open.as_ref() {
+        o.preview.set_selection(request);
+    }
+    Ok(())
 }
 
 #[tauri::command]

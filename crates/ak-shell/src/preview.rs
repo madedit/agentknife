@@ -105,7 +105,15 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
     let device = move || layout.with(|l| l.device);
 
     #[cfg(target_arch = "wasm32")]
-    browser::wire(preview, chat, frame, stage, stage_size, url);
+    browser::wire(
+        preview,
+        chat,
+        backend.clone(),
+        frame,
+        stage,
+        stage_size,
+        url,
+    );
 
     // Waits until the app runs (a first build takes minutes); on failure keeps
     // the output for Details.
@@ -408,6 +416,7 @@ mod browser {
     pub fn wire(
         preview: Preview,
         chat: Chat,
+        backend: crate::backend::Backend,
         frame: NodeRef<leptos::html::Iframe>,
         stage: NodeRef<leptos::html::Div>,
         stage_size: RwSignal<(f64, f64)>,
@@ -456,7 +465,7 @@ mod browser {
                     post(InspectorCommand::Enable);
                 }
                 Some(InspectorEvent::Select { target }) => {
-                    chat.selection.set(Some(target));
+                    crate::chat::select(chat, &backend, Some(target));
                     preview.picking.set(false);
                 }
                 Some(InspectorEvent::Cancel) => preview.picking.set(false),

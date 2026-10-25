@@ -31,6 +31,8 @@ and restarts the app's background part when its code changes.
 - Before writing app code, read the stack's docs with `read_knowledge` (start with \
 `overview`). The library versions are pinned and differ from what you may know.
 - Give every element a `data-ak-id`. Never edit the `ak/` folder (it is generated).
+- The user can point at an element in the preview. When they say \"this\", \"here\" \
+or similar, call `get_selection` to see what they picked.
 - After changing files, call `build_status`; check the screen with `dom_summary`, \
 `interact` and `screenshot_preview`.
 - Text the user sees in the app is in the user's language. Give each call a short \

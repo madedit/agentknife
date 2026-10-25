@@ -107,6 +107,17 @@ pub(crate) const PRIMARY: &str = "rounded-lg bg-blue-600 px-3 py-1.5 text-sm fon
 pub(crate) const SECONDARY: &str = "rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800";
 pub(crate) const CARD: &str = "rounded-xl border border-gray-200 bg-white p-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900";
 
+/// What the user points at in the preview: the chip here, and the app at
+/// once, so `get_selection` sees it before a message is sent (another AI
+/// tool never sends one here).
+pub fn select(chat: Chat, backend: &Backend, picked: Option<Picked>) {
+    chat.selection.set(picked.clone());
+    let backend = backend.clone();
+    leptos::task::spawn_local(async move {
+        let _ = backend.set_selection(picked).await;
+    });
+}
+
 /// Sends `message` (with the current selection) and shows it at once.
 pub fn send_message(chat: Chat, message: String) {
     let selection = chat.selection.get_untracked();
@@ -663,7 +674,7 @@ fn Composer() -> impl IntoView {
                         aria-label=t("chat-selected-remove")
                         title=t("chat-selected-remove")
                         class="rounded-full px-1.5 hover:bg-blue-100 dark:hover:bg-blue-900"
-                        on:click=move |_| chat.selection.set(None)
+                        on:click=move |_| select(chat, &expect_context::<Backend>(), None)
                     >
                         "×"
                     </button>

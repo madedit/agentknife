@@ -84,6 +84,7 @@ const COMMANDS: &[&str] = &[
     "pick_folder",
     "mcp_status",
     "set_mcp",
+    "set_selection",
 ];
 
 /// The app's state and commands on `builder` (plugins are the caller's).
@@ -130,6 +131,7 @@ pub fn with_commands<R: Runtime>(builder: Builder<R>, state: state::AppState) ->
             settings::pick_folder,
             mcp::mcp_status,
             mcp::set_mcp,
+            workspace::set_selection,
         ])
         .setup(|app| {
             // Listens for other AI tools when the setting is on.

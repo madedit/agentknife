@@ -332,7 +332,7 @@ impl Demo {
             }
             cmd::OPEN_FOLDER | cmd::PICK_FOLDER => Ok(Value::Null),
             cmd::PREVIEW_STATUS => Ok(json!(d.preview)),
-            cmd::RUN_APP | cmd::REVEAL | cmd::CLEAR_LOG => Ok(Value::Null),
+            cmd::RUN_APP | cmd::REVEAL | cmd::CLEAR_LOG | cmd::SET_SELECTION => Ok(Value::Null),
             cmd::GET_LOG => Ok(json!(demo_log())),
             cmd::GET_SETTINGS => {
                 let mut s = d.settings.clone();

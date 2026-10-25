@@ -192,6 +192,13 @@ impl Backend {
         }
     }
 
+    pub async fn set_selection(
+        &self,
+        picked: Option<ak_types::preview::Picked>,
+    ) -> Result<(), CallError> {
+        self.call(cmd::SET_SELECTION, Some(picked)).await
+    }
+
     pub async fn mcp_status(&self) -> Result<ak_types::ipc::McpStatus, CallError> {
         self.call(cmd::MCP_STATUS, None::<()>).await
     }
