@@ -493,8 +493,10 @@ pub const PRESETS: &[ProviderPreset] = &[
     },
     ProviderPreset {
         id: "openai-compatible",
-        kind: PresetKind::Cloud,
-        base_url: None,
+        // Mostly a local server (llama.cpp, vLLM, Jan); the address may also
+        // be another computer or an online service.
+        kind: PresetKind::Local,
+        base_url: Some("http://localhost:8080/v1"),
         needs_key: false,
         page: None,
         suggested_model: None,

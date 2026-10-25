@@ -308,7 +308,7 @@ fn ChooseStep(w: RwSignal<Wizard>, on_cancel: Option<Callback<()>>) -> impl Into
                         on:click=move |_| w.update(|w| w.choose(p))
                     >
                         <span class="flex items-center gap-2">
-                            <span class="font-medium">{tr(format!("connect-preset-{}", p.id))}</span>
+                            <span class="font-medium">{choice_name(p)}</span>
                             {move || match state() {
                                 "current" => Some(view! {
                                     <span data-badge="current" class="rounded-full bg-blue-600 px-2 py-0.5 text-xs text-white">{t("connect-in-use")}</span>
@@ -363,6 +363,16 @@ fn ChooseStep(w: RwSignal<Wizard>, on_cancel: Option<Callback<()>>) -> impl Into
     }
 }
 
+/// A preset's name while choosing: "Another program (enter its address)"; once
+/// connected (top bar, settings) it is the short `connect-preset-<id>`.
+fn choice_name(p: &ProviderPreset) -> impl Fn() -> String + Send + Sync + 'static {
+    if p.asks_address() {
+        tr(format!("connect-preset-{}-choice", p.id))
+    } else {
+        tr(format!("connect-preset-{}", p.id))
+    }
+}
+
 const PRIMARY: &str = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50";
 const SECONDARY: &str = "rounded-lg border border-gray-300 px-4 py-2 text-sm hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800";
 const FIELD: &str = "mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950";
@@ -373,14 +383,31 @@ fn DetailsStep(
     test: impl Fn() + Clone + Send + Sync + 'static,
 ) -> impl IntoView {
     let preset = move || w.with(|w| w.preset);
-    let name = move || preset().map(|p| tr(format!("connect-preset-{}", p.id))());
+    let name = move || preset().map(|p| choice_name(p)());
     let test2 = test.clone();
     view! {
         <section data-step="details" class="mt-6 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-950">
             <h2 class="text-lg font-medium">{name}</h2>
+            <Show when=move || w.with(Wizard::shows_address)>
+                <label class="mt-4 block text-sm font-medium">
+                    {t("connect-address")}
+                    <input
+                        type="url"
+                        spellcheck="false"
+                        class=FIELD
+                        prop:value=move || w.with(|w| w.address.clone())
+                        on:input=move |e| w.update(|w| w.address = event_target_value(&e))
+                    />
+                </label>
+            </Show>
             <Show when=move || w.with(Wizard::shows_key)>
                 <label class="mt-4 block text-sm font-medium">
-                    {t("connect-key")}
+                    // Most local programs need none: then it comes last and says so.
+                    {move || if preset().is_some_and(|p| p.needs_key) {
+                        t("connect-key")()
+                    } else {
+                        t("connect-key-optional")()
+                    }}
                     <input
                         type="password"
                         data-field="key"
@@ -398,21 +425,12 @@ fn DetailsStep(
                 </label>
                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{t("connect-key-safe")}</p>
             </Show>
-            <Show when=move || w.with(Wizard::shows_address)>
-                <label class="mt-4 block text-sm font-medium">
-                    {t("connect-address")}
-                    <input
-                        type="url"
-                        spellcheck="false"
-                        class=FIELD
-                        prop:value=move || w.with(|w| w.address.clone())
-                        on:input=move |e| w.update(|w| w.address = event_target_value(&e))
-                    />
-                </label>
-            </Show>
             <Show when=move || preset().is_some_and(|p| p.kind == PresetKind::Local)>
                 <p class="mt-3 text-sm text-gray-600 dark:text-gray-400">
                     {move || {
+                        if preset().is_some_and(|p| p.asks_address()) {
+                            return t("connect-other-running")();
+                        }
                         let name = name().unwrap_or_default();
                         crate::i18n::t_with("connect-local-running", [("name", name)])()
                     }}
@@ -633,8 +651,12 @@ mod tests {
         w.address = "  ".into();
         assert!(!w.can_test());
 
+        // On this computer (llama.cpp's address), a key only if the server wants one.
         let w = chosen("openai-compatible");
-        assert!(w.shows_key() && w.shows_address() && !w.can_test());
+        assert_eq!(w.preset.map(|p| p.kind), Some(PresetKind::Local));
+        assert!(w.shows_key() && w.shows_address());
+        assert_eq!(w.address, "http://localhost:8080/v1");
+        assert!(w.can_test());
     }
 
     #[test]
