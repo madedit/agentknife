@@ -305,6 +305,7 @@ chat-answered = 你的回答：{ $answer }
 chat-other-answer = 或自己輸入答案
 chat-send = 送出
 chat-stop = 停止
+chat-stopping = 正在停止…
 chat-continue = 繼續
 chat-step-limit = 我已經做了很多步，先停下來讓你看看。要繼續嗎？
 chat-max-tokens = 我的回答太長被截斷了。要繼續嗎？

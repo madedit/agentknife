@@ -203,7 +203,18 @@ pub fn ChatPane() -> impl IntoView {
 #[component]
 fn ItemView(index: usize) -> impl IntoView {
     let chat = expect_context::<Chat>();
-    let item = Memo::new(move |_| chat.log.with(|l| l.items.get(index).cloned()));
+    // Compared in place and cloned only when it changed: the log changes with
+    // every streamed word, and cloning every item each time (long thinking,
+    // step output) made the window fall far behind a fast local model.
+    let item = Memo::new_owning(move |old: Option<Option<Item>>| {
+        chat.log.with(|l| {
+            let now = l.items.get(index);
+            match old {
+                Some(old) if old.as_ref() == now => (old, false),
+                _ => (now.cloned(), true),
+            }
+        })
+    });
     let last = move || chat.log.with(|l| l.running && index + 1 == l.items.len());
     move || {
         item.get().map(|i| match i {
@@ -630,7 +641,10 @@ fn Composer() -> impl IntoView {
         send_message(chat, text.get_untracked().trim().to_owned());
         text.set(String::new());
     };
-    let stop = move |_| call(chat.log, |b| async move { b.cancel_turn().await });
+    let stop = move |_| {
+        chat.log.update(|l| l.stopping = true);
+        call(chat.log, |b| async move { b.cancel_turn().await });
+    };
     view! {
         <div class="border-t border-gray-200 p-3 dark:border-gray-800">
             {move || chat.selection.get().map(|p| view! {
@@ -671,8 +685,8 @@ fn Composer() -> impl IntoView {
                         </button>
                     }
                 >
-                    <button title=t("chat-stop-tip") type="button" data-action="stop" class=SECONDARY on:click=stop>
-                        {t("chat-stop")}
+                    <button title=t("chat-stop-tip") type="button" data-action="stop" class=SECONDARY disabled=move || chat.log.with(|l| l.stopping) on:click=stop>
+                        {move || if chat.log.with(|l| l.stopping) { t("chat-stopping") } else { t("chat-stop") }}
                     </button>
                 </Show>
             </div>

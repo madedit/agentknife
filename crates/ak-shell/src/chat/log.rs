@@ -110,6 +110,8 @@ pub struct ChatLog {
     pub items: Vec<Item>,
     /// A turn is running (the input shows "Stop").
     pub running: bool,
+    /// Stop was pressed and the turn has not ended yet.
+    pub stopping: bool,
     /// (this session, today)
     pub usage: Option<(UsageSummary, UsageSummary)>,
     /// (spent, cap) in US dollars, once today's 80% is reached.
@@ -231,6 +233,7 @@ impl ChatLog {
         match event {
             AgentEvent::TurnStarted { .. } => {
                 self.running = true;
+                self.stopping = false;
                 self.new_bubble = true;
             }
             AgentEvent::TextDelta { text } => self.write(&text, false),
@@ -310,6 +313,7 @@ impl ChatLog {
             }
             AgentEvent::TurnFinished { outcome } => {
                 self.running = false;
+                self.stopping = false;
                 for item in &mut self.items {
                     match item {
                         Item::Step { state, .. } if *state == StepState::Running => {
@@ -518,6 +522,21 @@ mod tests {
             label: label.into(),
             detail: "src/main.rs".into(),
         }
+    }
+
+    #[test]
+    fn stopping_lasts_until_the_turn_ends() {
+        let mut log = ChatLog::default();
+        log.apply(AgentEvent::TurnStarted {
+            turn_id: "t".into(),
+        });
+        log.stopping = true;
+        log.apply(AgentEvent::ThinkingDelta { text: "Hm".into() });
+        assert!(log.running && log.stopping);
+        log.apply(AgentEvent::TurnFinished {
+            outcome: TurnOutcome::Cancelled,
+        });
+        assert!(!log.running && !log.stopping);
     }
 
     #[test]

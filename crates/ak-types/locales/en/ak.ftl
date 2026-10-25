@@ -305,6 +305,7 @@ chat-answered = Your answer: { $answer }
 chat-other-answer = Or type your own answer
 chat-send = Send
 chat-stop = Stop
+chat-stopping = Stopping…
 chat-continue = Continue
 chat-step-limit = I took many steps and paused so you can check. Shall I continue?
 chat-max-tokens = My answer was cut off because it got too long. Shall I continue?

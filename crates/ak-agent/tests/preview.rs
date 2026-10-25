@@ -29,6 +29,8 @@ struct FakePreview {
     selection: Option<Picked>,
     capture: bool,
     crashes: Vec<String>,
+    /// `settled` never answers (a build that takes very long).
+    endless_build: bool,
 }
 
 fn ok() -> PreviewStatus {
@@ -75,6 +77,9 @@ impl PreviewAccess for FakePreview {
     }
 
     fn settled(&self, _: Duration) -> BoxFuture<'_, PreviewStatus> {
+        if self.endless_build {
+            return Box::pin(std::future::pending());
+        }
         let s = self.next();
         Box::pin(async move { s })
     }
@@ -376,6 +381,35 @@ fn build_events(events: &[AgentEvent]) -> Vec<String> {
             _ => None,
         })
         .collect()
+}
+
+#[tokio::test]
+async fn stop_does_not_wait_for_the_build_check() {
+    let p = Arc::new(ScriptedProvider::new(vec![
+        tool_calls(&[("c1", "write_file", "{}")]),
+        text("Done."),
+    ]));
+    let preview = Arc::new(FakePreview {
+        statuses: Mutex::new(vec![ok()]),
+        endless_build: true,
+        ..FakePreview::default()
+    });
+    let a = agent(p, preview, "src/main.rs", 3);
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    let cancel = CancellationToken::new();
+    let c2 = cancel.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        c2.cancel();
+    });
+    let mut c = Conversation::new();
+    let outcome = tokio::time::timeout(
+        Duration::from_secs(5),
+        a.run_turn(&mut c, Message::user_text("make it blue"), &tx, &cancel),
+    )
+    .await
+    .expect("the turn stops while the build check waits");
+    assert_eq!(outcome, TurnOutcome::Cancelled);
 }
 
 #[tokio::test]

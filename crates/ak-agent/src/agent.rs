@@ -545,7 +545,7 @@ impl Agent {
                 // at, and if it changed files, the app must still build.
                 self.add_ids(touched).await;
                 match self
-                    .check_build(conversation, events, touched, &mut state)
+                    .check_build(conversation, events, touched, &mut state, cancel)
                     .await
                 {
                     BuildCheck::Fine => return TurnOutcome::Completed,
@@ -703,6 +703,7 @@ impl Agent {
         events: &Events,
         touched: &[String],
         state: &mut TurnState,
+        cancel: &CancellationToken,
     ) -> BuildCheck {
         let Some(preview) = &self.preview else {
             return BuildCheck::Fine;
@@ -711,7 +712,12 @@ impl Agent {
             return BuildCheck::Fine;
         }
         emit(events, AgentEvent::BuildChecking);
-        let status = preview.settled(BUILD_CHECK_WAIT).await;
+        // A first build can take minutes; Stop must not wait for it.
+        let status = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => return BuildCheck::Stop(TurnOutcome::Cancelled),
+            s = preview.settled(BUILD_CHECK_WAIT) => s,
+        };
         let max = self.config.max_fix_attempts;
         let Some(error) = status.error() else {
             emit(

@@ -12,7 +12,7 @@ Task format and id scheme: see AGENTS.md §8. Only the coordinator edits this fi
 
 ## Phase 1 — MVP
 
-Areas: CORE (workspace, xtask, CI), I18N, PROV (providers), AGENT, DOC (doctor), PROJ (projects/checkpoints), BRIDGE, PREV (preview), UI (ak-ui kit), TPL (template), KNOW (knowledge), BUNDLE, SHELL (AgentKnife UI), APP (Tauri wiring), E2E.
+Areas: CORE (workspace, xtask, CI), I18N, PROV (providers), AGENT, DOC (doctor), PROJ (projects/checkpoints), BRIDGE, PREV (preview), UI (ak-ui kit), TPL (template), KNOW (knowledge), BUNDLE, SHELL (AgentKnife UI), APP (Tauri wiring), MCP (external agents), E2E.
 
 Suggested parallel tracks once P1-CORE-003 is done:
 - A: PROV → AGENT
@@ -491,6 +491,57 @@ APP and E2E integrate all tracks.
 - Owner: coordinator
 - Depends on: P1-APP-001
 - Acceptance: a release workflow builds AgentKnife installers for Windows, macOS, and Linux on GitHub Actions. Auto-update stays out of scope until Phase 2.
+
+---
+
+### External agents (MCP)
+
+Lets Claude Code, Codex, Gemini CLI and other agent CLIs operate a running AgentKnife over MCP, while the user watches in the AgentKnife window.
+
+```
+agent CLI ──stdio──▶ agentknife-mcp (shim) ──127.0.0.1 HTTP + token──▶ AgentKnife (ak-app)
+                     reads <data_dir>/AgentKnife/mcp.json             └─ ak-mcp: MCP protocol + McpHost trait
+                                                                         reuses ak-agent tools, ProjectPolicy,
+                                                                         PreviewSession, ak-project/doctor/bundle
+```
+
+Open decisions (owner), with the recommendation in brackets: MCP library [`rmcp`, pinned in versions.toml]; shim behaviour when AgentKnife is not running [start it and wait]; whether to also expose AgentKnife's file/command tools [yes, so policy, checkpoints and preview restarts stay consistent]; where the setting lives [full mode only].
+
+### P1-MCP-001 — MCP server core (M1)
+- Crate(s): ak-mcp (new; no tauri, leptos or ak-shell dependency), ak-app, ak-preview, ak-shell, ak-types
+- Owner: unassigned
+- Depends on: P1-APP-001, P1-PREV-002
+- Acceptance:
+  - ak-mcp implements MCP initialize (with `instructions`), tools/list and tools/call over Streamable HTTP. It talks to the app only through an `McpHost` trait, and its tests use a fake host.
+  - The tools reuse ak-agent's `Tool` definitions, so descriptions and permissions are the same as for the built-in agent: `status` (project, preview state, whether an agent is busy), `list_projects`, `open_project`, the file tools, `run_command`, `read_knowledge`, `add_library` and the preview tools (`build_status`, `dom_summary`, `interact`, `screenshot_preview`, `get_selection`). `label` is optional over MCP.
+  - The `instructions` are a short version of the system prompt's working rules: read the knowledge pack first, `data-ak-id` on every element, `build_status` after edits, never edit `ak/`, user-facing text in the user's language.
+  - ak-app serves it on 127.0.0.1 only, on a random port with a 128-bit random token, written to `<data_dir>/AgentKnife/mcp.json` (readable by the user only) while the setting is on. Requests without the token, and any request with an `Origin` header, are refused.
+  - A console binary `agentknife-mcp` (shipped next to AgentKnife) bridges stdio to that endpoint, reading mcp.json itself, so client configs never contain the token. Setup is one line, e.g. `claude mcp add agentknife -- <path>\agentknife-mcp.exe`.
+  - The setting "Let other AI tools operate AgentKnife" is off by default. The settings page shows copyable setup for Claude Code, Codex and a generic JSON config (fluent, zh-TW and en).
+  - The first connection from a client name asks the user in the AgentKnife window. Actions that need confirmation (downloads, installs, deletions, outside the project) use the existing `ConfirmReason` cards in the window, not MCP elicitation.
+  - API keys, the keychain and the bridge token are never reachable through MCP.
+  - Only one agent changes the project at a time (shares `turn.lock`). While the built-in agent works, change tools return a plain "AgentKnife's AI is working" error, and the other way round.
+  - External steps appear in the chat pane as steps named after the client (e.g. "Claude Code: reading the login page"), and a checkpoint is made when an external session first changes the project.
+  - ak-preview watches the plan's `backend_watch` paths, so edits made with a client's own tools (or the user's editor) still restart the backend.
+  - Verified live: Claude Code and Codex each create a small app in a project, check it with `dom_summary` and `interact`, and the user sees the steps in AgentKnife.
+
+### P1-MCP-002 — Full workflow tools, resources and prompts (M2)
+- Crate(s): ak-mcp, ak-app
+- Owner: unassigned
+- Depends on: P1-MCP-001, P1-BUNDLE-002, P1-PROJ-003
+- Acceptance:
+  - Tools: `new_project`, `check_tools` (installs still confirmed in the window), `run_app` (real window), `package_app` (returns the install steps), `checkpoint`, `restore` (asks the user first), `get_log`.
+  - Resources: each knowledge-pack topic and the project's `.agentknife/` PROJECT and STATUS files.
+  - Prompts: a "build an app" workflow template.
+  - Each tool has a fake-host test; packaging is verified live from Claude Code once.
+
+### P1-MCP-003 — Headless mode and notifications (M3, optional)
+- Crate(s): ak-mcp, ak-app
+- Owner: unassigned
+- Depends on: P1-MCP-002
+- Acceptance:
+  - `agentknife-mcp --headless` runs projects, preview and tools without the AgentKnife window. Confirmations then go through MCP elicitation, and are refused if the client does not support it.
+  - Preview status changes are pushed as MCP notifications (resource subscriptions).
 
 ---
 

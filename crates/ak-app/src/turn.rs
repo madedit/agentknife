@@ -323,6 +323,48 @@ fn emit<R: Runtime>(app: &AppHandle<R>, event: AgentEvent) {
     let _ = app.emit(AGENT_EVENT, event);
 }
 
+/// How long streamed words are collected before they go to the window.
+const DELTA_FLUSH: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// Joins the model's streamed words into fewer window events. A fast local
+/// model sends a hundred or more pieces a second; one event each floods the
+/// window, which then falls behind (Stop is handled long after it is pressed).
+#[derive(Default)]
+struct Deltas {
+    pending: Option<AgentEvent>,
+}
+
+impl Deltas {
+    /// The events to send now, in their order.
+    fn push(&mut self, event: AgentEvent) -> Vec<AgentEvent> {
+        match (self.pending.as_mut(), &event) {
+            (Some(AgentEvent::TextDelta { text: a }), AgentEvent::TextDelta { text: b })
+            | (
+                Some(AgentEvent::ThinkingDelta { text: a }),
+                AgentEvent::ThinkingDelta { text: b },
+            ) => {
+                a.push_str(b);
+                return Vec::new();
+            }
+            _ => {}
+        }
+        let earlier = self.pending.take();
+        if matches!(
+            event,
+            AgentEvent::TextDelta { .. } | AgentEvent::ThinkingDelta { .. }
+        ) {
+            self.pending = Some(event);
+            earlier.into_iter().collect()
+        } else {
+            earlier.into_iter().chain([event]).collect()
+        }
+    }
+
+    fn flush(&mut self) -> Option<AgentEvent> {
+        self.pending.take()
+    }
+}
+
 /// Runs one turn in the background.
 fn spawn<R: Runtime>(app: AppHandle<R>, start: Start) {
     tauri::async_runtime::spawn(async move {
@@ -346,9 +388,35 @@ fn spawn<R: Runtime>(app: AppHandle<R>, start: Start) {
             let app = app.clone();
             let log = parts.log.clone();
             tauri::async_runtime::spawn(async move {
-                while let Some(e) = rx.recv().await {
+                let mut deltas = Deltas::default();
+                let mut flush_at = None;
+                loop {
+                    let next = match flush_at {
+                        Some(at) => match tokio::time::timeout_at(at, rx.recv()).await {
+                            Ok(next) => next,
+                            Err(_) => {
+                                if let Some(d) = deltas.flush() {
+                                    emit(&app, d);
+                                }
+                                flush_at = None;
+                                continue;
+                            }
+                        },
+                        None => rx.recv().await,
+                    };
+                    let Some(e) = next else { break };
                     log_step(&log, &e);
-                    emit(&app, e);
+                    for out in deltas.push(e) {
+                        emit(&app, out);
+                    }
+                    flush_at = match (deltas.pending.is_some(), flush_at) {
+                        (false, _) => None,
+                        (true, Some(at)) => Some(at),
+                        (true, None) => Some(tokio::time::Instant::now() + DELTA_FLUSH),
+                    };
+                }
+                if let Some(d) = deltas.flush() {
+                    emit(&app, d);
                 }
             })
         };
@@ -637,6 +705,24 @@ mod tests {
     use ak_types::preview::{Rect, Size};
 
     use super::*;
+
+    #[test]
+    fn streamed_words_are_joined_and_keep_their_order() {
+        let text = |t: &str| AgentEvent::TextDelta { text: t.into() };
+        let think = |t: &str| AgentEvent::ThinkingDelta { text: t.into() };
+        let mut d = Deltas::default();
+        assert!(d.push(think("Hm")).is_empty());
+        assert!(d.push(think("m.")).is_empty());
+        assert_eq!(
+            d.push(AgentEvent::ThinkingEnd),
+            [think("Hmm."), AgentEvent::ThinkingEnd]
+        );
+        assert!(d.push(text("Hel")).is_empty());
+        assert!(d.push(text("lo")).is_empty());
+        assert_eq!(d.push(think("Then")), [text("Hello")]);
+        assert_eq!(d.flush(), Some(think("Then")));
+        assert_eq!(d.flush(), None);
+    }
 
     #[test]
     fn allowed_folders_are_existing_absolute_folders_and_the_ai_hears_of_them() {
