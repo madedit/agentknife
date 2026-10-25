@@ -75,6 +75,14 @@ builds again.
   "not found") — it lives on a more exact type: `dyn_ref::<web_sys::Text>()`,
   `dyn_into::<web_sys::HtmlDocument>()` (topic `browser`), or its feature is
   missing.
+- **`cannot find module or crate ev`** — `use leptos::ev;`, or leave the event's
+  type out: `move |_| …`.
+- **`expected function, found macro format`**, or a string with `` ` `` and
+  `${x}` — that is JavaScript: Rust writes `format!("{x} points")`.
+- **A black 3D canvas without errors** — it has no height: `dom_summary` shows
+  `size=…x0`. The height comes from `h-screen` on the outer element through
+  `flex flex-col` and `min-h-0 flex-1` on every element in between (`ToastHost`
+  adds no element; your own wrapper `div`s do) (topic `three-d`).
 - **`type mismatch in closure arguments`** on `Button`'s `on_click` — write
   `move |_| …`; `move |()| …` is for `Form`'s `on_submit`.
 

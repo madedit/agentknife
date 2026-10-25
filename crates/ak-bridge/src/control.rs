@@ -176,12 +176,27 @@ pub async fn run(action: ControlAction) -> Result<Value, String> {
             init.set_meta_key(press.meta);
             init.set_bubbles(true);
             init.set_cancelable(true);
+            let mut clicked = None;
             for (kind, wait) in [("keydown", ms), ("keyup", 0)] {
                 if let Ok(ev) = KeyboardEvent::new_with_keyboard_event_init_dict(kind, &init) {
                     let not_prevented = target.dispatch_event(&ev).unwrap_or(false);
                     // A made-up Tab does not move the focus: do what a real one does.
                     if kind == "keydown" && press.key == "Tab" && not_prevented {
                         move_focus(&document, press.shift);
+                    }
+                    // Nor does Space or Enter press the focused button, as a real
+                    // one does (a game that does not prevent it restarts).
+                    if kind == "keydown"
+                        && not_prevented
+                        && presses_button(&target, &press.key)
+                        && let Some(button) = target.dyn_ref::<HtmlElement>()
+                    {
+                        button.click();
+                        clicked = Some(
+                            target
+                                .get_attribute("data-ak-id")
+                                .unwrap_or_else(|| tag(&target)),
+                        );
                     }
                 }
                 sleep(wait).await;
@@ -192,7 +207,9 @@ pub async fn run(action: ControlAction) -> Result<Value, String> {
                 .active_element()
                 .and_then(|el| el.closest("[data-ak-id]").ok().flatten())
                 .and_then(|el| el.get_attribute("data-ak-id"));
-            Ok(json!({ "pressed": key, "ms": ms, "on": tag(&target), "focus": focus }))
+            Ok(
+                json!({ "pressed": key, "ms": ms, "on": tag(&target), "focus": focus, "clicked": clicked }),
+            )
         }
         ControlAction::Type { ak_id, text, enter } => {
             let el = find(&ak_id)?;
@@ -254,6 +271,23 @@ pub async fn run(action: ControlAction) -> Result<Value, String> {
             })
             .map_err(|e| e.to_string())
         }
+    }
+}
+
+/// Whether `key` on the focused `el` clicks it in a real browser: Space or
+/// Enter on a button, Enter on a link.
+fn presses_button(el: &Element, key: &str) -> bool {
+    let kind = el
+        .get_attribute("type")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    match el.tag_name().to_ascii_lowercase().as_str() {
+        "button" => matches!(key, " " | "Enter"),
+        "input" if matches!(kind.as_str(), "button" | "submit" | "reset") => {
+            matches!(key, " " | "Enter")
+        }
+        "a" => key == "Enter" && el.has_attribute("href"),
+        _ => false,
     }
 }
 
@@ -675,6 +709,14 @@ fn item(el: &Element, tag: String, ak_id: Option<String>, depth: usize) -> DomIt
         if let Some(v) = el.get_attribute(name).filter(|v| !v.is_empty()) {
             attrs.push((name.to_owned(), v));
         }
+    }
+    // A canvas with no height shows nothing and reports no error.
+    if tag == "canvas" {
+        let rect = el.get_bounding_client_rect();
+        attrs.push((
+            "size".to_owned(),
+            format!("{:.0}x{:.0}", rect.width(), rect.height()),
+        ));
     }
     let (value, checked) = if let Some(input) = el.dyn_ref::<HtmlInputElement>() {
         match input.type_().as_str() {

@@ -29,6 +29,10 @@ What the props take ("follows" = a closure or signal keeps it up to date):
 | Nav | `items` | fixed list; `active`: `RwSignal<String>` |
 | List | `items` | follows (`RwSignal<Vec<T>>` or `Signal`) |
 
+**ak-ui components have no `class` prop** (`class=` on them does not build). For
+another look (a big coloured button, a game's keys) use a plain element with
+Tailwind classes and its own `data-ak-id` (see Button below).
+
 ## Button
 ```rust
 <Button ak_id="save-button" on_click=move |_| save()>"Save"</Button>
@@ -46,8 +50,9 @@ inside the handler and in the label, reading signals:
     {move || match phase.get() { Phase::Playing => "Pause", Phase::Paused => "Resume", Phase::Ready => "Start" }}
 </Button>
 ```
-`on_click` takes a closure `move |_| …` (the event is an `ev::MouseEvent`); not
-`move |()|`, which is only for `Form`'s `on_submit`.
+`on_click` takes a closure `move |_| …`: leave the event's type out (it is a
+`leptos::ev::MouseEvent`; `ev::` alone needs `use leptos::ev;`). Not `move |()|`,
+which is only for `Form`'s `on_submit`.
 
 `small=true` gives a smaller button (toolbars, a card's own buttons):
 `<Button ak_id="card-edit" variant=ButtonVariant::Ghost small=true>"Edit"</Button>`.

@@ -13,19 +13,28 @@ Call `add_library` with `"three"`. It copies into `vendor/three/`:
 Other three.js addons (model loaders, effects) are not available.
 
 ## 2. index.html
-Add the import map and the `copy-dir` link **above** the `rel="rust"` link. Do not
-change the other trunk links.
+Add the import map and the `copy-dir` link right after `<title>`, before the
+comment and the `rel="rust"` link. Do not change the other trunk links. The whole
+`<head>` afterwards:
 
 ```html
-<script type="importmap">
-  {
-    "imports": {
-      "three": "./vendor/three/three.module.js",
-      "three/addons/": "./vendor/three/addons/"
-    }
-  }
-</script>
-<link data-trunk rel="copy-dir" href="vendor" />
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My Game</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./vendor/three/three.module.js",
+          "three/addons/": "./vendor/three/addons/"
+        }
+      }
+    </script>
+    <link data-trunk rel="copy-dir" href="vendor" />
+    <!-- wasm-opt is off: it is not part of AgentKnife's toolchain. -->
+    <link data-trunk rel="rust" data-bin="app-ui" data-wasm-opt="0" />
+    <link data-trunk rel="tailwind-css" href="style/input.css" />
+  </head>
 ```
 
 ## 3. Cargo.toml (screens)
@@ -271,6 +280,12 @@ pub fn GameScreen() -> impl IntoView {
 }
 ```
 
+The canvas gets its height from `h-screen` on `<main>`, through `flex-col` and
+`min-h-0 flex-1`. Put `GameScreen` straight into `ToastHost` or the app (no box
+around it), or give every element you add around it `flex min-h-0 flex-1
+flex-col`: a canvas 0 pixels high is black, with no error (`dom_summary` shows the
+canvas' `size`).
+
 In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
 `leptos::mount::mount_to_body(game::GameScreen)` after `ak_bridge::start()`).
 
@@ -306,9 +321,40 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
   `extern "C"` block, call it through `game.with_value`.
 - **Keyboard**: `window.addEventListener("keydown", this.onKey)` in the constructor,
   `removeEventListener` in `dispose()`. Keep pressed keys in a `Set` and read it in
-  `frame()`. Call `e.preventDefault()` for the keys the game uses (space, arrows):
-  otherwise space also presses the button clicked last (it keeps the focus) and
-  arrows scroll the page.
+  `frame()`. **Call `e.preventDefault()` for every key the game uses** (space,
+  Enter, arrows): the button clicked last keeps the focus, so without it Space
+  presses "Restart" again, and arrows scroll the page. `interact` `key` does the
+  same (its answer's `clicked` names the button it pressed).
+- **The view**: OrbitControls already turns (drag) and zooms (wheel): set
+  `enableZoom`, `zoomSpeed`, `minDistance`/`maxDistance`, `maxPolarAngle` instead
+  of adding a `wheel` listener (both would zoom). Buttons that turn or zoom the
+  view change the camera once, when pressed, and `frame()` only calls
+  `controls.update()`; setting `camera.position` every frame fights the controls:
+  ```js
+  // dTurn, dTilt in radians; zoom < 1 comes closer.
+  turn_view(dTurn, dTilt, zoom) {
+    const c = this.controls;
+    const s = new THREE.Spherical().setFromVector3(this.camera.position.clone().sub(c.target));
+    s.theta += dTurn;
+    s.phi = Math.min(Math.max(s.phi + dTilt, 0.1), c.maxPolarAngle);
+    s.radius = Math.min(Math.max(s.radius * zoom, c.minDistance), c.maxDistance);
+    this.camera.position.setFromSpherical(s).add(c.target);
+    c.update();
+  }
+  ```
+  Read the view for `state_json()` with `controls.getAzimuthalAngle()`,
+  `getPolarAngle()` and `getDistance()`.
+- **Board games (match-3, cards, chess)**: the rules are turns, not frames.
+  - One `state` (`"ready"`, `"busy"`, `"over"`) owned by the turn logic. Ignore
+    clicks and keys while `"busy"` (pieces falling, a new shuffle). Only the
+    function that runs the turn sets and clears it; helpers (`addGem`,
+    `removeRow`) never set the state or start timers themselves.
+  - A piece that starts moving or vanishing is tracked in exactly one list until
+    it is done.
+  - A new or shuffled board must be playable: no finished matches and at least
+    one possible move (`has_move()`); deal again until both hold.
+  - Share one geometry and a few materials between all pieces; free them once in
+    `dispose()` (`scene.traverse`).
 - **Buttons held down** (move while pressed, on screen or touch): Leptos
   `on:pointerdown` starts, `on:pointerup` and `on:pointerleave` stop; tell the game
   with a method (`set_move(-1)`, `set_move(0)`).
@@ -381,5 +427,11 @@ The game moves every frame; test it by acting and then watching its state.
   ball travel and bounce). Do not sleep with `run_command`.
 - Put what the rules depend on, and a frame or time counter, into `state_json()`
   so the readings show movement.
+- 3D pieces have no `data-ak-id`, so `interact` cannot click them. Let the game
+  find a move itself and say how to make it: a `hint()` that finds a valid move
+  (on the visible layer first), and in `state_json()` the move and the keys that
+  make it in the current view (`"hint": {"from": [2, 3], "keys": ["ArrowUp", " "]}`).
+  Then press those keys and check the result (score, the board). This is far more
+  reliable than working out positions from the camera.
 - After a change the page reloads and the game starts over: an element can be
   missing (the start screen is back). Call `dom_summary` and do it again.

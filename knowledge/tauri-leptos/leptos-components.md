@@ -122,7 +122,9 @@ fn Page() -> impl IntoView {
   ```
   (`Dir` must be `Copy`: `#[derive(Clone, Copy)]`.)
 - The event's type: leave it out, `move |e| …`, and Leptos picks the right one.
-  When you write it (`use leptos::ev;` first, the prelude does not bring it), it
+  Usually leave it out (`move |_| …`, `move |e| …`). When you write it
+  (`use leptos::ev;` first, or the full `leptos::ev::MouseEvent`; the prelude
+  does not bring `ev`), it
   must match the event, or you get `type mismatch in closure arguments: expected
   closure signature fn(PointerEvent), found fn(MouseEvent)` plus an `IntoView is
   not satisfied` wall:

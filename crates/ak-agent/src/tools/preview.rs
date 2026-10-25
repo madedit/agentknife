@@ -316,7 +316,7 @@ impl Tool for Interact {
                     "by": { "type": "integer", "description": "scroll: pixels to scroll down (negative: up)" },
                     "text": { "type": "string", "description": "What to type (replaces the field's text)" },
                     "enter": { "type": "boolean", "description": "Press Enter after typing" },
-                    "key": { "type": "string", "description": "The key to press (key), as KeyboardEvent.key: \"ArrowLeft\", \"a\", \"Enter\"; space is \" \" or \"Space\"; with modifiers: \"Control+z\", \"Control+Shift+z\", \"Alt+ArrowLeft\"" },
+                    "key": { "type": "string", "description": "The key to press (key), as KeyboardEvent.key: \"ArrowLeft\", \"a\", \"Enter\"; space is \" \" or \"Space\"; with modifiers: \"Control+z\", \"Control+Shift+z\", \"Alt+ArrowLeft\". It goes to the focused element, as a real key does: the button clicked last keeps the focus, and Space or Enter presses it unless the page calls preventDefault (the answer's `clicked` says so; games must prevent the keys they use)" },
                     "ms": { "type": "integer", "description": "How long to hold (hold: default 1000; key: default 0, a tap), at most 10000" },
                     "wait_ms": { "type": "integer", "description": "read_state: wait this long first, at most 10000" },
                     "samples": { "type": "integer", "description": "read_state: read this many times (2 to 10), the first now and the last after wait_ms" },
