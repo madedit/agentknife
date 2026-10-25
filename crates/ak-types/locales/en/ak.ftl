@@ -516,6 +516,7 @@ settings-read-add-tip = Pick a folder the AI may read without asking
 settings-crash-copy-tip = Copy this report, to share it when reporting a problem
 settings-crash-folder-tip = Open the folder with the crash reports
 settings-save-tip = Save these settings
+settings-cancel-tip = Undo the changes not saved yet
 
 ## Other AI tools operating AgentKnife (MCP)
 connect-external = Use an AI tool you already have (advanced)

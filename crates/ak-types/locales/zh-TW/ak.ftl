@@ -513,6 +513,7 @@ settings-read-add-tip = 選一個 AI 不用每次問就可以讀的資料夾
 settings-crash-copy-tip = 複製這份報告，回報問題時可以附上
 settings-crash-folder-tip = 打開放當機報告的資料夾
 settings-save-tip = 儲存這些設定
+settings-cancel-tip = 把還沒儲存的修改改回去
 
 ## Other AI tools operating AgentKnife (MCP)
 connect-external = 用你已經在用的 AI 工具（進階）

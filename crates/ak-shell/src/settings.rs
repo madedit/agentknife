@@ -77,6 +77,8 @@ pub fn SettingsScreen(
     let backend = StoredValue::new(expect_context::<Backend>());
     let loaded = initial.is_some();
     let s = RwSignal::new(initial.unwrap_or_default());
+    // The values as last saved, for "Cancel".
+    let last_saved = StoredValue::new(s.get_untracked());
     let reports = RwSignal::new(crash);
     let saved = RwSignal::new(false);
     let error = RwSignal::new(None::<String>);
@@ -89,6 +91,7 @@ pub fn SettingsScreen(
             let b = backend.get_value();
             if let Ok(v) = b.get_settings().await {
                 cap_text.set(v.daily_cap_usd.map(|c| c.to_string()).unwrap_or_default());
+                last_saved.set_value(v.clone());
                 s.set(v);
             }
             if let Ok(r) = b.crash_reports().await {
@@ -125,6 +128,7 @@ pub fn SettingsScreen(
             match b.save_settings(&value).await {
                 Ok(()) => {
                     tr.set_locale(i18n::chosen_locale(value.language));
+                    last_saved.set_value(value);
                     error.set(None);
                     saved.set(true);
                 }
@@ -132,17 +136,40 @@ pub fn SettingsScreen(
             }
         });
     };
+    // Back to the values as last saved.
+    let cancel = move |_| {
+        let v = last_saved.get_value();
+        cap_text.set(v.daily_cap_usd.map(|c| c.to_string()).unwrap_or_default());
+        s.set(v);
+        saved.set(false);
+        error.set(None);
+    };
     let language = move || s.with(|s| s.language.map(|l| l.tag().to_owned()).unwrap_or_default());
     let now = crate::backend::now();
 
     view! {
-        <div data-screen="settings" class="flex min-h-0 flex-1 justify-center overflow-auto bg-gray-50 p-6 dark:bg-gray-900">
+        <div data-screen="settings" class="flex min-h-0 flex-1 justify-center overflow-auto bg-gray-50 px-6 pb-6 dark:bg-gray-900">
             <div class="flex w-full max-w-2xl flex-col gap-4">
-                <div class="flex items-center justify-between gap-3">
-                    <h1 class="text-2xl font-semibold">{t("settings-title")}</h1>
-                    <button title=t("settings-close-tip") type="button" data-action="close-settings" class="text-sm text-blue-700 hover:underline dark:text-blue-300" on:click=move |_| on_close.run(())>
-                        {t("connect-back")}
-                    </button>
+                // Stays at the top while the page scrolls, so back and save are always at hand.
+                <div data-bar="settings" class="sticky top-0 z-10 -mx-2 flex flex-wrap items-center justify-between gap-3 bg-gray-50 px-2 pt-6 pb-3 dark:bg-gray-900">
+                    <div class="flex items-center gap-3">
+                        <button title=t("settings-close-tip") type="button" data-action="close-settings" class="text-sm text-blue-700 hover:underline dark:text-blue-300" on:click=move |_| on_close.run(())>
+                            {t("connect-back")}
+                        </button>
+                        <h1 class="text-2xl font-semibold">{t("settings-title")}</h1>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <Show when=move || saved.get()>
+                            <span data-saved="" class="text-sm text-green-700 dark:text-green-400">{t("settings-saved")}</span>
+                        </Show>
+                        {move || error.get().map(|e| view! { <span role="alert" class="text-sm text-red-700">{t("home-error")}" "{e}</span> })}
+                        <button title=t("settings-cancel-tip") type="button" data-action="cancel-settings" class="rounded-lg border border-gray-300 px-4 py-2 text-sm hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800" on:click=cancel>
+                            {t("common-cancel")}
+                        </button>
+                        <button title=t("settings-save-tip") type="button" data-action="save-settings" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" on:click=save>
+                            {t("settings-save")}
+                        </button>
+                    </div>
                 </div>
 
                 <Section title="settings-language">
@@ -371,15 +398,6 @@ pub fn SettingsScreen(
                     })}
                 </Section>
 
-                <div class="flex items-center justify-end gap-3 pb-6">
-                    <Show when=move || saved.get()>
-                        <span data-saved="" class="text-sm text-green-700 dark:text-green-400">{t("settings-saved")}</span>
-                    </Show>
-                    {move || error.get().map(|e| view! { <span role="alert" class="text-sm text-red-700">{t("home-error")}" "{e}</span> })}
-                    <button title=t("settings-save-tip") type="button" data-action="save-settings" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" on:click=save>
-                        {t("settings-save")}
-                    </button>
-                </div>
             </div>
         </div>
     }

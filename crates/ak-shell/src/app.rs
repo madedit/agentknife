@@ -279,8 +279,9 @@ fn TopBar(
         let other = external
             .names()
             .map(|names| t_with("shell-ai-external", [("names", names)])());
-        match (own, other) {
-            (Some(own), Some(other)) => format!("{own} · {other}"),
+        // The tool doing the work comes first (the label is cut off when long).
+        match (other, own) {
+            (Some(other), Some(own)) => format!("{other} · {own}"),
             (Some(one), None) | (None, Some(one)) => one,
             (None, None) => t("shell-ai-none")(),
         }
