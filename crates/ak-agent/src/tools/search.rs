@@ -70,6 +70,7 @@ impl Tool for SearchFiles {
                     .map(|e| e.into_path())
                     .collect();
                 files.sort();
+                let searched = files.len();
 
                 let files_only = args["files_only"].as_bool().unwrap_or(false);
                 let per_file = args["max_per_file"]
@@ -113,8 +114,16 @@ impl Tool for SearchFiles {
                         hits.push(format!("{name}: … {} more", found - per_file));
                     }
                 }
-                let mut out = if hits.is_empty() {
-                    "No matches.".to_owned()
+                // Say what was searched: a glob that matches no file (a guessed
+                // file name) looks the same as a pattern that matches no line.
+                let mut out = if searched == 0 {
+                    "No files to search there. Check the folder and the glob with list_files                      (file names are often not what you would guess)."
+                        .to_owned()
+                } else if hits.is_empty() {
+                    format!(
+                        "No matches in {searched} file{}.",
+                        if searched == 1 { "" } else { "s" }
+                    )
                 } else {
                     hits.join("\n")
                 };
@@ -163,6 +172,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_file_as_path_searches_that_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = ToolContext::for_project(dir.path());
+        std::fs::create_dir_all(dir.path().join("src")).unwrap();
+        std::fs::write(
+            dir.path().join("src/gen_Canvas.rs"),
+            "pub fn fill_text() {}
+",
+        )
+        .unwrap();
+        for glob in [None, Some("*.rs"), Some("other.rs")] {
+            let mut args = json!({ "pattern": "fill_text", "path": "src/gen_Canvas.rs" });
+            if let Some(g) = glob {
+                args["glob"] = json!(g);
+            }
+            let out = text(&SearchFiles.call(args, &c).await);
+            assert_eq!(
+                out, "src/gen_Canvas.rs:1: pub fn fill_text() {}",
+                "glob {glob:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn finds_lines_with_glob_and_case() {
         let dir = tempfile::tempdir().unwrap();
         let c = ToolContext::for_project(dir.path());
@@ -192,8 +225,14 @@ mod tests {
         assert_eq!(rs, "src/app.rs:2: let Button = 1;");
         assert_eq!(
             text(&SearchFiles.call(json!({ "pattern": "zzz" }), &c).await),
-            "No matches."
+            "No matches in 3 files."
         );
+        let none = text(
+            &SearchFiles
+                .call(json!({ "pattern": "x", "glob": "*canvas*" }), &c)
+                .await,
+        );
+        assert!(none.starts_with("No files to search there."), "{none}");
         let bad = SearchFiles.call(json!({ "pattern": "(" }), &c).await;
         assert!(bad.is_error && text(&bad).contains("Invalid pattern"));
     }

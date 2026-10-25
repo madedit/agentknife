@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.15"
+version = "0.2.16"
 
 [versions]
 tauri = "2.12.4"
@@ -45,7 +45,7 @@ file = "browser.md"
 [[topic]]
 id = "canvas"
 title = "Canvas editors"
-summary = "Flow charts, diagrams, maps: a stage with pointer capture, pan and zoom with one transform, screen to drawing coordinates, wheel zoom with a non-passive listener, SVG lines with a wide hit path, fit-zoom limits, shortcut keys that skip fields."
+summary = "Flow charts, diagrams, maps: a stage with pointer capture, pan and zoom with one transform, screen to drawing coordinates, wheel zoom with a non-passive listener, SVG lines with a wide hit path, fit-zoom limits, shortcut keys that skip fields; big grids drawn on a <canvas> (2D context, only the visible rows, scrolling)."
 file = "canvas.md"
 
 [[topic]]

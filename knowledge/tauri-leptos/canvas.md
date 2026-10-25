@@ -223,6 +223,58 @@ fn Stage() -> impl IntoView {
   ```
   and at the start of the key handler: `if is_typing() { return; }`.
 
+## Drawing on a `<canvas>` (big grids, charts with thousands of points)
+Thousands of cells as elements make scrolling slow; a `<canvas>` that draws only
+the visible part stays fast. Features: add `HtmlCanvasElement` and
+`CanvasRenderingContext2d` to web-sys.
+- Get the context from the element of a `NodeRef::<leptos::html::Canvas>`, and
+  keep it in `StoredValue::new_local(…)`: it is not `Send`, so `StoredValue::new`
+  does not take it.
+- Scrolling: an `overflow-auto` box holds a `<div>` as big as the whole grid
+  (it only makes the scroll bars) and the canvas `sticky top-0 left-0` on top.
+  On `scroll`, read `scroll_top()` / `scroll_left()` (whole pixels, `i32`; the
+  setters take `i32` too: `x as i32`) and draw again.
+- Sharp on high-DPI screens: canvas `width`/`height` = CSS size ×
+  `window.device_pixel_ratio()`, then `ctx.scale(ratio, ratio)` once.
+- Colours take a string: `set_fill_style_str("#111827")`,
+  `set_stroke_style_str(…)`; `fill_text` returns a `Result` (`let _ =`).
+- Mouse: `on:pointerdown` gives a `PointerEvent`, `on:dblclick` a `MouseEvent`;
+  a helper used by both takes `&web_sys::MouseEvent` (`&*e` from a pointer event).
+- Typing into a cell: a real `<input>` placed over the cell while editing (IME
+  and the clipboard then just work); copy and paste for the selection: topic
+  `leptos-components`.
+```rust
+use wasm_bindgen::JsCast;
+
+const ROW: f64 = 24.0;
+
+/// The 2D drawing context of a `<canvas>`.
+fn context_2d(canvas: &web_sys::HtmlCanvasElement) -> Option<web_sys::CanvasRenderingContext2d> {
+    canvas.get_context("2d").ok()??.dyn_into().ok()
+}
+
+/// Draws only the rows on screen: `first..first + count`.
+fn draw_rows(
+    ctx: &web_sys::CanvasRenderingContext2d,
+    width: f64,
+    first: usize,
+    count: usize,
+    cell: impl Fn(usize) -> String,
+) {
+    ctx.clear_rect(0.0, 0.0, width, count as f64 * ROW);
+    ctx.set_font("14px sans-serif");
+    for i in 0..count {
+        let y = i as f64 * ROW;
+        ctx.set_stroke_style_str("#e5e7eb");
+        ctx.stroke_rect(0.0, y, width, ROW);
+        ctx.set_fill_style_str("#111827");
+        let _ = ctx.fill_text(&cell(first + i), 6.0, y + 17.0);
+    }
+}
+```
+With `scroll_top` from the box: `first = scroll_top as usize / 24`, `count` =
+the box's height / 24 + 2.
+
 ## Checking it in the preview
 - `interact` `click` works on SVG shapes that have a `data-ak-id` (the hit
   path), and `dom_summary` lists them (SVG parts without one, such as icons, are

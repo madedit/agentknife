@@ -194,7 +194,7 @@ fn first_errors(output: &str, keep: usize) -> String {
 }
 
 /// Errors after the shown ones that are listed by their first line and place.
-const LISTED_ERRORS: usize = 10;
+const LISTED_ERRORS: usize = 40;
 
 /// The backend's crashes, for the agent ("" when there are none).
 pub fn describe_crashes(crashes: &[String]) -> String {

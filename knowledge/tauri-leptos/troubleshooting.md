@@ -75,6 +75,33 @@ builds again.
   "not found") — it lives on a more exact type: `dyn_ref::<web_sys::Text>()`,
   `dyn_into::<web_sys::HtmlDocument>()` (topic `browser`), or its feature is
   missing.
+- **`spawn_local` not found** (in this scope, or in `leptos`) — it is
+  `leptos::task::spawn_local(async move { … })`; **`{async closure}` is not a
+  future** — pass an `async move { … }` block, not `async move || …`.
+- **`cannot find value usize`** — a type where a value belongs:
+  `RwSignal::new((0usize, 0usize))`, not `(0usize, usize)`.
+- **`no method named take_value`**, or **`the ? operator can only be used in a
+  closure that returns Result or Option`** inside `update_value` — use
+  `try_update_value(|v| …)`, which returns what the closure returns (topic
+  `leptos-reactivity`).
+- **E0204 `this field does not implement Copy`** on `#[derive(Copy)]` — a `Cell`,
+  `String` or `Vec` field: make it a signal or drop `Copy`.
+- **`StoredValue<…>: Send` / `Sync` is not satisfied** for a canvas context or a
+  JS `Closure` — `StoredValue::new_local(…)`.
+- **A window listener stops working, with no error** — it was added with
+  `Closure::wrap` and the `Closure` was dropped: use `window_event_listener` and
+  `on_cleanup(move || handle.remove())` (topic `leptos-components`).
+- **`expected &PointerEvent, found &MouseEvent`** — `on:dblclick` and `on:click`
+  give a `MouseEvent`: a helper used by both takes `&web_sys::MouseEvent` (a
+  `PointerEvent` derefs to it: `&*e`).
+- **`expected i32, found f64`** on `set_scroll_left` / `set_scroll_top` — they
+  take whole pixels: `x as i32`.
+- **`no method named clipboard_data` / `key` / … found** — a web-sys feature is
+  missing; the message does not say which: it is named after the type that has
+  the method (`ClipboardEvent`, `DataTransfer`, …; topic `browser`).
+- **Many errors at once** — `build_status` shows the first ones in full and lists
+  the rest by file: fix them file by file in one pass, then call `build_status`
+  again, rather than one error per build.
 - **`cannot find module or crate ev`** — `use leptos::ev;`, or leave the event's
   type out: `move |_| …`.
 - **`expected function, found macro format`**, or a string with `` ` `` and

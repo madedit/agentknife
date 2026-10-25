@@ -1590,3 +1590,69 @@ fn parse_date(cell: &str) -> Option<String> {
 fn column(header: &[String], names: &[&str]) -> Option<usize> {
     header.iter().position(|h| names.contains(&h.trim()))
 }
+
+// ---- leptos-components: copy and paste ----
+fn clipboard_listeners(
+    selected_text: impl Fn() -> String + 'static,
+    paste_text: impl Fn(&str) + 'static,
+) {
+    use leptos::ev;
+    let copy = window_event_listener(ev::copy, move |e| {
+        if is_typing() {
+            return; // a text field copies its own text
+        }
+        if let Some(data) = e.clipboard_data() {
+            let _ = data.set_data("text/plain", &selected_text());
+            e.prevent_default();
+        }
+    });
+    let paste = window_event_listener(ev::paste, move |e| {
+        if is_typing() {
+            return;
+        }
+        if let Some(text) = e.clipboard_data().and_then(|d| d.get_data("text/plain").ok()) {
+            paste_text(&text); // cells from Excel: rows split by '\n', columns by '\t'
+            e.prevent_default();
+        }
+    });
+    on_cleanup(move || {
+        copy.remove();
+        paste.remove();
+    });
+}
+
+// ---- leptos-reactivity: taking a value out of a StoredValue ----
+fn drag_end() -> Option<(f64, f64)> {
+    let drag = StoredValue::new(None::<(f64, f64)>);
+    // Takes the value out and leaves None (e.g. at pointerup).
+    let end_drag = move || drag.try_update_value(Option::take).flatten();
+    end_drag()
+}
+
+// ---- canvas: drawing on a <canvas> ----
+const ROW: f64 = 24.0;
+
+/// The 2D drawing context of a `<canvas>`.
+fn context_2d(canvas: &web_sys::HtmlCanvasElement) -> Option<web_sys::CanvasRenderingContext2d> {
+    use wasm_bindgen::JsCast;
+    canvas.get_context("2d").ok()??.dyn_into().ok()
+}
+
+/// Draws only the rows on screen: `first..first + count`.
+fn draw_rows(
+    ctx: &web_sys::CanvasRenderingContext2d,
+    width: f64,
+    first: usize,
+    count: usize,
+    cell: impl Fn(usize) -> String,
+) {
+    ctx.clear_rect(0.0, 0.0, width, count as f64 * ROW);
+    ctx.set_font("14px sans-serif");
+    for i in 0..count {
+        let y = i as f64 * ROW;
+        ctx.set_stroke_style_str("#e5e7eb");
+        ctx.stroke_rect(0.0, y, width, ROW);
+        ctx.set_fill_style_str("#111827");
+        let _ = ctx.fill_text(&cell(first + i), 6.0, y + 17.0);
+    }
+}

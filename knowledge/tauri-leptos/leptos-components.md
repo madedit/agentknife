@@ -93,6 +93,38 @@ fn Page() -> impl IntoView {
   });
   on_cleanup(move || keys.remove());
   ```
+  `window_event_listener` (and `window_event_listener_untyped("name", …)` for an
+  event by its name) is in the prelude. Do not add window listeners with
+  `Closure::wrap` + `add_event_listener_with_callback`: once the `Closure` is
+  dropped, the listener stops without any error ("clicking does nothing").
+- Copy, cut and paste for your own grid or canvas (web-sys features
+  `ClipboardEvent` and `DataTransfer`): the window's `copy` and `paste` events
+  carry the text, so other programs (Excel, Notes) work with it too:
+  ```rust
+  let copy = window_event_listener(ev::copy, move |e| {
+      if is_typing() {
+          return; // a text field copies its own text
+      }
+      if let Some(data) = e.clipboard_data() {
+          let _ = data.set_data("text/plain", &selected_text());
+          e.prevent_default();
+      }
+  });
+  let paste = window_event_listener(ev::paste, move |e| {
+      if is_typing() {
+          return;
+      }
+      if let Some(text) = e.clipboard_data().and_then(|d| d.get_data("text/plain").ok()) {
+          paste_text(&text); // cells from Excel: rows split by '\n', columns by '\t'
+          e.prevent_default();
+      }
+  });
+  on_cleanup(move || {
+      copy.remove();
+      paste.remove();
+  });
+  ```
+  Cut is `ev::cut`: copy, then clear the cells.
   Apps with text fields: skip the shortcut keys while the user types (Delete in
   a name field must not delete the selected item): topic `canvas`, `is_typing`.
 - One handler used in several places (two events, many rows): a closure that

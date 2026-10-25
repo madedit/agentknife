@@ -107,7 +107,7 @@ pub fn check_build(root: &Path) -> Result<()> {
     std::fs::write(&backend, tray)?;
     add_deps(
         &out.join("Cargo.toml"),
-        "serde_json = \"1.0.154\"\njs-sys = \"0.3.106\"\nwasm-bindgen-futures = \"0.4.79\"\nweb-sys = { version = \"0.3.106\", features = [\"HtmlCanvasElement\", \"Storage\", \"Window\", \"Navigator\", \"Clipboard\", \"Document\", \"Element\", \"HtmlInputElement\", \"EventTarget\", \"Request\", \"RequestInit\", \"Response\", \"AbortController\", \"AbortSignal\", \"HtmlDocument\", \"Node\", \"Text\", \"CharacterData\", \"DragEvent\", \"DataTransfer\", \"DomRect\", \"AddEventListenerOptions\", \"WheelEvent\", \"PointerEvent\", \"HtmlElement\"] }\n",
+        "serde_json = \"1.0.154\"\njs-sys = \"0.3.106\"\nwasm-bindgen-futures = \"0.4.79\"\nweb-sys = { version = \"0.3.106\", features = [\"HtmlCanvasElement\", \"Storage\", \"Window\", \"Navigator\", \"Clipboard\", \"Document\", \"Element\", \"HtmlInputElement\", \"EventTarget\", \"Request\", \"RequestInit\", \"Response\", \"AbortController\", \"AbortSignal\", \"HtmlDocument\", \"Node\", \"Text\", \"CharacterData\", \"DragEvent\", \"DataTransfer\", \"DomRect\", \"AddEventListenerOptions\", \"WheelEvent\", \"PointerEvent\", \"HtmlElement\", \"ClipboardEvent\", \"CanvasRenderingContext2d\"] }\n",
     )?;
 
     let pinned = Pinned::builtin()?;

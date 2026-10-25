@@ -65,6 +65,11 @@ let load = move |_| {
     });
 };
 ```
+`spawn_local` is not in the prelude: write `leptos::task::spawn_local` (plain
+`spawn_local` gives "not found in this scope", `leptos::spawn_local` "not found in
+`leptos`"). It takes an `async move { … }` block, not a closure (`async move ||`
+gives "`{async closure}` is not a future").
+
 To load once when a screen opens:
 ```rust
 let loaded = LocalResource::new(|| async {
@@ -151,3 +156,26 @@ Or pass signals as props (`todos: RwSignal<Vec<Todo>>`) — they are Copy.
       seq.get_value()
   };
   ```
+  `get_value()` returns a copy of the whole value (`StoredValue<Option<T>>` gives
+  `Option<T>`); `try_get_value()` adds one more `Option` (`None` once the
+  component is gone). There is no `take_value`. To get something out of an
+  update, use `try_update_value`, which returns what the closure returns; the
+  closure of `update_value` returns `()`, so `?` cannot be used in it:
+  ```rust
+  let drag = StoredValue::new(None::<(f64, f64)>);
+  // Takes the value out and leaves None (e.g. at pointerup).
+  let end_drag = move || drag.try_update_value(Option::take).flatten();
+  ```
+  A value that is not `Send` (a canvas's 2D context, a JS `Closure`) needs
+  `StoredValue::new_local(…)`; `StoredValue::new` asks for `Send + Sync`.
+- `#[derive(Clone, Copy)]` on a struct of state works only when every field is
+  `Copy` (signals, `StoredValue`, numbers); a `Cell`, `RefCell`, `String` or `Vec`
+  gives E0204 "this field does not implement `Copy`". Use a signal for the field,
+  or drop `Copy`.
+- Closures in a component can only use closures written above them (`cannot find
+  function step` when `stop_edit` calls `step` defined later): write the ones
+  that use nothing else first.
+- One action for a button and a shortcut key: a closure that captures only `Copy`
+  values (signals, `StoredValue`, numbers) is `Copy` itself and can be used in
+  both. Otherwise make it a `Callback::new(…)` (or `UnsyncCallback::new(…)` when
+  it captures something not `Send`), both in the prelude, and call `.run(x)`.
