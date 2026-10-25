@@ -143,19 +143,22 @@ async fn connection(
     if write.write_all(b"OK\n").await.is_err() {
         return;
     }
+    let admitted = Arc::new(Mutex::new(None));
     let handler = Handler {
         host: host.clone(),
         id,
-        client: Mutex::new(None),
+        admission: tokio::sync::Mutex::new(Admission::Pending),
+        admitted: admitted.clone(),
     };
-    let Ok(running) = handler.serve((read, write)).await else {
-        return;
-    };
-    let client = running.service().client();
-    tokio::select! {
-        _ = stop.cancelled() => {}
-        _ = running.waiting() => {}
+    // Initialize runs inside `serve` for older clients; newer ones are let in
+    // on their first request, so who connected is known only afterwards.
+    if let Ok(running) = handler.serve((read, write)).await {
+        tokio::select! {
+            _ = stop.cancelled() => {}
+            _ = running.waiting() => {}
+        }
     }
+    let client = admitted.lock().ok().and_then(|c| c.clone());
     if let Some(c) = client {
         host.disconnected(&c);
     }
@@ -181,13 +184,53 @@ fn hello_ok(line: &str, token: &str) -> bool {
 struct Handler {
     host: Arc<dyn McpHost>,
     id: u64,
-    client: Mutex<Option<Client>>,
+    /// Held while the user is asked, so a second request waits for the answer.
+    admission: tokio::sync::Mutex<Admission>,
+    /// The client once let in (for `disconnected`).
+    admitted: Arc<Mutex<Option<Client>>>,
+}
+
+enum Admission {
+    Pending,
+    In(Client),
+    Out,
 }
 
 impl Handler {
-    fn client(&self) -> Option<Client> {
-        self.client.lock().ok().and_then(|c| c.clone())
+    /// Lets the client in on its first request: `initialize` (protocols up to
+    /// 2025-11-25), or any request from a 2026-07-28 client, which has no
+    /// handshake and names itself in each request's metadata. Asked once per
+    /// connection; nothing is listed or run before the user agrees.
+    async fn admit(&self, info: Option<Implementation>) -> Result<Client, ErrorData> {
+        let mut admission = self.admission.lock().await;
+        match &*admission {
+            Admission::In(c) => return Ok(c.clone()),
+            Admission::Out => return Err(refused()),
+            Admission::Pending => {}
+        }
+        let client = Client {
+            id: self.id,
+            name: info
+                .as_ref()
+                .map_or_else(|| "AI tool".to_owned(), display_name),
+        };
+        if !self.host.connected(&client).await {
+            *admission = Admission::Out;
+            return Err(refused());
+        }
+        if let Ok(mut a) = self.admitted.lock() {
+            *a = Some(client.clone());
+        }
+        *admission = Admission::In(client.clone());
+        Ok(client)
     }
+}
+
+fn refused() -> ErrorData {
+    ErrorData::invalid_request(
+        "The user did not allow this tool to operate AgentKnife.",
+        None,
+    )
 }
 
 /// The name a person knows a client by.
@@ -258,27 +301,16 @@ impl ServerHandler for Handler {
         context: RequestContext<RoleServer>,
     ) -> Result<InitializeResult, ErrorData> {
         context.peer.set_peer_info(request.clone());
-        let client = Client {
-            id: self.id,
-            name: display_name(&request.client_info),
-        };
-        if !self.host.connected(&client).await {
-            return Err(ErrorData::invalid_request(
-                "The user did not allow this tool to operate AgentKnife.",
-                None,
-            ));
-        }
-        if let Ok(mut c) = self.client.lock() {
-            *c = Some(client);
-        }
+        self.admit(Some(request.client_info.clone())).await?;
         self.negotiate_initialize(&request)
     }
 
     async fn list_tools(
         &self,
         _: Option<PaginatedRequestParams>,
-        _: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
+        self.admit(context.client_info()).await?;
         Ok(ListToolsResult::with_all_items(
             self.host.tools().into_iter().map(mcp_tool).collect(),
         ))
@@ -289,9 +321,7 @@ impl ServerHandler for Handler {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, ErrorData> {
-        let Some(client) = self.client() else {
-            return Err(ErrorData::invalid_request("not initialized", None));
-        };
+        let client = self.admit(context.client_info()).await?;
         let mut args = Value::Object(request.arguments.unwrap_or_default());
         let label = args
             .as_object_mut()

@@ -174,3 +174,60 @@ async fn a_wrong_token_or_a_declined_client_gets_nothing() {
     assert!(claude().serve(stream).await.is_err(), "initialize refused");
     assert!(host.calls.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn a_client_without_a_handshake_is_asked_before_anything() {
+    use rmcp::model::ProtocolVersion;
+    use rmcp::service::{ClientLifecycleMode, ClientServiceExt};
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("mcp.json");
+    let modern = || ClientLifecycleMode::Discover {
+        preferred_versions: vec![ProtocolVersion::V_2026_07_28],
+    };
+
+    // The user says no: not even the list.
+    let host = Arc::new(FakeHost::default());
+    let server = Server::start(host.clone(), file.clone()).await.unwrap();
+    let token = Endpoint::read(&file).unwrap().token.unwrap();
+    let (stream, _) = open(&file, &token).await;
+    let client = claude()
+        .serve_with_lifecycle(stream, modern())
+        .await
+        .unwrap();
+    assert!(client.list_all_tools().await.is_err());
+    assert!(
+        client
+            .call_tool(CallToolRequestParams::new("read_file"))
+            .await
+            .is_err()
+    );
+    assert_eq!(*host.seen.lock().unwrap(), ["+Claude Code"], "asked once");
+    assert!(host.calls.lock().unwrap().is_empty());
+    drop(server);
+
+    // The user says yes.
+    let host = Arc::new(FakeHost {
+        allow: true,
+        ..FakeHost::default()
+    });
+    let _server = Server::start(host.clone(), file.clone()).await.unwrap();
+    let token = Endpoint::read(&file).unwrap().token.unwrap();
+    let (stream, _) = open(&file, &token).await;
+    let client = claude()
+        .serve_with_lifecycle(stream, modern())
+        .await
+        .unwrap();
+    assert_eq!(client.list_all_tools().await.unwrap().len(), 1);
+    let mut call = CallToolRequestParams::new("read_file");
+    call.arguments = json!({ "path": "a.rs" }).as_object().cloned();
+    assert_eq!(client.call_tool(call).await.unwrap().is_error, Some(false));
+    assert_eq!(host.calls.lock().unwrap()[0].0, "Claude Code");
+    client.cancel().await.unwrap();
+    for _ in 0..50 {
+        if host.seen.lock().unwrap().len() == 2 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(*host.seen.lock().unwrap(), ["+Claude Code", "-Claude Code"]);
+}
