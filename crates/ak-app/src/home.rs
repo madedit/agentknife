@@ -14,6 +14,7 @@ use ak_types::ipc::{
 use ak_types::stack::StackProfile;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_opener::OpenerExt;
 use tokio::sync::Mutex;
 
 use crate::state::{AppState, OpenProject};
@@ -92,6 +93,35 @@ pub async fn delete_project(state: State<'_, AppState>, request: DeleteProject) 
         .forget(&request.id)
         .map_err(fail)?;
     home_state(state).await
+}
+
+/// Opens a project's folder in the file manager: a listed project by id, or
+/// the open one. Only project folders (the window names none itself).
+#[tauri::command]
+pub async fn open_in_files<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    request: Option<String>,
+) -> Res<()> {
+    let folder = {
+        let inner = state.inner.lock().await;
+        match &request {
+            Some(id) => inner
+                .registry
+                .recent()
+                .into_iter()
+                .find(|r| &r.entry.id == id)
+                .map(|r| r.entry.path),
+            None => inner.open.as_ref().map(|o| o.root.clone()),
+        }
+    }
+    .ok_or_else(|| fail("no such project"))?;
+    if !folder.is_dir() {
+        return Err(fail("the project folder is missing"));
+    }
+    app.opener()
+        .open_path(folder.display().to_string(), None::<&str>)
+        .map_err(fail)
 }
 
 /// Moves a folder to the system's trash. Windows releases the files of just

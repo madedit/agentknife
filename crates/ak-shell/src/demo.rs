@@ -337,7 +337,8 @@ impl Demo {
             | cmd::REVEAL
             | cmd::CLEAR_LOG
             | cmd::SET_SELECTION
-            | cmd::OPEN_TERMINAL => Ok(Value::Null),
+            | cmd::OPEN_TERMINAL
+            | cmd::OPEN_IN_FILES => Ok(Value::Null),
             cmd::GET_LOG => Ok(json!(demo_log())),
             cmd::GET_SETTINGS => {
                 let mut s = d.settings.clone();

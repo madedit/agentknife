@@ -186,18 +186,7 @@ pub fn ExternalStep(
     let connected = move || external.names();
     view! {
         <section data-step="external" class="mt-6 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-950">
-            <h2 class="text-lg font-medium">{name}</h2>
-            <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">{about}</p>
-            <div class="mt-4">
-                <SetupCommand tool />
-            </div>
-            <p data-external-state="" class="mt-4 text-sm" aria-live="polite">
-                {move || match connected() {
-                    Some(names) => t_with("external-connected", [("names", names)])(),
-                    None => waiting(),
-                }}
-            </p>
-            <div class="mt-5 flex gap-2">
+            <div data-bar="step" class=crate::connect::STEP_BAR>
                 <button title=t("connect-back-tip") type="button" class=SECONDARY on:click=move |_| on_back.run(())>
                     {t("connect-back")}
                 </button>
@@ -214,6 +203,17 @@ pub fn ExternalStep(
                     </button>
                 })}
             </div>
+            <h2 class="text-lg font-medium">{name}</h2>
+            <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">{about}</p>
+            <div class="mt-4">
+                <SetupCommand tool />
+            </div>
+            <p data-external-state="" class="mt-4 text-sm" aria-live="polite">
+                {move || match connected() {
+                    Some(names) => t_with("external-connected", [("names", names)])(),
+                    None => waiting(),
+                }}
+            </p>
         </section>
     }
 }

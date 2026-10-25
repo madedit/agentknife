@@ -494,6 +494,9 @@ files-reload-tip = Show the AI’s version of the file; your unsaved changes are
 files-keep-mine-tip = Keep what you typed; saving overwrites the AI’s change
 home-open-project-tip = Open this project
 home-delete-tip = Remove this project from the list (asks first)
+home-open-files = Open in file manager
+home-open-files-tip = Open this project’s folder in the file manager
+files-open-files-tip = Open this project’s folder in the file manager
 home-delete-forget-tip = Only take it off this list; the folder stays where it is
 home-delete-trash-tip = { $os ->
     [macos] Take it off the list and move its folder to the Trash; you can still get it back from there

@@ -331,7 +331,22 @@ pub fn FilesPane(layout: RwSignal<Layout>) -> impl IntoView {
     let open_path = move || files.open.with(|o| o.as_ref().map(|o| o.path.clone()));
     view! {
         <section data-pane="file-list" class="flex min-h-0 flex-1 flex-col">
-            <Heading text="shell-files" />
+            <Heading text="shell-files">
+                <button
+                    title=t("files-open-files-tip")
+                    type="button"
+                    data-action="open-in-files"
+                    class="rounded px-2 py-0.5 text-xs text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950"
+                    on:click=move |_| {
+                        let backend = backend.get_value();
+                        leptos::task::spawn_local(async move {
+                            let _ = backend.open_in_files(None).await;
+                        });
+                    }
+                >
+                    {t("home-open-files")}
+                </button>
+            </Heading>
             <Show
                 when=move || files.entries.with(|e| !e.is_empty())
                 fallback=|| view! { <p class="px-4 text-sm text-gray-500 dark:text-gray-400">{t("shell-files-empty")}</p> }

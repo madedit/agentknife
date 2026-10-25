@@ -358,6 +358,14 @@ fn ChooseStep(w: RwSignal<Wizard>, on_cancel: Option<Callback<()>>) -> impl Into
         })
     };
     view! {
+        // At the top, staying in view while the page scrolls.
+        {on_cancel.map(|cancel| view! {
+            <div data-bar="step" class="sticky top-0 z-10 -mx-6 mt-4 bg-gray-50 px-6 py-2 dark:bg-gray-900">
+                <button title=t("common-cancel-tip") type="button" class=SECONDARY on:click=move |_| cancel.run(())>
+                    {t("common-cancel")}
+                </button>
+            </div>
+        })}
         {move || current().map(|(name, model)| view! {
             <p data-current-ai="" class="mt-4 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-100">
                 {t_with("connect-current", [("name", name), ("model", model)])}
@@ -388,13 +396,6 @@ fn ChooseStep(w: RwSignal<Wizard>, on_cancel: Option<Callback<()>>) -> impl Into
                 }).collect_view()}
             </div>
         </section>
-        {on_cancel.map(|cancel| view! {
-            <div class="mt-6">
-                <button title=t("common-cancel-tip") type="button" class=SECONDARY on:click=move |_| cancel.run(())>
-                    {t("common-cancel")}
-                </button>
-            </div>
-        })}
     }
 }
 
@@ -407,6 +408,10 @@ fn choice_name(p: &ProviderPreset) -> impl Fn() -> String + Send + Sync + 'stati
         tr(format!("connect-preset-{}", p.id))
     }
 }
+
+/// The step's buttons: at the top of the card, staying in view while the page
+/// scrolls.
+pub(crate) const STEP_BAR: &str = "sticky top-0 z-10 -mx-5 -mt-5 mb-4 flex flex-wrap gap-2 rounded-t-xl border-b border-gray-200 bg-white px-5 py-3 dark:border-gray-700 dark:bg-gray-950";
 
 const PRIMARY: &str = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50";
 const SECONDARY: &str = "rounded-lg border border-gray-300 px-4 py-2 text-sm hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800";
@@ -422,6 +427,21 @@ fn DetailsStep(
     let test2 = test.clone();
     view! {
         <section data-step="details" class="mt-6 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-950">
+            <div data-bar="step" class=STEP_BAR>
+                <button title=t("connect-back-tip") type="button" class=SECONDARY on:click=move |_| w.update(Wizard::back)>
+                    {t("connect-back")}
+                </button>
+                <button
+                    title=t("connect-test-tip")
+                    type="button"
+                    data-action="test"
+                    class=PRIMARY
+                    disabled=move || !w.with(Wizard::can_test)
+                    on:click=move |_| test2()
+                >
+                    {move || if w.with(|w| w.busy) { t("connect-testing")() } else { t("connect-test")() }}
+                </button>
+            </div>
             <h2 class="text-lg font-medium">{name}</h2>
             <Show when=move || w.with(Wizard::shows_address)>
                 <label class="mt-4 block text-sm font-medium">
@@ -490,21 +510,6 @@ fn DetailsStep(
                 </a>
             })}
             <ErrorBox w />
-            <div class="mt-5 flex gap-2">
-                <button title=t("connect-back-tip") type="button" class=SECONDARY on:click=move |_| w.update(Wizard::back)>
-                    {t("connect-back")}
-                </button>
-                <button
-                    title=t("connect-test-tip")
-                    type="button"
-                    data-action="test"
-                    class=PRIMARY
-                    disabled=move || !w.with(Wizard::can_test)
-                    on:click=move |_| test2()
-                >
-                    {move || if w.with(|w| w.busy) { t("connect-testing")() } else { t("connect-test")() }}
-                </button>
-            </div>
         </section>
     }
 }
@@ -529,6 +534,21 @@ fn ModelStep(
     };
     view! {
         <section data-step="model" class="mt-6 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-950">
+            <div data-bar="step" class=STEP_BAR>
+                <button title=t("connect-back-tip") type="button" class=SECONDARY on:click=move |_| w.update(Wizard::back)>
+                    {t("connect-back")}
+                </button>
+                <button
+                    title=t("connect-save-tip")
+                    type="button"
+                    data-action="save"
+                    class=PRIMARY
+                    disabled=move || !w.with(Wizard::can_save)
+                    on:click=move |_| save()
+                >
+                    {t("connect-save")}
+                </button>
+            </div>
             <p class="text-sm text-green-700 dark:text-green-400">{t("connect-ok")}</p>
             <label class="mt-4 block text-sm font-medium">
                 {t("connect-model")}
@@ -547,21 +567,6 @@ fn ModelStep(
                 }
             }}
             <ErrorBox w />
-            <div class="mt-5 flex gap-2">
-                <button title=t("connect-back-tip") type="button" class=SECONDARY on:click=move |_| w.update(Wizard::back)>
-                    {t("connect-back")}
-                </button>
-                <button
-                    title=t("connect-save-tip")
-                    type="button"
-                    data-action="save"
-                    class=PRIMARY
-                    disabled=move || !w.with(Wizard::can_save)
-                    on:click=move |_| save()
-                >
-                    {t("connect-save")}
-                </button>
-            </div>
         </section>
     }
 }

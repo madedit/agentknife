@@ -112,6 +112,9 @@ pub mod cmd {
     /// `()` → `()`: opens a terminal in the projects folder (setting up
     /// another AI tool there).
     pub const OPEN_TERMINAL: &str = "open_terminal";
+    /// `Option<String>` (a project's id; `None`: the open project) → `()`:
+    /// opens its folder in the file manager.
+    pub const OPEN_IN_FILES: &str = "open_in_files";
     /// `()` → [`McpStatus`](super::McpStatus); changes then arrive as
     /// [`MCP_EVENT`](super::MCP_EVENT).
     pub const MCP_STATUS: &str = "mcp_status";
@@ -162,6 +165,7 @@ pub mod cmd {
         SET_MCP,
         SET_SELECTION,
         OPEN_TERMINAL,
+        OPEN_IN_FILES,
     ];
 }
 

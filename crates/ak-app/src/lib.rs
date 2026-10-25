@@ -86,6 +86,7 @@ const COMMANDS: &[&str] = &[
     "set_mcp",
     "set_selection",
     "open_terminal",
+    "open_in_files",
 ];
 
 /// The app's state and commands on `builder` (plugins are the caller's).
@@ -134,6 +135,7 @@ pub fn with_commands<R: Runtime>(builder: Builder<R>, state: state::AppState) ->
             mcp::set_mcp,
             workspace::set_selection,
             mcp::open_terminal,
+            home::open_in_files,
         ])
         .setup(|app| {
             // Listens for other AI tools when the setting is on.

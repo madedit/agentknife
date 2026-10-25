@@ -491,6 +491,9 @@ files-reload-tip = 顯示 AI 改過的檔案，你還沒存的修改會不見
 files-keep-mine-tip = 保留你打的內容；存檔時會蓋掉 AI 的修改
 home-open-project-tip = 打開這個專案
 home-delete-tip = 把這個專案從清單移除（會先問你）
+home-open-files = 用檔案管理員打開
+home-open-files-tip = 在檔案管理員打開這個專案的資料夾
+files-open-files-tip = 在檔案管理員打開這個專案的資料夾
 home-delete-forget-tip = 只從這個清單拿掉，資料夾留在原地
 home-delete-trash-tip = { $os ->
     [macos] 從清單拿掉，資料夾移到垃圾桶，之後還能從那裡救回來

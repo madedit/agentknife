@@ -103,6 +103,8 @@ pub fn HomeScreen(
         }
     };
 
+    // For the rows' "open in file manager".
+    let files_backend = StoredValue::new(expect_context::<Backend>());
     let rows = move || {
         home.with(|h| h.projects.clone())
             .into_iter()
@@ -150,6 +152,25 @@ pub fn HomeScreen(
                                 <span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
                                     {if exists { when } else { t("home-missing")() }}
                                 </span>
+                            </button>
+                            <button
+                                title=t("home-open-files-tip")
+                                type="button"
+                                data-action="open-in-files"
+                                data-for=row.id.clone()
+                                disabled=!exists
+                                class="shrink-0 rounded-md px-2.5 py-1 text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+                                on:click={
+                                    let id = id.clone();
+                                    move |_| {
+                                        let (backend, id) = (files_backend.get_value(), id.clone());
+                                        leptos::task::spawn_local(async move {
+                                            let _ = backend.open_in_files(Some(&id)).await;
+                                        });
+                                    }
+                                }
+                            >
+                                {t("home-open-files")}
                             </button>
                             <button
                                 title=t("home-delete-tip")
