@@ -90,6 +90,8 @@ pub struct AppState {
     pub pinned: ak_doctor::Pinned,
     /// Used instead of the connection's AI (tests: a scripted one).
     pub provider: Option<Arc<dyn Provider>>,
+    /// Other AI tools operating AgentKnife (MCP).
+    pub mcp: crate::mcp::McpState,
 }
 
 impl AppState {
@@ -123,6 +125,7 @@ impl AppState {
             pinned,
             state_dir,
             provider: None,
+            mcp: crate::mcp::McpState::default(),
         })
     }
 }

@@ -629,9 +629,12 @@ fn Interrupted(request: String) -> impl IntoView {
 fn Composer() -> impl IntoView {
     let chat = expect_context::<Chat>();
     let text = RwSignal::new(String::new());
+    // Another AI tool is working: the user talks to it in its own window.
+    let external = crate::external::External::get();
     let busy = move || {
         chat.log
             .with(|l| l.running || l.waiting() || l.interrupted.is_some())
+            || external.names().is_some()
     };
     let can_send = move || !busy() && text.with(|t| !t.trim().is_empty());
     let send = move || {
@@ -647,6 +650,11 @@ fn Composer() -> impl IntoView {
     };
     view! {
         <div class="border-t border-gray-200 p-3 dark:border-gray-800">
+            {move || external.names().map(|names| view! {
+                <p data-note="external" class="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                    {t_with("chat-external", [("names", names)])}
+                </p>
+            })}
             {move || chat.selection.get().map(|p| view! {
                 <div data-chip="selection" class="mb-2 inline-flex max-w-full items-center gap-1 rounded-full bg-blue-50 py-0.5 pr-1 pl-3 text-xs text-blue-900 dark:bg-blue-950 dark:text-blue-100">
                     <span class="truncate">{t_with("chat-selected", [("what", selection_label(&p))])}</span>

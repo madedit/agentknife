@@ -16,12 +16,14 @@ const REMOVE: &[&str] = &["CARGO", "RUSTC", "RUSTDOC", "RUSTC_WRAPPER", "NO_COLO
 
 /// Runs AgentKnife with hot reload.
 pub fn run(root: &Path, args: &[String]) -> Result<()> {
+    mcp_program(root, false)?;
     tauri(root, &["dev"], args)
 }
 
 /// Builds `target/release/agentknife(.exe)` (the shell's screens built in).
 pub fn build(root: &Path, args: &[String]) -> Result<()> {
     tauri(root, &["build", "--no-bundle"], args)?;
+    mcp_program(root, true)?;
     let exe = root
         .join("target")
         .join("release")
@@ -54,6 +56,29 @@ pub fn e2e(root: &Path, args: &[String]) -> Result<()> {
         return Err(format!("the end-to-end test failed ({status})").into());
     }
     Ok(())
+}
+
+/// `agentknife-mcp`, which other AI tools start, next to AgentKnife.
+fn mcp_program(root: &Path, release: bool) -> Result<()> {
+    let pinned = Pinned::builtin()?;
+    let tc = Toolchain::new(Toolchain::default_root(), &pinned);
+    let mut cmd = Command::new(tc.exe(&tc.cargo_bin(), "cargo"));
+    cmd.args(["build", "-p", "ak-mcp", "--bin", "agentknife-mcp"])
+        .current_dir(root)
+        .envs(tc.env());
+    if release {
+        cmd.arg("--release");
+    }
+    for k in REMOVE {
+        cmd.env_remove(k);
+    }
+    println!("==> cargo build -p ak-mcp --bin agentknife-mcp");
+    let status = cmd.status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("building agentknife-mcp exited with {status}").into())
+    }
 }
 
 fn tauri(root: &Path, command: &[&str], args: &[String]) -> Result<()> {

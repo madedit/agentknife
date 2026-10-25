@@ -43,6 +43,9 @@ pub struct PreviewSession {
     reloader: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
+/// How often the backend code on disk is checked.
+pub const WATCH_EVERY: Duration = Duration::from_millis(1_500);
+
 fn busy(s: &ServerState) -> bool {
     matches!(s, ServerState::Starting | ServerState::Building)
 }
@@ -66,6 +69,20 @@ impl PreviewSession {
 
     pub async fn stop(&self) {
         self.preview.lock().await.stop().await;
+    }
+
+    /// Checks the backend code on disk every [`WATCH_EVERY`] while the
+    /// session lives, and restarts the backend when it changed without a
+    /// [`PreviewSession::files_changed`].
+    pub fn watch_backend(self: &Arc<Self>) {
+        let session = Arc::downgrade(self);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(WATCH_EVERY).await;
+                let Some(s) = session.upgrade() else { return };
+                let _ = s.preview.lock().await.backend_changed_on_disk().await;
+            }
+        });
     }
 
     pub fn status(&self) -> PreviewStatus {

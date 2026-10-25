@@ -92,6 +92,7 @@ crates/
   ak-project/    Projects, .agentknife/ files, git checkpoints + GC, chat history.
   ak-preview/    Trunk dev-server management, bridge host, inspector protocol, screenshots.
   ak-bundle/     Host-platform bundling + install instructions.
+  ak-mcp/        MCP server for other agent CLIs (Claude Code, Codex, …) and their stdio shim `agentknife-mcp`.
   ak-ui/         Component kit used by generated apps (Leptos + Tailwind).
   ak-ui-gallery/ Every ak-ui component on one page (trunk serve; dev only).
   ak-bridge/     Crate embedded in generated apps: WebSocket invoke, inspector, control channel.
@@ -149,6 +150,14 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Per-day totals live in `<data_dir>/AgentKnife/usage.json` (local calendar day, shared by all projects); session totals live in the Agent.
   - At 80% of the cap a `BudgetWarning` is sent once a day. At 100% the user is asked (`ConfirmKind::DailyCap`) once a day; declining ends the turn as `OverBudget`.
   - When prices change, update the table and its date in the same change.
+- **Other AI tools (MCP, P1-MCP-001):** agent CLIs operate a running AgentKnife with AgentKnife's own tools, while the user watches in the window.
+  - The client starts `agentknife-mcp` (ak-mcp's bin, built next to `agentknife` by `cargo xtask build`/`dev`). It reads `<data>/AgentKnife/mcp.json` (`ak_mcp::Endpoint`: enabled, port, token), connects to 127.0.0.1, sends `AGENTKNIFE-MCP/1 <token>` and then passes stdio through unchanged. Not running → it starts the `agentknife` next to it and waits; setting off → it tells the user to turn it on.
+  - AgentKnife (`ak_app::mcp`) listens only while the setting is on (`AppSettings::mcp_enabled`, changed only by `set_mcp`; `save_settings` keeps it). rmcp serves MCP on each connection (`ak_mcp::Server`, one connection = one session); the host (`McpHost`) runs the tools. No HTTP: a browser cannot pass the hello line.
+  - The first connection of a client name asks the user in a native dialog (`mcp-allow-*`); allowed names go to `AppSettings::mcp_allowed`.
+  - Tools: `status`, `list_projects`, `open_project` (no greeting from AgentKnife's AI) plus the built-in agent's project tools from the same `turn::workbench` (policy, reference folders, notes), without `ask_user`; `label` is optional. Each call runs through `ak_agent::Step` (the same gate and confirmation cards as a turn) and shows in the chat as "<tool>: <label>".
+  - One AI changes the project at a time: changing tools are refused while a turn runs; a turn does not start while a tool changes the project (`mcp::busy`). Changed files get the id pass and `files_changed`; after a minute without changes (or when the tool leaves) they become a version. `PROJECT_CHANGED_EVENT` reloads the file tree, `PROJECT_OPENED_EVENT` shows a project a tool opened, `MCP_EVENT` carries `McpStatus` (top bar "(external)", the chat input paused).
+  - The preview restarts the backend when `backend_watch` code changes on disk without `files_changed` (`PreviewSession::watch_backend`, a fingerprint every 1.5 s), so edits with a client's own file tools still apply.
+  - The token and API keys are never shown to a model.
 - **Doctor:** detection and installation are deterministic Rust code, and the AI only narrates. Install Rust, targets, Trunk, wasm-bindgen, tauri-cli, and Tailwind CLI in AgentKnife's own directory (custom `RUSTUP_HOME`/`CARGO_HOME`). For system-level dependencies (MSVC Build Tools, WebView2, Xcode CLT, Linux webkit packages), guide the user step by step. Installs must be idempotent and resumable.
   - `ak_doctor::Toolchain` lives under `<data_dir>/AgentKnife/toolchain/`, with `rustup/`, `cargo/` and `bin/`. Tools are always called by full path. Pinned versions come from the embedded `versions.toml`.
   - Anything that runs rustup or cargo must use `Toolchain::env()`, which sets `RUSTUP_AUTO_INSTALL=0` and `RUSTUP_TOOLCHAIN`. Without it, rustup silently installs a missing toolchain. The one exception is installing Rust itself (rustup-init, `rustup toolchain install`), which uses the private homes without `RUSTUP_TOOLCHAIN`. `SystemProbe` drops inherited `RUSTUP_TOOLCHAIN`, `RUSTUP_HOME`, `CARGO_HOME`, `CARGO`, `RUSTC` and `RUSTDOC`, so the parent process (for example `cargo run`) cannot change which toolchain is used.

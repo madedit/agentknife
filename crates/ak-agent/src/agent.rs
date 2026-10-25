@@ -25,7 +25,7 @@ use crate::permission::{ConfirmRequest, Confirmer, Decision, DeclineAll, Permiss
 use crate::plan::{CancelPlans, PlanReviewer};
 use crate::policy::{PermissionMode, ProjectPolicy};
 use crate::prompt::{PLAN_TOOL, PlanMode, greeting_note, plan_tool_spec, system_prompt};
-use crate::tool::{ToolContext, ToolOutput, ToolRegistry, split_label};
+use crate::tool::{Tool, ToolContext, ToolOutput, ToolRegistry, split_label};
 use crate::tools::preview::{PreviewAccess, describe_status};
 use crate::usage::{CapStatus, CostBasis, Totals, UsageLedger};
 
@@ -1026,8 +1026,57 @@ impl Agent {
         if call.name == PLAN_TOOL && self.config.plan_mode != PlanMode::NeverAsk {
             return self.review_plan(call, step_id, events, ctx, state).await;
         }
-        let (label, args) = split_label(call.arguments.clone());
-        let label = label.unwrap_or_else(|| call.name.clone());
+        let plan_mode = self.config.plan_mode;
+        let approved = state.plan_approved;
+        let step = Step {
+            tools: &self.tools,
+            gate: self.gate.as_ref(),
+            confirmer: self.confirmer.as_ref(),
+            events,
+            ctx,
+        };
+        step.run(call, step_id, None, |tool| {
+            (plan_mode == PlanMode::AlwaysAsk && tool.changes_project() && !approved).then(|| {
+                ToolOutput::error(format!(
+                    "Before changing the project, call {PLAN_TOOL} and wait for the user's approval."
+                ))
+            })
+        })
+        .await
+    }
+}
+
+/// One tool call as the agent runs it: shown as a step, checked by the gate
+/// (asking the user when the gate says so), run, and reported. The agent's turn
+/// uses it, and so does AgentKnife's MCP server for agents outside AgentKnife.
+pub struct Step<'a> {
+    pub tools: &'a ToolRegistry,
+    pub gate: &'a dyn PermissionGate,
+    pub confirmer: &'a dyn Confirmer,
+    pub events: &'a UnboundedSender<AgentEvent>,
+    pub ctx: &'a ToolContext,
+}
+
+impl Step<'_> {
+    /// Runs `call` (its `label` argument, if any, names the step; `label`
+    /// overrides it). `refuse` may turn the call down before the gate sees it.
+    /// `None` means the user cancelled.
+    pub async fn run(
+        &self,
+        call: &ToolCall,
+        step_id: &str,
+        label: Option<String>,
+        refuse: impl FnOnce(&dyn Tool) -> Option<ToolOutput>,
+    ) -> Option<ToolOutput> {
+        let Self {
+            tools,
+            gate,
+            confirmer,
+            events,
+            ctx,
+        } = self;
+        let (own_label, args) = split_label(call.arguments.clone());
+        let label = label.or(own_label).unwrap_or_else(|| call.name.clone());
         emit(
             events,
             AgentEvent::StepStarted {
@@ -1039,58 +1088,52 @@ impl Agent {
         );
         let output = if call.invalid_arguments.is_some() {
             ToolOutput::error(
-                "The arguments were not valid JSON (probably cut off by the output limit). \
-                 Call the tool again with complete, smaller arguments.",
+                "The arguments were not valid JSON (probably cut off by the output limit).                  Call the tool again with complete, smaller arguments.",
             )
         } else if !call.arguments.is_object() {
             ToolOutput::error(
-                "The arguments must be one JSON object with the fields as keys, \
-                 such as {\"path\": \"src/main.rs\"}. Call the tool again.",
+                "The arguments must be one JSON object with the fields as keys,                  such as {\"path\": \"src/main.rs\"}. Call the tool again.",
             )
-        } else if let Some(tool) = self.tools.get(&call.name) {
-            let needs_plan = self.config.plan_mode == PlanMode::AlwaysAsk
-                && tool.changes_project()
-                && !state.plan_approved;
-            let allowed = match self.gate.check(&call.name, &args, ctx) {
-                _ if needs_plan => Err(ToolOutput::error(format!(
-                    "Before changing the project, call {PLAN_TOOL} and wait for the user's approval."
-                ))),
-                Decision::Allow => Ok(()),
-                Decision::Deny { reason } => Err(ToolOutput::error(format!(
-                    "Not allowed because {} ({}). Find another way that stays inside \
-                         the project, or explain to the user why it is needed.",
-                    reason.kind.for_model(),
-                    reason.detail
-                ))),
-                Decision::Ask { reason } => {
-                    let request = ConfirmRequest {
-                        request_id: format!("{step_id}-confirm"),
-                        tool: call.name.clone(),
-                        label: label.clone(),
-                        reason: reason.clone(),
-                    };
-                    emit(
-                        events,
-                        AgentEvent::NeedsConfirmation {
-                            request_id: request.request_id.clone(),
-                            tool: request.tool.clone(),
-                            label: request.label.clone(),
-                            reason,
-                        },
-                    );
-                    let yes = tokio::select! {
-                        biased;
-                        _ = ctx.cancel.cancelled() => return None,
-                        yes = self.confirmer.confirm(request) => yes,
-                    };
-                    if yes {
-                        Ok(())
-                    } else {
-                        Err(ToolOutput::error(
-                            "The user declined this step. Ask what they would prefer instead.",
-                        ))
+        } else if let Some(tool) = tools.get(&call.name) {
+            let allowed = match refuse(tool.as_ref()) {
+                Some(refusal) => Err(refusal),
+                None => match gate.check(&call.name, &args, ctx) {
+                    Decision::Allow => Ok(()),
+                    Decision::Deny { reason } => Err(ToolOutput::error(format!(
+                        "Not allowed because {} ({}). Find another way that stays inside                          the project, or explain to the user why it is needed.",
+                        reason.kind.for_model(),
+                        reason.detail
+                    ))),
+                    Decision::Ask { reason } => {
+                        let request = ConfirmRequest {
+                            request_id: format!("{step_id}-confirm"),
+                            tool: call.name.clone(),
+                            label: label.clone(),
+                            reason: reason.clone(),
+                        };
+                        emit(
+                            events,
+                            AgentEvent::NeedsConfirmation {
+                                request_id: request.request_id.clone(),
+                                tool: request.tool.clone(),
+                                label: request.label.clone(),
+                                reason,
+                            },
+                        );
+                        let yes = tokio::select! {
+                            biased;
+                            _ = ctx.cancel.cancelled() => return None,
+                            yes = confirmer.confirm(request) => yes,
+                        };
+                        if yes {
+                            Ok(())
+                        } else {
+                            Err(ToolOutput::error(
+                                "The user declined this step. Ask what they would prefer instead.",
+                            ))
+                        }
                     }
-                }
+                },
             };
             match allowed {
                 Ok(()) => {

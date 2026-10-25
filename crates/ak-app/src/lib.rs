@@ -10,6 +10,7 @@
 pub mod connect;
 pub mod crash;
 pub mod home;
+pub mod mcp;
 pub mod settings;
 pub mod state;
 pub mod tools;
@@ -81,6 +82,8 @@ const COMMANDS: &[&str] = &[
     "save_settings",
     "crash_reports",
     "pick_folder",
+    "mcp_status",
+    "set_mcp",
 ];
 
 /// The app's state and commands on `builder` (plugins are the caller's).
@@ -125,13 +128,22 @@ pub fn with_commands<R: Runtime>(builder: Builder<R>, state: state::AppState) ->
             settings::save_settings,
             settings::crash_reports,
             settings::pick_folder,
+            mcp::mcp_status,
+            mcp::set_mcp,
         ])
+        .setup(|app| {
+            // Listens for other AI tools when the setting is on.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move { mcp::apply(&handle).await });
+            Ok(())
+        })
 }
 
 /// For `App::run`: stops the preview's dev servers and the app window with
 /// AgentKnife.
 pub fn on_event<R: Runtime>(handle: &tauri::AppHandle<R>, event: RunEvent) {
     if let RunEvent::Exit = event {
+        mcp::shut_down(&handle.state::<state::AppState>());
         close_project(handle);
     }
 }

@@ -47,6 +47,51 @@ pub struct Preview {
     crashes: CrashLog,
     frontend: Option<Running>,
     backend: Option<Running>,
+    /// The backend code as the running backend was built from it
+    /// ([`backend_fingerprint`]).
+    backend_print: Option<u64>,
+}
+
+/// Folders under the watched paths that are build output, not code.
+const NOT_CODE: &[&str] = &["target", ".git", "node_modules", "gen"];
+
+/// Paths, sizes and change times of the files under `watch` (project-relative
+/// paths): changes when any of them is written, added or removed.
+pub fn backend_fingerprint(root: &Path, watch: &[&str]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    fn walk(dir: &Path, h: &mut std::collections::hash_map::DefaultHasher) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        let mut entries: Vec<_> = entries.filter_map(Result::ok).collect();
+        entries.sort_by_key(|e| e.file_name());
+        for e in entries {
+            let Ok(meta) = e.metadata() else { continue };
+            if meta.is_dir() {
+                if !NOT_CODE.contains(&e.file_name().to_string_lossy().as_ref()) {
+                    walk(&e.path(), h);
+                }
+            } else {
+                e.path().hash(h);
+                meta.len().hash(h);
+                meta.modified().ok().hash(h);
+            }
+        }
+    }
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for w in watch {
+        let path = root.join(w);
+        if path.is_file() {
+            path.hash(&mut h);
+            if let Ok(meta) = path.metadata() {
+                meta.len().hash(&mut h);
+                meta.modified().ok().hash(&mut h);
+            }
+        } else {
+            walk(&path, &mut h);
+        }
+    }
+    h.finish()
 }
 
 impl Preview {
@@ -67,6 +112,7 @@ impl Preview {
             crashes: CrashLog::default(),
             frontend: None,
             backend: None,
+            backend_print: None,
         })
     }
 
@@ -127,9 +173,29 @@ impl Preview {
             self.frontend = Some(self.spawn(Side::Frontend)?);
         }
         if self.backend.is_none() && self.plan.backend.is_some() {
+            self.backend_print = Some(self.fingerprint());
             self.backend = Some(self.spawn(Side::Backend)?);
         }
         Ok(())
+    }
+
+    fn fingerprint(&self) -> u64 {
+        backend_fingerprint(&self.root, self.plan.backend_watch)
+    }
+
+    /// Restarts the backend when its code changed on disk since it started:
+    /// edits nobody told the preview about (another AI tool's own file tools,
+    /// the user's editor). Returns whether it restarted.
+    pub async fn backend_changed_on_disk(&mut self) -> std::io::Result<bool> {
+        if self.backend.is_none() {
+            return Ok(false);
+        }
+        let now = self.fingerprint();
+        if self.backend_print == Some(now) {
+            return Ok(false);
+        }
+        self.restart_backend().await?;
+        Ok(true)
     }
 
     /// Stops everything.
@@ -150,6 +216,7 @@ impl Preview {
             return Ok(());
         }
         self.stop_side(Side::Backend).await;
+        self.backend_print = Some(self.fingerprint());
         self.backend = Some(self.spawn(Side::Backend)?);
         Ok(())
     }
@@ -388,6 +455,39 @@ impl Watcher {
                 output: format!("{what} ({code}).\n{}", tail.text()),
             },
             None,
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_fingerprint_follows_code_but_not_build_output() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let root = dir.path();
+        let write = |rel: &str, text: &str| {
+            let p = root.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap_or(root)).unwrap_or_else(|e| panic!("{e}"));
+            std::fs::write(p, text).unwrap_or_else(|e| panic!("{e}"));
+        };
+        write("src-tauri/src/main.rs", "fn main() {}");
+        write("src-tauri/Cargo.toml", "[package]");
+        let watch = &["src-tauri"];
+        let first = backend_fingerprint(root, watch);
+        assert_eq!(backend_fingerprint(root, watch), first, "stable");
+        write("src-tauri/target/debug/app.exe", "build output");
+        write("src/main.rs", "screens are not backend code");
+        assert_eq!(backend_fingerprint(root, watch), first);
+        write("src-tauri/src/main.rs", "fn main() { run() }");
+        let changed = backend_fingerprint(root, watch);
+        assert_ne!(changed, first);
+        write("src-tauri/src/db.rs", "pub fn open() {}");
+        assert_ne!(
+            backend_fingerprint(root, watch),
+            changed,
+            "a new file counts"
         );
     }
 }

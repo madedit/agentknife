@@ -1,0 +1,34 @@
+[package]
+name = "ak-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "MCP server that lets agent CLIs (Claude Code, Codex, …) operate AgentKnife."
+
+[[bin]]
+# What a client starts (`claude mcp add agentknife -- agentknife-mcp`): connects
+# its stdio to the running AgentKnife, starting it when needed.
+name = "agentknife-mcp"
+path = "src/bin/agentknife-mcp.rs"
+test = false
+doc = false
+
+[dependencies]
+ak-agent = { path = "../ak-agent" }
+ak-types.workspace = true
+dirs.workspace = true
+futures-util.workspace = true
+getrandom.workspace = true
+rmcp = { workspace = true, features = ["server"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["net", "io-util", "io-std", "macros", "rt-multi-thread", "sync", "time", "process"] }
+tokio-util.workspace = true
+
+[dev-dependencies]
+rmcp = { workspace = true, features = ["server", "client"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

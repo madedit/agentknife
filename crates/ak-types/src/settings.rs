@@ -98,6 +98,11 @@ pub struct AppSettings {
     /// Folders (absolute paths) whose files the AI reads without asking, like
     /// the toolchain's library sources. Never written to.
     pub read_folders: Vec<String>,
+    /// "Let other AI tools operate AgentKnife" (MCP, P1-MCP-001). Only
+    /// `set_mcp` changes it.
+    pub mcp_enabled: bool,
+    /// Tools the user let in (by name, e.g. "Claude Code"); asked once each.
+    pub mcp_allowed: Vec<String>,
 }
 
 impl AppSettings {
@@ -155,6 +160,8 @@ impl Default for AppSettings {
             keep_turns: 50,
             daily_cap_usd: None,
             read_folders: Vec::new(),
+            mcp_enabled: false,
+            mcp_allowed: Vec::new(),
         }
     }
 }

@@ -1,4 +1,4 @@
-//! The settings page: language, AI, permissions, folders the AI may read,
+//! The settings page: language, AI, other AI tools, permissions, folders the AI may read,
 //! plans, automatic fixes, version history, daily limit, privacy and crash
 //! reports.
 
@@ -178,6 +178,9 @@ pub fn SettingsScreen(
                     </div>
                 </Section>
 
+                <Section title="settings-external" about="settings-external-about">
+                    <crate::external::ExternalSettings />
+                </Section>
                 <Section title="settings-permissions">
                     <Choice
                         name="permissions"

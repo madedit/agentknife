@@ -1,9 +1,14 @@
 # STATUS
 
 ## Doing
-- P1-CORE-003 — coordinator — workflow written (.github/workflows/ci.yml); not yet run: repo has no GitHub remote
-
+- P1-MCP-001 — coordinator — started 2026-10-25
+  Notes: owner decisions: rmcp (3.7.0, pinned), the shim starts AgentKnife when it is not running, AgentKnife's file/command tools are offered.
+  - Transport changed from the plan's Streamable HTTP to a local TCP socket: `agentknife-mcp` sends `AGENTKNIFE-MCP/1 <token>` and then passes stdio through unchanged; rmcp serves MCP on the socket in AgentKnife (one connection = one session, the client's name from `initialize`). Simpler than rmcp 3.7's stateless HTTP (protocol 2026-07-28), no HTTP stack in AgentKnife, and a browser cannot pass the hello line (so no Origin check is needed).
+  - Versions: the plan said "a checkpoint when an external session first changes the project"; it is now one version per burst of changes (after a minute without changes, or when the tool leaves), named after the tool and its first step, like a turn's version after the turn.
+  - Done: ak-mcp (endpoint file, listener + token check, handler, shim, tests over a real socket); ak-agent `Step` (one gated tool call, shared by the turn and MCP); ak-app `mcp` (host, settings `mcp_enabled`/`mcp_allowed`, commands `mcp_status`/`set_mcp`, the allow dialog, busy rule, id pass, versions, events; test over the real socket on the mock runtime); ak-preview `watch_backend`; ak-shell connect wizard's third group with setup commands and waiting, Settings section, top bar "(external)", chat input paused; xtask builds the shim next to AgentKnife; AGENTS.md §3/§4.
+  - Left: the live check with Claude Code (the owner's) and Codex (not installed here).
 ## Blocked
+- P1-MCP-001 (follow-up) — needs: P1-APP-003 — installers must ship `agentknife-mcp` next to AgentKnife (Tauri `externalBin`); `cargo xtask build` already puts it in target/release.
 - P1-MCP-001 — needs: owner decision — plan written (execution-plan.md, "External agents (MCP)"). Open: MCP library (rmcp vs. own JSON-RPC; rmcp changes the pinned stack), shim when AgentKnife is not running (start it vs. error), whether to expose AgentKnife's own file/command tools. Decided: a third, advanced group in the connect wizard ("Use an AI tool you already have") plus management in Settings.
 - P1-APP-001 (follow-up) — needs: decision — the real preview screenshot (Capturer: WebView2 CapturePreview / CDP with clip, WKWebView takeSnapshot, webkit) is not wired: screenshot_preview stays off and the agent reads the DOM summary.
 - P1-APP-001 (follow-up) — needs: decision — no template-update mechanism yet: existing projects keep their config files (e.g. the old Trunk.toml watch list from PREV-002) and their ak/ kit copy.

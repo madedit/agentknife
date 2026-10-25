@@ -192,6 +192,14 @@ impl Backend {
         }
     }
 
+    pub async fn mcp_status(&self) -> Result<ak_types::ipc::McpStatus, CallError> {
+        self.call(cmd::MCP_STATUS, None::<()>).await
+    }
+
+    pub async fn set_mcp(&self, on: bool) -> Result<ak_types::ipc::McpStatus, CallError> {
+        self.call(cmd::SET_MCP, Some(on)).await
+    }
+
     pub async fn get_settings(&self) -> Result<AppSettings, CallError> {
         self.call(cmd::GET_SETTINGS, None::<()>).await
     }

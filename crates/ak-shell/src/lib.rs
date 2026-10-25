@@ -11,6 +11,7 @@ pub mod backend;
 pub mod chat;
 pub mod connect;
 mod demo;
+pub mod external;
 pub mod files;
 pub mod home;
 pub mod i18n;

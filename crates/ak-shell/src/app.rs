@@ -65,6 +65,16 @@ pub fn App() -> impl IntoView {
     backend.on(ak_types::ipc::BUNDLE_EVENT, move |p| {
         chat.log.update(|l| l.bundle_progress(p));
     });
+    let external = crate::external::External::new();
+    provide_context(external);
+    external.follow(&backend);
+    // Another AI tool changed files or made a version.
+    {
+        let b = backend.clone();
+        backend.on(ak_types::ipc::PROJECT_CHANGED_EVENT, move |()| {
+            files.refresh(b.clone());
+        });
+    }
     let home = RwSignal::new(HomeState::default());
     let screen = RwSignal::new(Screen::Loading);
     reload(&backend, home, screen, true);
@@ -89,7 +99,8 @@ fn reload(backend: &Backend, home: RwSignal<HomeState>, screen: RwSignal<Screen>
     leptos::task::spawn_local(async move {
         match backend.home_state().await {
             Ok(h) => {
-                let connected = h.ai.is_some();
+                // Another AI tool may do the work instead of a connected one.
+                let connected = h.ai.is_some() || h.external;
                 home.set(h);
                 if route {
                     screen.set(if connected {
@@ -149,6 +160,14 @@ pub fn AppView(
             screen.set(before_connect.get_value());
         })
     };
+    // Another AI tool connected in the wizard.
+    let external_done = {
+        let backend = backend.clone();
+        Callback::new(move |()| {
+            reload(&backend, home, screen, false);
+            screen.set(before_connect.get_value());
+        })
+    };
     let change_ai = Callback::new(move |()| {
         let now = screen.get_untracked();
         if !matches!(now, Screen::Connect { .. }) {
@@ -184,6 +203,13 @@ pub fn AppView(
             screen.set(Screen::Workspace(o.project));
         })
     };
+    // Another AI tool opened a project.
+    backend.on(
+        ak_types::ipc::PROJECT_OPENED_EVENT,
+        move |o: OpenedProject| {
+            open.run(o);
+        },
+    );
 
     view! {
         <div class="flex h-screen flex-col bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">
@@ -206,8 +232,8 @@ pub fn AppView(
                         screen.set(before_connect.get_value());
                     }));
                     match cancel {
-                        Some(c) => view! { <ConnectWizard on_done=connected on_cancel=c /> }.into_any(),
-                        None => view! { <ConnectWizard on_done=connected /> }.into_any(),
+                        Some(c) => view! { <ConnectWizard on_done=connected on_external=external_done on_cancel=c /> }.into_any(),
+                        None => view! { <ConnectWizard on_done=connected on_external=external_done /> }.into_any(),
                     }
                 }
                 Screen::Home => view! {
@@ -244,12 +270,20 @@ fn TopBar(
         _ => None,
     };
     let in_workspace = move || project().is_some();
-    let ai_label = move || match home.with(|h| h.ai.clone()) {
-        Some(ai) => {
+    let external = crate::external::External::get();
+    let ai_label = move || {
+        let own = home.with(|h| h.ai.clone()).map(|ai| {
             let provider = tr(format!("connect-preset-{}", ai.provider))();
             t_with("shell-ai", [("provider", provider), ("model", ai.model)])()
+        });
+        let other = external
+            .names()
+            .map(|names| t_with("shell-ai-external", [("names", names)])());
+        match (own, other) {
+            (Some(own), Some(other)) => format!("{own} · {other}"),
+            (Some(one), None) | (None, Some(one)) => one,
+            (None, None) => t("shell-ai-none")(),
         }
-        None => t("shell-ai-none")(),
     };
     let mode_button = move |mode: Mode, text: &'static str, hint: &'static str| {
         let on = move || layout.with(|l| l.mode == mode);

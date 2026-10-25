@@ -105,6 +105,12 @@ pub mod cmd {
     pub const GET_LOG: &str = "get_log";
     /// `()` → `()`: empties the open project's log.
     pub const CLEAR_LOG: &str = "clear_log";
+    /// `()` → [`McpStatus`](super::McpStatus); changes then arrive as
+    /// [`MCP_EVENT`](super::MCP_EVENT).
+    pub const MCP_STATUS: &str = "mcp_status";
+    /// `bool` (let other AI tools operate AgentKnife) → [`McpStatus`](super::McpStatus).
+    /// Off disconnects every tool.
+    pub const SET_MCP: &str = "set_mcp";
 
     /// Every command, for checking that the app handles them all.
     pub const ALL: &[&str] = &[
@@ -145,6 +151,8 @@ pub mod cmd {
         PICK_FOLDER,
         GET_LOG,
         CLEAR_LOG,
+        MCP_STATUS,
+        SET_MCP,
     ];
 }
 
@@ -201,6 +209,30 @@ pub struct BundleFailure {
 pub const PREVIEW_EVENT: &str = "preview-status";
 /// Tauri event (no payload): load the preview page again (it stopped answering).
 pub const PREVIEW_RELOAD_EVENT: &str = "preview-reload";
+
+/// Tauri event carrying [`McpStatus`] when the setting changes or a tool
+/// connects or leaves.
+pub const MCP_EVENT: &str = "mcp-status";
+
+/// Tauri event carrying an [`OpenedProject`] that another AI tool opened, so
+/// the window shows it.
+pub const PROJECT_OPENED_EVENT: &str = "project-opened";
+
+/// Tauri event (no payload): another AI tool changed the open project's files
+/// or made a version; the file tree and version history reload.
+pub const PROJECT_CHANGED_EVENT: &str = "project-changed";
+
+/// Other AI tools operating AgentKnife over MCP (P1-MCP-001).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct McpStatus {
+    /// "Let other AI tools operate AgentKnife" is on.
+    pub enabled: bool,
+    /// The tools connected now, by name ("Claude Code").
+    pub clients: Vec<String>,
+    /// The program a tool starts (`agentknife-mcp`), full path, for the setup
+    /// commands; empty when it is missing next to AgentKnife.
+    pub program: String,
+}
 /// Tauri event carrying new lines of the open project's log
 /// (`Vec<`[`LogLine`](crate::log::LogLine)`>`).
 pub const LOG_EVENT: &str = "project-log";
@@ -324,6 +356,10 @@ pub struct HomeState {
     pub ai: Option<AiConnection>,
     /// Where new projects go (shown in the new-project dialog).
     pub projects_folder: String,
+    /// Other AI tools may operate AgentKnife (then the connect wizard is not
+    /// needed to start).
+    #[serde(default)]
+    pub external: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

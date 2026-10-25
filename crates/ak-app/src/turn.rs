@@ -28,7 +28,7 @@ use crate::state::{AppState, Pending};
 use crate::{Res, fail, ui_locale};
 
 /// The chat's side of the agent's questions: each waits for its command.
-struct UiBridge(Arc<std::sync::Mutex<Pending>>);
+pub(crate) struct UiBridge(pub(crate) Arc<std::sync::Mutex<Pending>>);
 
 impl Confirmer for UiBridge {
     fn confirm(&self, request: ConfirmRequest) -> BoxFuture<'_, bool> {
@@ -145,10 +145,6 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
         Plans::Always => PlanMode::AlwaysAsk,
         Plans::Never => PlanMode::NeverAsk,
     };
-    let mode = match settings.permissions {
-        Permissions::Standard => PermissionMode::Standard,
-        Permissions::AskEveryChange => PermissionMode::AskEveryChange,
-    };
     config.context_window = caps.context_window;
     if let Some(max) = caps.max_output_tokens {
         config.max_tokens = config.max_tokens.min(max);
@@ -158,43 +154,26 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
         effective.base_url.as_deref(),
         &effective.model,
     );
-
-    // Library sources the AI may read without asking (no keys or user data
-    // there), and the folders the user allowed in the settings.
-    config.reference_dirs = reference_dirs(&state.toolchain);
-    if let Some(system) = config.system.as_mut() {
-        system.push_str(&library_note(&state.toolchain.cargo_home()));
-    }
-    let allowed = allowed_folders(&settings.read_folders);
-    if let (Some(system), Some(note)) = (config.system.as_mut(), folders_note(&allowed)) {
-        system.push_str(&note);
-    }
-    config.reference_dirs.extend(allowed);
-    // What the app itself saved (in the preview too), so the AI can check it.
-    if let Some(data) = profile
-        .app_data_folder(&parts.root)
-        .and_then(|f| dirs::data_dir().map(|d| d.join(f)))
-    {
-        if let Some(system) = config.system.as_mut() {
-            system.push_str(&app_data_note(&data));
-        }
-        config.reference_dirs.push(data);
-    }
-    let config_refs = config.reference_dirs.clone();
-    let bridge = Arc::new(UiBridge(state.pending.clone()));
-    let env = ToolEnv {
-        path_prefix: state.tools.path_prefix.clone(),
-        vars: state.tools.env.clone(),
-    };
-    let registry = with_preview_tools(
-        project_tools(env, bridge.clone(), Some(profile.knowledge_pack())),
+    let bench = workbench(
+        state,
+        &parts.root,
+        profile,
         parts.preview.clone(),
+        &settings,
         caps.vision,
     );
+    if let Some(system) = config.system.as_mut() {
+        system.push_str(&bench.notes);
+    }
+    config.reference_dirs = bench.references.clone();
+    let Workbench {
+        registry,
+        policy,
+        bridge,
+        ..
+    } = bench;
     Ok(Agent::new(provider, registry, config)
-        .with_gate(Arc::new(
-            ProjectPolicy::new(mode).with_reference_dirs(config_refs),
-        ))
+        .with_gate(Arc::new(policy))
         .with_confirmer(bridge.clone())
         .with_plan_reviewer(bridge)
         .with_preview(parts.preview.clone())
@@ -204,6 +183,66 @@ async fn agent(state: &AppState, parts: &Parts) -> anyhow::Result<Agent> {
         .with_checkpointer(Arc::new(Checkpoints(parts.root.clone())))
         .with_store(Arc::new(Store(parts.project.clone())))
         .with_usage_ledger(state.ledger.clone()))
+}
+
+/// The open project's tools and permissions, as the built-in agent has them
+/// (the MCP server gives other AI tools the same).
+pub(crate) struct Workbench {
+    pub registry: ak_agent::tool::ToolRegistry,
+    pub policy: ProjectPolicy,
+    /// Folders the read tools may read besides the project.
+    pub references: Vec<PathBuf>,
+    /// What the AI should know about those folders (English: for the model).
+    pub notes: String,
+    pub bridge: Arc<UiBridge>,
+}
+
+pub(crate) fn workbench(
+    state: &AppState,
+    root: &std::path::Path,
+    profile: &'static dyn ak_types::stack::StackProfile,
+    preview: Arc<dyn ak_agent::tools::PreviewAccess>,
+    settings: &ak_types::settings::AppSettings,
+    vision: bool,
+) -> Workbench {
+    let mode = match settings.permissions {
+        Permissions::Standard => PermissionMode::Standard,
+        Permissions::AskEveryChange => PermissionMode::AskEveryChange,
+    };
+    // Library sources the AI may read without asking (no keys or user data
+    // there), and the folders the user allowed in the settings.
+    let mut references = reference_dirs(&state.toolchain);
+    let mut notes = library_note(&state.toolchain.cargo_home());
+    let allowed = allowed_folders(&settings.read_folders);
+    if let Some(note) = folders_note(&allowed) {
+        notes.push_str(&note);
+    }
+    references.extend(allowed);
+    // What the app itself saved (in the preview too), so the AI can check it.
+    if let Some(data) = profile
+        .app_data_folder(root)
+        .and_then(|f| dirs::data_dir().map(|d| d.join(f)))
+    {
+        notes.push_str(&app_data_note(&data));
+        references.push(data);
+    }
+    let bridge = Arc::new(UiBridge(state.pending.clone()));
+    let env = ToolEnv {
+        path_prefix: state.tools.path_prefix.clone(),
+        vars: state.tools.env.clone(),
+    };
+    let registry = with_preview_tools(
+        project_tools(env, bridge.clone(), Some(profile.knowledge_pack())),
+        preview,
+        vision,
+    );
+    Workbench {
+        registry,
+        policy: ProjectPolicy::new(mode).with_reference_dirs(references.clone()),
+        references,
+        notes,
+        bridge,
+    }
 }
 
 /// The toolchain's library sources: crates (registry, git) and Rust's own.
@@ -279,7 +318,7 @@ enum Start {
 async fn claim(state: &AppState) -> Option<Parts> {
     let mut inner = state.inner.lock().await;
     let open = inner.open.as_mut()?;
-    if open.cancel.is_some() {
+    if open.cancel.is_some() || crate::mcp::busy(state) {
         return None;
     }
     let cancel = CancellationToken::new();
@@ -298,7 +337,7 @@ async fn claim(state: &AppState) -> Option<Parts> {
 }
 
 /// The AI's steps in the project's log: what runs, then what it printed.
-fn log_step(log: &LogBook, event: &AgentEvent) {
+pub(crate) fn log_step(log: &LogBook, event: &AgentEvent) {
     match event {
         AgentEvent::StepStarted {
             tool,

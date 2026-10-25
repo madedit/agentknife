@@ -16,15 +16,22 @@ pub async fn get_settings(state: State<'_, AppState>) -> Res<AppSettings> {
 }
 
 /// Saves the page's values (clamped). The AI connection is kept as it is:
-/// only the connect wizard changes it, with its key.
+/// only the connect wizard changes it, with its key; so are the MCP settings.
 #[tauri::command]
 pub async fn save_settings(state: State<'_, AppState>, request: AppSettings) -> Res<()> {
     let mut inner = state.inner.lock().await;
-    // The connection is the connect wizard's.
+    // The connection is the connect wizard's; other AI tools are `set_mcp`'s
+    // and the user's answers when one connects.
     let (ai, ai_known) = (inner.settings.ai.clone(), inner.settings.ai_known.clone());
+    let (mcp_enabled, mcp_allowed) = (
+        inner.settings.mcp_enabled,
+        inner.settings.mcp_allowed.clone(),
+    );
     let mut settings = AppSettings {
         ai,
         ai_known,
+        mcp_enabled,
+        mcp_allowed,
         ..request
     }
     .clamped();

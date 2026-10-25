@@ -84,6 +84,8 @@ pub struct Demo {
     /// The open project's files and history (one set for every demo project).
     files: BTreeMap<String, String>,
     timeline: Vec<TimelineRow>,
+    /// Other AI tools: turning them on "connects" Claude Code after a moment.
+    mcp: ak_types::ipc::McpStatus,
 }
 
 /// What the preview printed while it started.
@@ -183,6 +185,10 @@ impl Demo {
             running: false,
             files: demo_files(),
             timeline: demo_timeline(),
+            mcp: ak_types::ipc::McpStatus {
+                program: r"C:\Program Files\AgentKnife\agentknife-mcp.exe".into(),
+                ..Default::default()
+            },
         }
     }
 
@@ -283,6 +289,7 @@ impl Demo {
                     projects,
                     ai: d.ai.clone(),
                     projects_folder: DEMO_FOLDER.into(),
+                    external: d.settings.mcp_enabled,
                 }))
             }
             cmd::HOME_STATE => {
@@ -292,6 +299,7 @@ impl Demo {
                     projects,
                     ai: d.ai.clone(),
                     projects_folder: DEMO_FOLDER.into(),
+                    external: d.settings.mcp_enabled,
                 }))
             }
             cmd::CREATE_PROJECT => {
@@ -341,6 +349,33 @@ impl Demo {
                 }
                 .clamped();
                 Ok(Value::Null)
+            }
+            cmd::MCP_STATUS => Ok(json!(d.mcp)),
+            cmd::SET_MCP => {
+                let on = req.as_bool().unwrap_or(false);
+                d.settings.mcp_enabled = on;
+                d.mcp.enabled = on;
+                if !on {
+                    d.mcp.clients.clear();
+                }
+                let status = d.mcp.clone();
+                drop(d);
+                if on && status.clients.is_empty() {
+                    let demo = demo.clone();
+                    leptos::task::spawn_local(async move {
+                        sleep(3_000).await;
+                        let status = demo.lock().ok().and_then(|mut d| {
+                            d.mcp.enabled.then(|| {
+                                d.mcp.clients = vec!["Claude Code".into()];
+                                d.mcp.clone()
+                            })
+                        });
+                        if let Some(status) = status {
+                            send(&demo, ak_types::ipc::MCP_EVENT, status);
+                        }
+                    });
+                }
+                Ok(json!(status))
             }
             cmd::CRASH_REPORTS => Ok(json!(ak_types::ipc::CrashReports {
                 folder: "~/AppData/Roaming/AgentKnife/crash-reports".into(),

@@ -43,6 +43,7 @@ fn home_state() -> HomeState {
             effort: None,
         }),
         projects_folder: "C:/Users/me/AgentKnife/Projects".into(),
+        external: false,
     }
 }
 

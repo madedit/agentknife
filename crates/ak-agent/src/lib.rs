@@ -15,7 +15,7 @@ pub mod tools;
 pub mod usage;
 
 pub use agent::{
-    Agent, AgentConfig, Checkpointer, ConversationStore, IdPass, NoCheckpoints, NoStore,
+    Agent, AgentConfig, Checkpointer, ConversationStore, IdPass, NoCheckpoints, NoStore, Step,
     TurnSummary,
 };
 

@@ -21,6 +21,8 @@ tauri-plugin-dialog = "2.8.3"
 tauri-plugin-opener = "2.7.2"
 leptos = "=0.8.22"
 wasm-bindgen = "=0.2.129"
+# MCP server for agent CLIs (ak-mcp).
+rmcp = { version = "=3.7.0", default-features = false }
 
 # Common
 serde = { version = "1.0.229", features = ["derive"] }

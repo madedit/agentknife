@@ -16,6 +16,8 @@ pub enum Step {
     Choose,
     Details,
     Model,
+    /// Another AI tool (MCP), by its id in `external::TOOLS`.
+    External(&'static str),
 }
 
 /// The wizard's state, separate from the view so it can be tested.
@@ -94,6 +96,7 @@ impl Wizard {
         self.error = None;
         self.step = match self.step {
             Step::Model => Step::Details,
+            Step::External(_) => Step::Choose,
             _ => Step::Choose,
         };
     }
@@ -180,12 +183,14 @@ impl Wizard {
     }
 }
 
-/// The wizard. `on_done` runs after the connection was saved; `on_cancel` is
-/// offered when there is somewhere to go back to.
+/// The wizard. `on_done` runs after the connection was saved, `on_external`
+/// once another AI tool connected; `on_cancel` is offered when there is
+/// somewhere to go back to.
 #[component]
 pub fn ConnectWizard(
     #[prop(optional)] initial: Option<Wizard>,
     on_done: Callback<AiConnection>,
+    #[prop(optional)] on_external: Option<Callback<()>>,
     #[prop(optional)] on_cancel: Option<Callback<()>>,
 ) -> impl IntoView {
     let w = RwSignal::new(initial.unwrap_or_default());
@@ -260,6 +265,13 @@ pub fn ConnectWizard(
                     Step::Model => {
                         view! { <ModelStep w pick=pick.clone() save=save.clone() /> }.into_any()
                     }
+                    Step::External(tool) => view! {
+                        <crate::external::ExternalStep
+                            tool
+                            on_back=Callback::new(move |()| w.update(Wizard::back))
+                            on_done=on_external
+                        />
+                    }.into_any(),
                 }}
             </div>
         </div>
@@ -353,6 +365,29 @@ fn ChooseStep(w: RwSignal<Wizard>, on_cancel: Option<Callback<()>>) -> impl Into
         })}
         {group(PresetKind::Cloud, "connect-cloud", "connect-cloud-about")}
         {group(PresetKind::Local, "connect-local", "connect-local-about")}
+        <section data-group="external" class="mt-6">
+            <h2 class="font-medium">{t("connect-external")}</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400">{t("connect-external-about")}</p>
+            <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                {crate::external::TOOLS.iter().map(|(id, _)| {
+                    let id: &'static str = id;
+                    view! {
+                        <button
+                            title=t("connect-preset-tip")
+                            type="button"
+                            data-tool=id
+                            class="rounded-xl border border-gray-200 bg-white p-4 text-left hover:border-blue-500 hover:shadow-sm dark:border-gray-700 dark:bg-gray-950"
+                            on:click=move |_| w.update(|w| {
+                                w.error = None;
+                                w.step = Step::External(id);
+                            })
+                        >
+                            <span class="font-medium">{crate::external::tool_name(id)}</span>
+                        </button>
+                    }
+                }).collect_view()}
+            </div>
+        </section>
         {on_cancel.map(|cancel| view! {
             <div class="mt-6">
                 <button title=t("common-cancel-tip") type="button" class=SECONDARY on:click=move |_| cancel.run(())>

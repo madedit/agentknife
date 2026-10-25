@@ -16,6 +16,7 @@ const CORE: &[&str] = &[
     "ak-project",
     "ak-preview",
     "ak-bundle",
+    "ak-mcp",
 ];
 /// Crates shipped inside generated apps; independent of AgentKnife internals.
 const GENERATED_APP: &[&str] = &["ak-ui", "ak-bridge"];

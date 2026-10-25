@@ -35,6 +35,14 @@ fn row(r: &RecentProject) -> ProjectRow {
     }
 }
 
+/// The open project's stack.
+pub fn profile_of_root(open: &OpenProject) -> &'static dyn StackProfile {
+    open.project
+        .lock()
+        .map(|p| profile_of(&p))
+        .unwrap_or_else(|_| profiles::default_profile())
+}
+
 /// The project's stack (the default one for projects made before stacks).
 pub fn profile_of(project: &Project) -> &'static dyn StackProfile {
     project
@@ -52,6 +60,7 @@ pub async fn home_state(state: State<'_, AppState>) -> Res<HomeState> {
         projects: inner.registry.recent().iter().map(row).collect(),
         ai: inner.settings.ai.clone(),
         projects_folder: inner.registry.default_parent().display().to_string(),
+        external: inner.settings.mcp_enabled,
     })
 }
 
@@ -116,7 +125,7 @@ pub async fn create_project<R: Runtime>(
     project
         .scaffold(profiles::default_profile())
         .map_err(fail)?;
-    open(app, &state, project).await
+    open(app, &state, project, true).await
 }
 
 #[tauri::command]
@@ -136,7 +145,28 @@ pub async fn open_project<R: Runtime>(
             .ok_or_else(|| fail(format!("no project {request}")))?;
         inner.registry.open(&path, ui_locale()).map_err(fail)?
     };
-    open(app, &state, project).await
+    open(app, &state, project, true).await
+}
+
+/// Opens a listed project for another AI tool (MCP): no greeting from
+/// AgentKnife's own AI, which would only get in its way.
+pub async fn open_project_quietly<R: Runtime>(
+    app: AppHandle<R>,
+    state: &State<'_, AppState>,
+    id: String,
+) -> Res<OpenedProject> {
+    let project = {
+        let mut inner = state.inner.lock().await;
+        let path = inner
+            .registry
+            .recent()
+            .into_iter()
+            .find(|r| r.entry.id == id)
+            .map(|r| r.entry.path)
+            .ok_or_else(|| fail(format!("no project {id}")))?;
+        inner.registry.open(&path, ui_locale()).map_err(fail)?
+    };
+    open(app, state, project, false).await
 }
 
 #[tauri::command]
@@ -162,7 +192,7 @@ pub async fn open_folder<R: Runtime>(
             .scaffold(profiles::default_profile())
             .map_err(fail)?;
     }
-    open(app, &state, project).await.map(Some)
+    open(app, &state, project, true).await.map(Some)
 }
 
 /// Closes what is open: stops the turn, the preview and the app window.
@@ -182,6 +212,7 @@ async fn open<R: Runtime>(
     app: AppHandle<R>,
     state: &State<'_, AppState>,
     project: Project,
+    may_greet: bool,
 ) -> Res<OpenedProject> {
     let root = project.root().to_path_buf();
     let id = project.meta().id.clone();
@@ -200,6 +231,8 @@ async fn open<R: Runtime>(
         let _ = reload_app.emit(ak_types::ipc::PREVIEW_RELOAD_EVENT, ());
     });
     session.start().await.map_err(fail)?;
+    // Backend code changed by another AI tool's own file tools, or by the user.
+    session.watch_backend();
     forward_status(app.clone(), session.clone());
 
     let history = project.load_conversation().map_err(fail)?.conversation;
@@ -237,7 +270,7 @@ async fn open<R: Runtime>(
     }
     // The project notes for the AI, and a greeting in a brand-new chat (after
     // the window has shown the history, so its events land after it).
-    let greet = empty && interrupted.is_none();
+    let greet = may_greet && empty && interrupted.is_none();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(400)).await;
         crate::turn::on_open(app, greet).await;
