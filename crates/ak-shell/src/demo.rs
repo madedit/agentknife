@@ -186,6 +186,7 @@ impl Demo {
             files: demo_files(),
             timeline: demo_timeline(),
             mcp: ak_types::ipc::McpStatus {
+                folder: DEMO_FOLDER.into(),
                 program: r"C:\Program Files\AgentKnife\agentknife-mcp.exe".into(),
                 ..Default::default()
             },
@@ -332,7 +333,11 @@ impl Demo {
             }
             cmd::OPEN_FOLDER | cmd::PICK_FOLDER => Ok(Value::Null),
             cmd::PREVIEW_STATUS => Ok(json!(d.preview)),
-            cmd::RUN_APP | cmd::REVEAL | cmd::CLEAR_LOG | cmd::SET_SELECTION => Ok(Value::Null),
+            cmd::RUN_APP
+            | cmd::REVEAL
+            | cmd::CLEAR_LOG
+            | cmd::SET_SELECTION
+            | cmd::OPEN_TERMINAL => Ok(Value::Null),
             cmd::GET_LOG => Ok(json!(demo_log())),
             cmd::GET_SETTINGS => {
                 let mut s = d.settings.clone();

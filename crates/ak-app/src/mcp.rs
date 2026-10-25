@@ -90,9 +90,17 @@ fn endpoint_file(state: &AppState) -> PathBuf {
     state.state_dir.join("mcp.json")
 }
 
-fn status(state: &AppState, enabled: bool) -> McpStatus {
+async fn status(state: &AppState) -> McpStatus {
+    let (enabled, folder) = {
+        let inner = state.inner.lock().await;
+        (
+            inner.settings.mcp_enabled,
+            inner.registry.default_parent().display().to_string(),
+        )
+    };
     McpStatus {
         enabled,
+        folder,
         clients: state
             .mcp
             .with(|r| r.clients.iter().map(|c| c.name.clone()).collect())
@@ -105,8 +113,7 @@ fn status(state: &AppState, enabled: bool) -> McpStatus {
 
 async fn emit_status<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<AppState>();
-    let enabled = state.inner.lock().await.settings.mcp_enabled;
-    let _ = app.emit(MCP_EVENT, status(&state, enabled));
+    let _ = app.emit(MCP_EVENT, status(&state).await);
 }
 
 /// Listens while the setting is on; off, the endpoint file says so (the
@@ -141,16 +148,87 @@ pub async fn apply<R: Runtime>(app: &AppHandle<R>) {
     emit_status(app).await;
 }
 
-/// AgentKnife closes: nobody listens any more.
+/// AgentKnife closes: nobody listens any more. The file keeps whether the
+/// setting is on, so a tool's `agentknife-mcp` starts AgentKnife only then
+/// (every Claude Code session starts it, most have nothing to do here).
 pub fn shut_down(state: &AppState) {
+    // Dropping the server marks the file off first.
     state.mcp.with(|r| r.server.take());
-    let _ = std::fs::remove_file(endpoint_file(state));
+    let enabled = state
+        .inner
+        .try_lock()
+        .map(|i| i.settings.mcp_enabled)
+        .unwrap_or(false);
+    let _ = Endpoint {
+        enabled,
+        port: None,
+        token: None,
+    }
+    .write(&endpoint_file(state));
 }
 
 #[tauri::command]
 pub async fn mcp_status(state: State<'_, AppState>) -> Res<McpStatus> {
-    let enabled = state.inner.lock().await.settings.mcp_enabled;
-    Ok(status(&state, enabled))
+    Ok(status(&state).await)
+}
+
+/// A terminal in the projects folder, where the user sets up a tool and then
+/// starts it (its setting is for that folder only).
+#[tauri::command]
+pub async fn open_terminal(state: State<'_, AppState>) -> Res<()> {
+    let folder = state
+        .inner
+        .lock()
+        .await
+        .registry
+        .default_parent()
+        .to_path_buf();
+    std::fs::create_dir_all(&folder).map_err(fail)?;
+    terminal_in(&folder).map_err(fail)
+}
+
+fn terminal_in(dir: &std::path::Path) -> std::io::Result<()> {
+    use std::process::{Command, Stdio};
+    let quiet = |c: &mut Command| {
+        c.current_dir(dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+    };
+    if cfg!(windows) {
+        // Windows Terminal when there is one, else PowerShell in its own window.
+        let mut wt = Command::new("wt.exe");
+        wt.arg("-d").arg(dir);
+        quiet(&mut wt);
+        if wt.spawn().is_ok() {
+            return Ok(());
+        }
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", "start", "", "powershell", "-NoExit"]);
+        quiet(&mut cmd);
+        return cmd.spawn().map(drop);
+    }
+    if cfg!(target_os = "macos") {
+        let mut open = Command::new("open");
+        open.args(["-a", "Terminal"]).arg(dir);
+        quiet(&mut open);
+        return open.spawn().map(drop);
+    }
+    // Linux: the desktop's default terminal, else the common ones.
+    for program in [
+        "x-terminal-emulator",
+        "gnome-terminal",
+        "konsole",
+        "xfce4-terminal",
+        "xterm",
+    ] {
+        let mut c = Command::new(program);
+        quiet(&mut c);
+        if c.spawn().is_ok() {
+            return Ok(());
+        }
+    }
+    Err(std::io::Error::other("no terminal program was found"))
 }
 
 #[tauri::command]
@@ -165,7 +243,7 @@ pub async fn set_mcp<R: Runtime>(
         inner.settings.save(&state.state_dir).map_err(fail)?;
     }
     apply(&app).await;
-    Ok(status(&state, request))
+    Ok(status(&state).await)
 }
 
 fn words(id: &str, pairs: &[(&'static str, &str)]) -> String {

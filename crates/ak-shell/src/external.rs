@@ -84,13 +84,16 @@ pub fn tool_name(id: &str) -> String {
 }
 
 /// What the user pastes to set up `tool` with `program` (agentknife-mcp's
-/// full path): a terminal command, or for other tools the usual JSON config.
+/// full path): a terminal command run in the projects folder, or for other
+/// tools the usual JSON config. Claude Code and Gemini CLI keep it for that
+/// folder only (their default), so sessions elsewhere do not start it; Codex
+/// has one setting for every folder.
 pub fn setup_text(tool: &str, program: &str) -> String {
     let quoted = format!("\"{program}\"");
     match tool {
-        "claude-code" => format!("claude mcp add --scope user agentknife -- {quoted}"),
+        "claude-code" => format!("claude mcp add agentknife -- {quoted}"),
         "codex" => format!("codex mcp add agentknife -- {quoted}"),
-        "gemini" => format!("gemini mcp add --scope user agentknife {quoted}"),
+        "gemini" => format!("gemini mcp add agentknife {quoted}"),
         _ => {
             let config = serde_json::json!({
                 "mcpServers": { "agentknife": { "command": program } }
@@ -105,13 +108,17 @@ pub fn setup_text(tool: &str, program: &str) -> String {
 pub fn SetupCommand(tool: &'static str) -> impl IntoView {
     let external = External::get();
     let program = move || external.status.with(|s| s.program.clone());
+    let folder = move || external.status.with(|s| s.folder.clone());
     let text = move || setup_text(tool, &program());
-    let name = tool_name(tool);
-    let first = if tool == "other" {
-        "external-step1-config"
-    } else {
+    // Values in `Show`'s children, which run again: kept, not moved.
+    let name = StoredValue::new(tool_name(tool));
+    let terminal = tool != "other";
+    let first = if terminal {
         "external-step1"
+    } else {
+        "external-step1-config"
     };
+    let backend = StoredValue::new(expect_context::<Backend>());
     view! {
         <div data-setup=tool class="text-sm">
             <Show
@@ -133,7 +140,28 @@ pub fn SetupCommand(tool: &'static str) -> impl IntoView {
                         {t("external-copy")}
                     </button>
                 </div>
-                <p class="mt-2">{t_with("external-step2", [("name", name.clone())])}</p>
+                {terminal.then(|| view! {
+                    <button
+                        type="button"
+                        data-action="open-terminal"
+                        title=move || t_with("external-open-terminal-tip", [("folder", folder())])()
+                        class="mt-2 rounded-lg border border-gray-300 px-3 py-1 text-xs hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+                        on:click=move |_| {
+                            let backend = backend.get_value();
+                            leptos::task::spawn_local(async move {
+                                let _ = backend.open_terminal().await;
+                            });
+                        }
+                    >
+                        {t("external-open-terminal")}
+                    </button>
+                })}
+                {(tool == "codex").then(|| view! {
+                    <p class="mt-2 text-xs text-gray-600 dark:text-gray-400">{t("external-codex-everywhere")}</p>
+                })}
+                <p class="mt-2">
+                    {move || t_with("external-step2", [("name", name.get_value()), ("folder", folder())])()}
+                </p>
             </Show>
         </div>
     }
@@ -257,10 +285,10 @@ mod tests {
         let p = r"C:\Program Files\AgentKnife\agentknife-mcp.exe";
         assert_eq!(
             setup_text("claude-code", p),
-            r#"claude mcp add --scope user agentknife -- "C:\Program Files\AgentKnife\agentknife-mcp.exe""#
+            r#"claude mcp add agentknife -- "C:\Program Files\AgentKnife\agentknife-mcp.exe""#
         );
         assert!(setup_text("codex", p).starts_with("codex mcp add agentknife -- \""));
-        assert!(setup_text("gemini", p).starts_with("gemini mcp add --scope user agentknife \""));
+        assert!(setup_text("gemini", p).starts_with("gemini mcp add agentknife \""));
         // JSON escapes the backslashes.
         let json: serde_json::Value =
             serde_json::from_str(&setup_text("other", p)).unwrap_or_default();

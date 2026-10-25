@@ -199,6 +199,10 @@ impl Backend {
         self.call(cmd::SET_SELECTION, Some(picked)).await
     }
 
+    pub async fn open_terminal(&self) -> Result<(), CallError> {
+        self.call(cmd::OPEN_TERMINAL, None::<()>).await
+    }
+
     pub async fn mcp_status(&self) -> Result<ak_types::ipc::McpStatus, CallError> {
         self.call(cmd::MCP_STATUS, None::<()>).await
     }

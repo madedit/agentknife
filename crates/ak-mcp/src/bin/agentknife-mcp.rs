@@ -1,6 +1,8 @@
 //! `agentknife-mcp`: what an agent CLI starts to use AgentKnife as an MCP
-//! server. It connects its stdin/stdout to the running AgentKnife (starting it
-//! when it is not running) and passes the messages through unchanged.
+//! server. It connects its stdin/stdout to the running AgentKnife and passes
+//! the messages through unchanged. When AgentKnife is not running it starts
+//! it, but only if the user let other AI tools in: a client starts this with
+//! every session, and with the setting off AgentKnife must not pop up.
 //!
 //! Messages for the user go to stderr: clients show it in their MCP log.
 
@@ -42,18 +44,19 @@ async fn run() -> Result<(), String> {
     pipe(stream).await
 }
 
-const OFF: &str = "AgentKnife is open, but other AI tools may not operate it yet. In \
-                   AgentKnife, turn on \"Let other AI tools operate AgentKnife\" (Connect AI, \
-                   or Settings), then try again.";
+const OFF: &str = "other AI tools may not operate AgentKnife: in AgentKnife, turn on \
+                   \"Let other AI tools operate AgentKnife\" (Connect AI, or Settings), then \
+                   try again.";
 
 enum Problem {
-    /// AgentKnife runs with the setting off.
+    /// The setting is off (AgentKnife open or not).
     Off,
     NotRunning,
     Refused(String),
 }
 
 async fn connect(file: &Path) -> Result<TcpStream, Problem> {
+    // No file: AgentKnife never ran; it starts, and the user sets it up there.
     let Some(endpoint) = Endpoint::read(file) else {
         return Err(Problem::NotRunning);
     };

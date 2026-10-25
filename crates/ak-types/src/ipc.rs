@@ -109,6 +109,9 @@ pub mod cmd {
     /// points at in the preview now, for `get_selection` (also another AI
     /// tool's, which sends no message through the chat).
     pub const SET_SELECTION: &str = "set_selection";
+    /// `()` → `()`: opens a terminal in the projects folder (setting up
+    /// another AI tool there).
+    pub const OPEN_TERMINAL: &str = "open_terminal";
     /// `()` → [`McpStatus`](super::McpStatus); changes then arrive as
     /// [`MCP_EVENT`](super::MCP_EVENT).
     pub const MCP_STATUS: &str = "mcp_status";
@@ -158,6 +161,7 @@ pub mod cmd {
         MCP_STATUS,
         SET_MCP,
         SET_SELECTION,
+        OPEN_TERMINAL,
     ];
 }
 
@@ -237,6 +241,8 @@ pub struct McpStatus {
     /// The program a tool starts (`agentknife-mcp`), full path, for the setup
     /// commands; empty when it is missing next to AgentKnife.
     pub program: String,
+    /// The projects folder: tools are set up for it and started in it.
+    pub folder: String,
 }
 /// Tauri event carrying new lines of the open project's log
 /// (`Vec<`[`LogLine`](crate::log::LogLine)`>`).

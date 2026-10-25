@@ -1,5 +1,6 @@
-//! `<data_dir>/AgentKnife/mcp.json`: where the running AgentKnife listens. It
-//! exists while AgentKnife runs; without the setting on it has no port.
+//! `<data_dir>/AgentKnife/mcp.json`: whether other AI tools may operate
+//! AgentKnife, and while it runs with that on, where it listens. Missing: it
+//! never ran with this version.
 
 use std::path::{Path, PathBuf};
 
