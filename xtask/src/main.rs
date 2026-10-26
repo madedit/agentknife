@@ -5,6 +5,7 @@
 mod bridge;
 mod ci;
 mod dev;
+mod dist;
 mod downloads;
 mod i18n;
 mod kit;
@@ -42,13 +43,14 @@ fn main() -> ExitCode {
             let rest: Vec<String> = std::env::args().skip(2).collect();
             dev::build(&workspace_root(), &rest)
         }
+        Some("dist") => dist::run(&workspace_root()),
         Some("e2e") => {
             let rest: Vec<String> = std::env::args().skip(2).collect();
             dev::e2e(&workspace_root(), &rest)
         }
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-toolchain|ci|dev|build|e2e|vendor-codemirror|vendor-libs|pin-downloads|vendor-kit|check-knowledge>"
+                "usage: cargo xtask <gen-toolchain|ci|dev|build|dist|e2e|vendor-codemirror|vendor-libs|pin-downloads|vendor-kit|check-knowledge>"
             );
             return ExitCode::FAILURE;
         }

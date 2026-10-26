@@ -1,7 +1,7 @@
 # AGENTS.md — AgentKnife
 
 Rules for any AI agent working on this repository. Read this file fully before every session.
-Product requirements and user flows live in [`docs/SPEC.md`](docs/SPEC.md) (Traditional Chinese).
+Product requirements and user flows live in [`docs/SPEC.md`](docs/SPEC.md).
 
 **Conflict rule:** if this file and SPEC disagree, **SPEC wins**. Implement per SPEC and add a `Blocked` entry in `plan/STATUS.md` saying "AGENTS.md needs update: <section>" for the coordinator to fix. There are two exceptions:
 - A section of this file marked `Owner-approved override (YYYY-MM-DD)` wins over SPEC.
@@ -103,7 +103,8 @@ templates/
 knowledge/       Version-pinned docs/examples the agent reads on demand (Leptos, Tauri 2, ak-ui).
 xtask/           `cargo xtask ci`, `vendor-codemirror`, and other dev tasks.
 versions.toml    Single source of truth for pinned versions.
-docs/SPEC.md     Product spec (zh-TW).
+docs/SPEC.md     Product spec.
+docs/install-size.md  Download and disk sizes on a fresh Windows PC (linked from the READMEs).
 plan/            STATUS.md and execution-plan.md (format in §8).
 ```
 
@@ -487,3 +488,5 @@ The user-project files `.agentknife/plan/tasks.md` and `STATUS.md` use the same 
 ## 10. License
 
 MIT OR Apache-2.0.
+
+Owner-approved override (2026-10-26): code that ends up in generated apps is MIT-0 ([`templates/LICENSE`](templates/LICENSE)), so those apps carry no notice for AgentKnife. That covers everything under `templates/` and the crates `vendor-kit` copies there (`ak-bridge`, `ak-ui`: `license = "MIT-0"` in their own Cargo.toml, not the workspace's). A new crate that generated apps depend on gets the same.

@@ -4,7 +4,7 @@
 [package]
 build = false
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "MIT-0"
 name = "ak-ui"
 publish = false
 version = "0.1.0"

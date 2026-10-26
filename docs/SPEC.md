@@ -1,117 +1,118 @@
-# AgentKnife 產品規格
+# AgentKnife Product Spec
 
-> 開發規範與架構約定請見 [`AGENTS.md`](../AGENTS.md)。本文件描述「做什麼」與「使用者體驗」。
+> Development rules and architecture conventions are in [`AGENTS.md`](../AGENTS.md). This document describes *what* we build and the user experience.
 
-## 1. 產品定位
+## 1. Product positioning
 
-AgentKnife 是一個由 AI Agent 主導的桌面開發工具，給**普通人或只有基礎程式知識的人**用。使用者用對話描述需求，AI 負責寫程式、建置、修錯、打包，並用白話一步步引導使用者。
+AgentKnife is a desktop development tool driven by an AI agent, for **ordinary people or people with only basic programming knowledge**. The user describes what they want in chat; the AI writes the code, builds it, fixes errors, packages it, and guides the user step by step in plain language.
 
-## 2. 目標使用者
+## 2. Target users
 
-- 沒寫過程式，但想做出自己的小工具或 App 的人
-- 懂一點程式，想用 AI 快速做出成品，偶爾想看看或改改程式碼的人
+- People who have never written code but want to make their own small tool or app
+- People who know a little programming, want the AI to produce a finished app quickly, and sometimes want to look at or tweak the code
 
-## 3. 畫面配置
+## 3. Screen layout
 
-| 區域 | 內容 |
+| Area | Contents |
 |---|---|
-| 左：檔案管理 | 專案的檔案樹；下方是「時間軸」，可以回到之前任一步 |
-| 中：WYSIWYG 預覽 | 即時跑出使用者的 App。上方可以切換裝置外框（桌面視窗 / 手機 / 平板）；程式碼編輯器以分頁形式和預覽切換 |
-| 右：AI 對話 | 輸入需求；顯示 AI 正在做什麼（白話步驟）、思考過程（預設折疊）、結果 |
+| Left: files | The project's file tree; below it, the "timeline", which can go back to any earlier step |
+| Center: WYSIWYG preview | The user's app running live. At the top, a switch for the device frame (desktop window / phone / tablet); the code editor is a tab that switches with the preview |
+| Right: AI chat | Enter requests; shows what the AI is doing (plain-language steps), its thinking (collapsed by default), and the results |
 
-- **簡單模式**（預設）：只顯示預覽和對話
-- **進階模式**：打開檔案區和程式碼編輯器
-- 各區可以拖拉調整寬度
+- **Simple mode** (default): only the preview and the chat
+- **Advanced mode**: opens the file area and the code editor
+- Each area's width can be adjusted by dragging
 
-## 4. 使用流程
+## 4. User flow
 
-### 4.1 首次開啟
-1. 顯示**專案清單**首頁（新專案 / 開啟最近的專案）。專案預設存在 `~/AgentKnife/Projects/<名稱>`，也可以自選位置。
-2. 第一次使用時，先**連結 AI**（全域設定一次就好，個別專案可以覆寫）：
-   - 雲端：Anthropic、OpenAI、OpenAI 相容端點（OpenRouter、DeepSeek、Groq 等）
-   - 本地：Ollama、LM Studio
-   - API key 存在作業系統的 keychain
-   - 連線時檢查模型是否支援 tool calling；不支援或能力不足時，用白話提醒「效果可能較差」
+### 4.1 First launch
+1. Show the **project list** home page (new project / open a recent project). Projects are saved in `~/AgentKnife/Projects/<name>` by default; the user can also choose a location.
+2. On first use, **connect an AI** first (set once globally; individual projects can override it):
+   - Cloud: Anthropic, OpenAI, OpenAI-compatible endpoints (OpenRouter, DeepSeek, Groq, etc.)
+   - Local: Ollama, LM Studio
+   - API keys are stored in the operating system's keychain
+   - On connecting, check whether the model supports tool calling; if it does not, or its abilities are weak, warn in plain language that "results may be worse"
 
-### 4.2 AI 打招呼
-AI 用使用者的語言打招呼，說明 AgentKnife 能做什麼，並建議下一步（例如「我們先檢查一下你的電腦有沒有需要的工具」）。
+### 4.2 The AI says hello
+The AI greets the user in the user's language, explains what AgentKnife can do, and suggests a next step (for example, "Let's first check whether your computer has the tools we need").
 
-### 4.3 工具檢查與安裝（doctor）
-- 由程式自動偵測與安裝，AI 只負責用白話說明進度、回答問題
-- Rust、Trunk、tauri-cli、Tailwind 等工具安裝在 AgentKnife 自己的資料夾，**不弄亂使用者的電腦**
-- 一定要系統安裝的東西（Windows 的 MSVC Build Tools、WebView2；macOS 的 Xcode Command Line Tools；Linux 的 webkit 套件），由 AI 一步步引導使用者完成
-- 安裝中斷可以重來、可以續傳
-- 不需要安裝 Node.js
+### 4.3 Tool check and install (doctor)
+- The program detects and installs tools automatically; the AI only explains progress in plain language and answers questions
+- Tools such as Rust, Trunk, tauri-cli and Tailwind are installed in AgentKnife's own folder, **without messing up the user's computer**
+- Things that must be installed system-wide (MSVC Build Tools and WebView2 on Windows; Xcode Command Line Tools on macOS; webkit packages on Linux): the AI guides the user through them step by step
+- An interrupted install can be retried and resumed
+- Node.js is not needed
 
-### 4.4 提出需求、即時預覽
-- 使用者用對話描述需求，AI 修改程式碼，中間預覽自動更新
-- 預覽是**真的可以操作的 App**（按鈕、資料儲存都是真的功能）
-- **點選指認**：在預覽中點一個元素，例如「這個按鈕」，再說要怎麼改
-- **小修改**直接做；**大功能**先列出 3 到 5 點計畫，加上預估時間和花費，使用者按「開始」才動手
-- 出錯時 AI 自動讀錯誤、自己修，**最多 3 次**；還是不行就用白話說明，讓使用者選擇：換個做法 / 回到上一步 / 看技術細節
-- AI 改完會自己看預覽截圖，並操作 App 驗證結果
-- 每完成一輪修改，自動在時間軸上留一個「檢查點」，隨時可以回到那一步
-  - 保留最近 50 個（可調整）；更舊的會自動合併到所屬的「任務完成」檢查點
-  - 「任務完成」、「打包」、使用者手動「標記這一版」的檢查點永遠保留
-- **做到一半中斷**（例如當機、強制關閉、斷網、AI 服務出錯）：重開專案時，AgentKnife 會用白話詢問：「上次做到一半中斷了（正在：○○）。要接著做，還是回到上一個檢查點？」
-  - 選「接著做」：AI 從中斷的地方繼續
-  - 選「回到上一個檢查點」：做到一半的內容會另存成「已放棄」的時間軸項目，之後還找得回來
-- 中途換用其他 AI（例如從雲端換成本地）不影響之前的對話紀錄，可以直接接著做
-- 「用真正的視窗執行」按鈕：開出實際的 App 視窗做最後測試
+### 4.4 Making requests, live preview
+- The user describes what they want in chat, the AI changes the code, and the preview in the center updates automatically
+- The preview is **a real, usable app** (buttons and data saving really work)
+- **Point and pick**: click an element in the preview, for example "this button", then say how to change it
+- **Small changes** are made directly; for **big features**, the AI first lists a 3–5 point plan with estimated time and cost, and starts only after the user presses "Start"
+- On errors, the AI reads the error and fixes it itself, **at most 3 times**; if that still fails, it explains in plain language and lets the user choose: try another way / go back a step / see the technical details
+- After a change, the AI looks at a screenshot of the preview itself and operates the app to verify the result
+- Each round of changes automatically leaves a "checkpoint" on the timeline, and the user can go back to that step at any time
+  - The latest 50 are kept (adjustable); older ones are merged automatically into the "task done" checkpoint they belong to
+  - "Task done", "packaging", and the user's own "mark this version" checkpoints are always kept
+- **Interrupted halfway** (for example a crash, a forced close, a lost connection, an AI service error): when the project is reopened, AgentKnife asks in plain language: "Last time the work was interrupted halfway (doing: …). Continue, or go back to the last checkpoint?"
+  - "Continue": the AI picks up where it stopped
+  - "Go back to the last checkpoint": the half-done work is saved as an "abandoned" timeline entry, so it can still be found later
+- Switching to another AI midway (for example from cloud to local) does not affect the earlier chat history; work can continue directly
+- A "Run in a real window" button: opens the actual app window for final testing
 
-### 4.5 打包與安裝
-- 產出**目前這台電腦平台**的 App 檔案：
-  - Windows：`.zip`（解壓後直接執行；`.exe` 安裝程式之後再加）
-  - macOS：`.dmg`
-  - Linux：`.tar.gz`（`.deb` 之後再加）
-  - （第二階段）Android：`.apk`
-- 安裝檔不簽章。AI 依平台用白話教使用者怎麼安裝，包括 Windows SmartScreen 和 macOS「無法打開」警告的處理方式
-- 需要其他平台的安裝檔時，AI 會說明要在那個平台的電腦上打包
+### 4.5 Packaging and installing
+- Produce the app file for **the platform of the current computer**:
+  - Windows: `.zip` (unzip and run directly; an `.exe` installer comes later)
+  - macOS: `.dmg`
+  - Linux: `.tar.gz` (`.deb` comes later)
+  - (Phase 2) Android: `.apk`
+- Installers are not signed. The AI teaches the user, in plain language and per platform, how to install, including how to handle the Windows SmartScreen and macOS "cannot be opened" warnings
+- When an installer for another platform is needed, the AI explains that it has to be packaged on a computer of that platform
 
-## 5. AI 的行為原則
+## 5. How the AI behaves
 
-- 大部分事情由 AI 主動完成，只在必要時問使用者
-- 一律用白話，不用術語；技術細節放在「詳細資料」裡
-- 權限：
-  - 專案資料夾內的讀寫、建置、執行：自動進行
-  - 下載安裝、存取專案以外的地方、刪除東西：先用白話詢問
-- AI 用使用者**最近一次輸入的語言**回答；判斷不出來時用介面語言（介面先支援繁中、英文）
-- 使用雲端 AI 時顯示大約用了多少 token / 花費，可以設定每日上限
-- 每個專案的 `.agentknife/` 資料夾存放：
-  - `PROJECT.md`：白話的需求與決定
-  - `plan/STATUS.md`：目前進度
-  - `plan/tasks.md`：任務清單
-  - 對話紀錄
-  重開專案時 AI 能接著做下去；對話太長時自動整理
+- The AI does most things on its own and asks the user only when necessary
+- Always plain language, no jargon; technical details go under "Details"
+- Permissions:
+  - Reading and writing inside the project folder, building, running: done automatically
+  - Downloading and installing, accessing places outside the project, deleting things: ask first in plain language
+- The AI answers in **the language of the user's latest input**; when that cannot be determined, it uses the interface language (the interface supports Traditional Chinese and English first)
+- When using a cloud AI, show roughly how many tokens / how much money has been used; a daily limit can be set
+- Each project's `.agentknife/` folder holds:
+  - `PROJECT.md`: requirements and decisions in plain language
+  - `plan/STATUS.md`: current progress
+  - `plan/tasks.md`: task list
+  - The chat history
 
-## 6. 使用者的 App 長什麼樣
+  When a project is reopened, the AI can carry on; when the chat gets too long, it is condensed automatically
 
-- 技術：Tauri 2 + Leptos + Tailwind（全 Rust，不用 Node）
-- AgentKnife 提供起始範本，以及一套常用元件（按鈕、表單、清單、對話框、導覽…）
-- 技術棧做成可擴充的「stack profile」。之後可以加入 egui 等其他技術，讓 AgentKnife 有能力做出像 [wordcraft](https://github.com/storytold/wordcraft) 這種大型專案
+## 6. What the user's app looks like
 
-## 7. 隱私
+- Technology: Tauri 2 + Leptos + Tailwind (all Rust, no Node)
+- AgentKnife provides a starter template and a set of common components (buttons, forms, lists, dialogs, navigation…)
+- The tech stack is an extensible "stack profile". Other technologies such as egui can be added later, so AgentKnife can build large projects like [wordcraft](https://github.com/storytold/wordcraft)
 
-- 預設不收集任何使用資料
-- 當機回報需要使用者主動同意才會送出
+## 7. Privacy
 
-## 8. 階段規劃
+- No usage data is collected by default
+- Crash reports are sent only with the user's explicit consent
 
-| 階段 | 內容 |
+## 8. Phases
+
+| Phase | Contents |
 |---|---|
-| Phase 1（MVP） | 桌面三平台、AI 連線、工具安裝、Tauri+Leptos 範本與元件、即時預覽與點選指認、對話、時間軸、打包與安裝說明、繁中/英文 |
-| Phase 2 | Android、AgentKnife 自動更新、更多 AI provider |
-| Phase 3 | iOS（只能在 Mac 上做）、大型專案模式（多個 AI 同時開發）、egui 技術棧、簽章與發佈、外掛系統 |
+| Phase 1 (MVP) | The three desktop platforms, AI connection, tool install, Tauri+Leptos template and components, live preview and point and pick, chat, timeline, packaging and install instructions, Traditional Chinese/English |
+| Phase 2 | Android, AgentKnife auto-update, more AI providers |
+| Phase 3 | iOS (only possible on a Mac), large-project mode (several AIs developing at once), the egui stack, signing and publishing, a plugin system |
 
-## 9. MVP 驗收情境
+## 9. MVP acceptance scenario
 
-一個沒寫過程式的人，在一台**乾淨的 Windows 11 電腦**上：
+A person who has never written code, on a **clean Windows 11 computer**:
 
-1. 安裝 AgentKnife
-2. 連結 AI
-3. 讓 AgentKnife 裝好開發工具
-4. 只靠對話做出一個「待辦清單 App」，可以新增、刪除項目，資料存在本機
-5. 中途在預覽裡點選一個按鈕，請 AI 改它的顏色
-6. 拿到安裝檔，照 AI 的說明成功安裝並執行
+1. Installs AgentKnife
+2. Connects an AI
+3. Lets AgentKnife install the development tools
+4. Using only chat, makes a "to-do list app" that can add and delete items, with the data saved on the computer
+5. Midway, clicks a button in the preview and asks the AI to change its color
+6. Gets the installer, and following the AI's instructions installs and runs it successfully
 
-macOS 和 Linux 也要通過相同的情境。
+macOS and Linux must pass the same scenario.
