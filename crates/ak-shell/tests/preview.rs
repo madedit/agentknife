@@ -95,6 +95,7 @@ fn status(frontend: ServerState, url: Option<&str>) -> PreviewStatus {
         frontend,
         backend: ServerState::Ready,
         url: url.map(Into::into),
+        downloading: false,
     }
 }
 
@@ -279,6 +280,26 @@ fn a_build_shows_its_log_in_a_window_over_the_preview() {
 }
 
 #[test]
+fn the_first_download_says_what_it_waits_for() {
+    let downloading = PreviewStatus {
+        frontend: ServerState::Starting,
+        backend: ServerState::Starting,
+        url: None,
+        downloading: true,
+    };
+    let html = render_with(
+        Locale::ZhTw,
+        downloading,
+        Device::Computer,
+        None,
+        Some(vec![]),
+    );
+    assert!(html.contains(r#"data-cover="downloading""#), "{html}");
+    assert!(html.contains("正在下載 App 用到的程式庫"), "{html}");
+    assert!(html.contains("build-log"), "{html}");
+}
+
+#[test]
 fn the_part_that_waits_its_turn_shows_zero() {
     // First build: the background part compiles, the screens wait for the
     // shared target folder and have not reported yet.
@@ -286,6 +307,7 @@ fn the_part_that_waits_its_turn_shows_zero() {
         frontend: ServerState::Building,
         backend: ServerState::Starting,
         url: None,
+        downloading: false,
     };
     let html = render_with(
         Locale::ZhTw,

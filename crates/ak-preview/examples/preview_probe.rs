@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     });
-    let session = PreviewSession::new(preview, None);
+    let session = std::sync::Arc::new(PreviewSession::new(preview, None));
     session.start().await?;
     let st = session.settled(Duration::from_secs(600)).await;
     println!(

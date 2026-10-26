@@ -1,6 +1,6 @@
 //! Test helper for tests/dev_server.rs: behaves like `trunk serve` (first
-//! argument `serve`) or like `cargo run` of the app backend (`run`), driven by
-//! FAKE_* environment variables. Not used by AgentKnife itself.
+//! argument `serve`), like `cargo run` of the app backend (`run`) or like
+//! `cargo fetch` (`fetch`), driven by FAKE_* environment variables. Not used by AgentKnife itself.
 
 #![forbid(unsafe_code)]
 
@@ -101,11 +101,24 @@ fn run() {
     }
 }
 
+/// FAKE_FETCH_DELAY (ms) to download; FAKE_FETCH=fail fails.
+fn fetch() {
+    log("fetch");
+    let delay: u64 = env("FAKE_FETCH_DELAY").parse().unwrap_or(0);
+    std::thread::sleep(Duration::from_millis(delay));
+    if env("FAKE_FETCH") == "fail" {
+        eprintln!("error: failed to download from `https://index.crates.io`");
+        std::process::exit(101);
+    }
+    eprintln!("  Downloaded leptos v0.8.22");
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("serve") => serve(&args),
         Some("run") => run(),
+        Some("fetch") => fetch(),
         _ => std::process::exit(2),
     }
 }

@@ -38,6 +38,7 @@ fn ok() -> PreviewStatus {
         frontend: ServerState::Ready,
         backend: ServerState::Ready,
         url: Some("http://127.0.0.1:1/".into()),
+        downloading: false,
     }
 }
 
@@ -304,6 +305,7 @@ async fn preview_tools() {
         },
         backend: ServerState::Ready,
         url: None,
+        downloading: false,
     }]);
     let r = with_preview_tools(ToolRegistry::new(), failing, false);
     let status = text_of(&call(&r, "build_status", json!({})).await);

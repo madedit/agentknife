@@ -35,7 +35,28 @@ async fn check_now(state: &AppState) -> DoctorCheck {
 
 #[tauri::command]
 pub async fn doctor_check(state: State<'_, AppState>) -> Res<DoctorCheck> {
-    Ok(check_now(&state).await)
+    let check = check_now(&state).await;
+    start_preview(&state, &check.report).await?;
+    Ok(check)
+}
+
+/// A project opened before the tools were all there has a preview that is
+/// off or failed; once they are ready, it starts again.
+async fn start_preview(state: &AppState, report: &ak_types::doctor::DoctorReport) -> Res<()> {
+    if !report.ready() {
+        return Ok(());
+    }
+    let preview = state
+        .inner
+        .lock()
+        .await
+        .open
+        .as_ref()
+        .map(|o| o.preview.clone());
+    match preview {
+        Some(p) => p.start_if_down().await.map_err(fail),
+        None => Ok(()),
+    }
 }
 
 #[tauri::command]
@@ -62,6 +83,7 @@ pub async fn doctor_install<R: Runtime>(
             let _ = app.emit(DOCTOR_EVENT, p);
         })
         .await;
+    start_preview(&state, &report).await?;
     let guides = ak_doctor::system::guides(&report, Platform::current(), &probe).await;
     Ok(DoctorCheck { report, guides })
 }

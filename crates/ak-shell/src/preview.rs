@@ -57,6 +57,8 @@ pub enum Cover {
     None,
     /// The preview is not running.
     Off,
+    /// Downloading the app's libraries before the first build.
+    Downloading,
     /// Starting or the first build: nothing to show yet.
     FirstBuild,
     /// A rebuild: the last good page stays, with a badge.
@@ -81,6 +83,7 @@ pub fn cover(status: &PreviewStatus) -> Cover {
     let busy = |s: &ServerState| matches!(s, ServerState::Starting | ServerState::Building);
     match (&status.url, &status.frontend) {
         (None, ServerState::Off) => Cover::Off,
+        (None, _) if status.downloading => Cover::Downloading,
         (None, _) => Cover::FirstBuild,
         (Some(_), f) if busy(f) || busy(&status.backend) => Cover::Rebuilding,
         _ => Cover::None,
@@ -177,7 +180,7 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
     let building = Memo::new(move |_| {
         matches!(
             preview.status.with(cover),
-            Cover::FirstBuild | Cover::Rebuilding
+            Cover::Downloading | Cover::FirstBuild | Cover::Rebuilding
         )
     });
     let build_sources = Signal::derive(move || {
@@ -211,6 +214,8 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
     let build_title = Signal::derive(move || {
         if opening.get() {
             t("build-log-window")()
+        } else if preview.status.with(|s| s.downloading) {
+            t("preview-downloading")()
         } else if preview.status.with(|s| s.url.is_none()) {
             t("preview-first-build")()
         } else {
@@ -405,6 +410,15 @@ fn CoverView(chat: Chat) -> impl IntoView {
             </div>
         }
         .into_any(),
+        Cover::Downloading => view! {
+            <div data-cover="downloading" role="status" class="absolute inset-0 flex items-center justify-center p-6 text-center">
+                <div class="max-w-sm">
+                    <p class="animate-pulse text-base font-medium">{t("preview-downloading")}</p>
+                    <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{t("preview-downloading-hint")}</p>
+                </div>
+            </div>
+        }
+        .into_any(),
         Cover::FirstBuild => view! {
             <div data-cover="first-build" role="status" class="absolute inset-0 flex items-center justify-center p-6 text-center">
                 <div class="max-w-sm">
@@ -586,8 +600,14 @@ mod tests {
             frontend,
             backend,
             url: url.clone(),
+            downloading: false,
         };
         assert_eq!(cover(&PreviewStatus::default()), Cover::Off);
+        let downloading = PreviewStatus {
+            downloading: true,
+            ..s(ServerState::Starting, ServerState::Starting, &None)
+        };
+        assert_eq!(cover(&downloading), Cover::Downloading);
         assert_eq!(
             cover(&s(ServerState::Building, ServerState::Starting, &None)),
             Cover::FirstBuild

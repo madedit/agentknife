@@ -125,6 +125,14 @@ impl StackProfile for TauriLeptos {
         let (mut env, env_remove) = trunk_env();
         env.extend(progress_env());
         PreviewPlan {
+            // The whole workspace (screens and src-tauri), every target.
+            prepare: Some(CommandSpec {
+                tool: Tool::Cargo,
+                args: strings(&["fetch"]),
+                cwd: "",
+                env: progress_env().collect(),
+                env_remove: Vec::new(),
+            }),
             frontend: CommandSpec {
                 tool: Tool::Trunk,
                 args: strings(&[

@@ -30,7 +30,7 @@ dependencies = [
 
 [[package]]
 name = "ak-agent"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ak-doctor",
  "ak-preview",
@@ -52,7 +52,7 @@ dependencies = [
 
 [[package]]
 name = "ak-app"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ak-agent",
  "ak-bundle",
@@ -99,7 +99,7 @@ dependencies = [
 
 [[package]]
 name = "ak-bundle"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ak-doctor",
  "ak-preview",
@@ -117,7 +117,7 @@ dependencies = [
 
 [[package]]
 name = "ak-doctor"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ak-types",
  "dirs",
@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "ak-mcp"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ak-agent",
  "ak-types",
@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "ak-preview"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ak-bridge",
  "ak-doctor",
@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "ak-project"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ak-types",
  "dirs",
@@ -188,7 +188,7 @@ dependencies = [
 
 [[package]]
 name = "ak-providers"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ak-types",
  "futures-util",
@@ -203,7 +203,7 @@ dependencies = [
 
 [[package]]
 name = "ak-shell"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ak-types",
  "futures-channel",
@@ -218,7 +218,7 @@ dependencies = [
 
 [[package]]
 name = "ak-types"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "fluent-bundle",
  "serde",
@@ -238,7 +238,7 @@ dependencies = [
 
 [[package]]
 name = "ak-ui-gallery"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ak-ui",
  "leptos",
@@ -7782,7 +7782,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ak-doctor",
  "flate2",

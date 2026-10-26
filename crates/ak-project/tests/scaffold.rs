@@ -64,6 +64,7 @@ impl StackProfile for Fake {
     }
     fn preview(&self) -> PreviewPlan {
         PreviewPlan {
+            prepare: None,
             frontend: cmd(),
             frontend_log: LogMarkers {
                 building: &[],

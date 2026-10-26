@@ -11,6 +11,7 @@ use ak_project::{Project, RecentProject, Timeline};
 use ak_types::ipc::{
     DeleteProject, HomeState, LOG_EVENT, NewProject, OpenedProject, PREVIEW_EVENT, ProjectRow,
 };
+use ak_types::log::LogSource;
 use ak_types::stack::StackProfile;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
@@ -260,7 +261,17 @@ async fn open<R: Runtime>(
     session.set_reloader(move || {
         let _ = reload_app.emit(ak_types::ipc::PREVIEW_RELOAD_EVENT, ());
     });
-    session.start().await.map_err(fail)?;
+    // On a computer without the tools yet the preview cannot start; the
+    // project opens anyway, the window offers to install them, and
+    // `doctor_install` starts the preview once they are there.
+    if let Err(e) = session.start().await {
+        let note = if e.kind() == std::io::ErrorKind::NotFound {
+            "> the preview starts once AgentKnife's tools are installed".to_owned()
+        } else {
+            format!("> the preview did not start: {e}")
+        };
+        log.push(LogSource::Screens, &note);
+    }
     // Backend code changed by another AI tool's own file tools, or by the user.
     session.watch_backend();
     forward_status(app.clone(), session.clone());

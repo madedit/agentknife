@@ -47,6 +47,12 @@ pub struct Preview {
     crashes: CrashLog,
     frontend: Option<Running>,
     backend: Option<Running>,
+    /// The plan's `prepare` step is running (its process id, if known).
+    preparing: Option<Option<u32>>,
+    /// The `prepare` step succeeded; it does not run again.
+    prepared: bool,
+    /// Counts stops, so a `prepare` step that ends after one starts nothing.
+    epoch: u64,
     /// The backend code as the running backend was built from it
     /// ([`backend_fingerprint`]).
     backend_print: Option<u64>,
@@ -112,6 +118,9 @@ impl Preview {
             crashes: CrashLog::default(),
             frontend: None,
             backend: None,
+            preparing: None,
+            prepared: false,
+            epoch: 0,
             backend_print: None,
         })
     }
@@ -189,6 +198,66 @@ impl Preview {
         Ok(())
     }
 
+    /// Runs the plan's `prepare` step unless it succeeded before or is running;
+    /// both sides show as starting meanwhile. Returns the stop count to pass to
+    /// [`Preview::prepared`] and the step's end (whether it succeeded), or
+    /// `None` when there is nothing to run.
+    pub fn prepare(&mut self) -> std::io::Result<Option<(u64, JoinHandle<bool>)>> {
+        let Some(spec) = self.plan.prepare.clone() else {
+            return Ok(None);
+        };
+        if self.prepared || self.preparing.is_some() {
+            return Ok(None);
+        }
+        let values = self.values();
+        let refs: Vec<(&str, &str)> = values.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let (reader, writer) = std::io::pipe()?;
+        let mut cmd = self.tools.command(&spec, &self.root, &refs);
+        cmd.stdout(writer.try_clone()?).stderr(writer);
+        let mut child = cmd.spawn()?;
+        drop(cmd);
+        self.preparing = Some(child.id());
+        let backend = self.plan.backend.is_some();
+        self.status.send_modify(|s| {
+            s.downloading = true;
+            s.frontend = ServerState::Starting;
+            if backend {
+                s.backend = ServerState::Starting;
+            }
+        });
+        self.log.push(
+            LogSource::Backend,
+            "> download the app's libraries before the first build",
+        );
+        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+        read_lines(reader, tx);
+        let log = self.log.clone();
+        let task = tokio::spawn(async move {
+            let lines = tokio::spawn(async move {
+                while let Some(line) = rx.recv().await {
+                    log.push(LogSource::Backend, &line);
+                }
+            });
+            let ok = child.wait().await.is_ok_and(|s| s.success());
+            let _ = tokio::time::timeout(DRAIN, lines).await;
+            ok
+        });
+        Ok(Some((self.epoch, task)))
+    }
+
+    /// The `prepare` step started at stop count `epoch` ended: starts both
+    /// sides, unless the preview was stopped meanwhile. After a failed
+    /// download the builds try again and report what went wrong.
+    pub fn prepared(&mut self, epoch: u64, ok: bool) -> std::io::Result<()> {
+        if epoch != self.epoch {
+            return Ok(());
+        }
+        self.preparing = None;
+        self.prepared = ok;
+        self.status.send_modify(|s| s.downloading = false);
+        self.start()
+    }
+
     fn fingerprint(&self) -> u64 {
         backend_fingerprint(&self.root, self.plan.backend_watch)
     }
@@ -210,6 +279,13 @@ impl Preview {
 
     /// Stops everything.
     pub async fn stop(&mut self) {
+        self.epoch += 1;
+        if let Some(pid) = self.preparing.take() {
+            if let Some(pid) = pid {
+                kill_tree(pid).await;
+            }
+            self.status.send_modify(|s| s.downloading = false);
+        }
         for side in [Side::Frontend, Side::Backend] {
             self.stop_side(side).await;
         }
@@ -323,6 +399,9 @@ impl Preview {
 
 impl Drop for Preview {
     fn drop(&mut self) {
+        if let Some(Some(pid)) = self.preparing.take() {
+            kill_tree_now(pid);
+        }
         for r in [self.frontend.take(), self.backend.take()]
             .into_iter()
             .flatten()

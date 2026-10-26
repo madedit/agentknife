@@ -38,6 +38,10 @@ pub struct PreviewStatus {
     /// The page to show (with the bridge address), once the screens are built.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// The app's libraries are downloading before the first build (both
+    /// sides show as starting meanwhile).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub downloading: bool,
 }
 
 impl PreviewStatus {

@@ -4,6 +4,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use ak_types::log::LogSource;
 use ak_types::preview::{
     AppState, ControlAction, DomSummary, PAGE_CLOSED, PAGE_NOT_OPEN, PAGE_RELOADED_STUCK,
     PAGE_TIMEOUT, Picked, PreviewStatus, ScreenshotArea, ServerState,
@@ -63,8 +64,39 @@ impl PreviewSession {
         }
     }
 
-    pub async fn start(&self) -> std::io::Result<()> {
-        self.preview.lock().await.start()
+    /// Starts the preview. The first time the stack's `prepare` step runs
+    /// before it, in the background: this returns at once.
+    pub async fn start(self: &Arc<Self>) -> std::io::Result<()> {
+        let mut preview = self.preview.lock().await;
+        let Some((epoch, prepare)) = preview.prepare()? else {
+            return preview.start();
+        };
+        drop(preview);
+        let session = Arc::downgrade(self);
+        tokio::spawn(async move {
+            let ok = prepare.await.unwrap_or(false);
+            let Some(s) = session.upgrade() else { return };
+            let mut preview = s.preview.lock().await;
+            if let Err(e) = preview.prepared(epoch, ok) {
+                preview.log().push(
+                    LogSource::Screens,
+                    &format!("> the preview did not start: {e}"),
+                );
+            }
+        });
+        Ok(())
+    }
+
+    /// Starts again when the preview is off or failed, as when it was opened
+    /// before the tools were installed; a running preview is left alone.
+    pub async fn start_if_down(self: &Arc<Self>) -> std::io::Result<()> {
+        let s = self.status();
+        if s.frontend == ServerState::Off || s.error().is_some() {
+            self.stop().await;
+            self.start().await
+        } else {
+            Ok(())
+        }
     }
 
     pub async fn stop(&self) {

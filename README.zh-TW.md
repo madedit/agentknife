@@ -57,7 +57,7 @@ AI agent 從這一段簡短的需求做出這個介面：
 
 macOS / Linux 版之後推出。
 
-1. 從 [Releases](../../releases/latest) 頁面下載 `AgentKnife-1.0.0-windows-x64.zip`。
+1. 從 [Releases](../../releases/latest) 頁面下載 `AgentKnife-1.0.1-windows-x64.zip`。
 2. 解壓縮到你想放的資料夾，`agentknife.exe` 和 `agentknife-mcp.exe` 要放在一起。
 3. 執行 `agentknife.exe`。程式沒有簽章，如果 Windows 跳出「Windows 已保護您的電腦」，請按「其他資訊」，再按「仍要執行」。
 

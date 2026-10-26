@@ -254,12 +254,15 @@ pub fn ConnectWizard(
         });
     };
 
+    // Only a new step rebuilds the page: rebuilding on every change of the
+    // wizard would replace the field being typed in, and its focus with it.
+    let step = Memo::new(move |_| w.with(|w| w.step));
     view! {
         <div data-screen="connect" class="flex min-h-0 flex-1 justify-center overflow-auto bg-gray-50 p-6 dark:bg-gray-900">
             <div class="w-full max-w-2xl">
                 <h1 class="text-2xl font-semibold">{t("connect-title")}</h1>
                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">{t("connect-intro")}</p>
-                {move || match w.with(|w| w.step) {
+                {move || match step.get() {
                     Step::Choose => view! { <ChooseStep w on_cancel /> }.into_any(),
                     Step::Details => view! { <DetailsStep w test=test.clone() /> }.into_any(),
                     Step::Model => {

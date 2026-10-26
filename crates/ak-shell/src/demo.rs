@@ -596,6 +596,7 @@ fn start_preview(demo: Arc<Mutex<Demo>>) {
             frontend: ServerState::Starting,
             backend: ServerState::Starting,
             url: None,
+            downloading: false,
         },
     );
     #[cfg(target_arch = "wasm32")]
@@ -607,6 +608,7 @@ fn start_preview(demo: Arc<Mutex<Demo>>) {
                 frontend: ServerState::Building,
                 backend: ServerState::Building,
                 url: None,
+                downloading: false,
             },
         );
         sleep(2_500).await;
@@ -619,6 +621,7 @@ fn ready() -> PreviewStatus {
         frontend: ServerState::Ready,
         backend: ServerState::Ready,
         url: Some(preview_url()),
+        downloading: false,
     }
 }
 

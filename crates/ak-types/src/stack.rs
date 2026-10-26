@@ -253,6 +253,9 @@ pub struct LogMarkers {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreviewPlan {
+    /// Runs to the end before the first start: downloads the app's libraries
+    /// once, so the two builds do not wait on each other for them.
+    pub prepare: Option<CommandSpec>,
     /// The dev server for the screens, serving on `{port}`.
     pub frontend: CommandSpec,
     /// How to read the dev server's output (built, rebuilding, failed).

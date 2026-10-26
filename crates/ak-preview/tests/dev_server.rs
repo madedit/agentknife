@@ -5,9 +5,10 @@
 #![allow(clippy::unwrap_used)]
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
-use ak_preview::{Preview, Tools, profiles};
+use ak_preview::{Preview, PreviewSession, Tools, profiles};
 use ak_types::preview::{PreviewStatus, ServerState};
 use tokio::sync::watch;
 
@@ -288,5 +289,39 @@ async fn a_dying_dev_server_is_an_error_and_drop_stops_everything() {
     tokio::time::sleep(Duration::from_millis(500)).await;
     if let Some(url) = url {
         assert!(!page_answers(&url).await);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_libraries_download_once_before_both_start() {
+    for outcome in ["ok", "fail"] {
+        let s = Setup::with_env(
+            "ok",
+            "ok",
+            &[("FAKE_FETCH_DELAY", "1500"), ("FAKE_FETCH", outcome)],
+        );
+        let log = s.dir.path().join("log");
+        let session = Arc::new(PreviewSession::new(s.preview, None));
+        let mut rx = session.subscribe();
+        session.start().await.unwrap();
+        let st = session.status();
+        assert!(st.downloading, "{st:?}");
+        assert_eq!(st.frontend, ServerState::Starting);
+        // A failed download is not the end: the builds report what went wrong.
+        wait(&mut rx, "ready", PreviewStatus::ready).await;
+        assert!(!session.status().downloading);
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert!(text.find("fetch").unwrap() < text.find("serve port=").unwrap());
+
+        // Started again: it downloads again only after a failure.
+        session.stop().await;
+        session.start().await.unwrap();
+        wait(&mut rx, "ready again", PreviewStatus::ready).await;
+        let fetches = std::fs::read_to_string(&log)
+            .unwrap()
+            .matches("fetch")
+            .count();
+        assert_eq!(fetches, if outcome == "ok" { 1 } else { 2 }, "{outcome}");
+        session.stop().await;
     }
 }

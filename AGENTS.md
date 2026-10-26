@@ -174,6 +174,8 @@ plan/            STATUS.md and execution-plan.md (format in §8).
 - **Preview:**
   - The center pane is an iframe on the Trunk dev server.
   - `ak_preview::Preview` runs one project's preview from its stack's PreviewPlan with the isolated toolchain (`Tools::from_toolchain`).
+    - `PreviewPlan::prepare` (tauri-leptos: `cargo fetch`) runs before the first start in a session, in the background (`PreviewSession::start` returns at once): both sides show Starting and `PreviewStatus::downloading` is set, so the window says the libraries are downloading. The two builds then start without waiting on each other for the package cache. It runs again only after it failed; a stop while it runs kills it and nothing starts.
+    - A preview that cannot start (no toolchain yet) does not fail opening the project. Once the tools check or install reports ready, `PreviewSession::start_if_down` starts a preview that is off or failed.
     - It picks free ports and a 128-bit random bridge token. The bridge port stays the same across backend restarts.
     - It publishes `ak_types::preview::PreviewStatus` on a watch channel: frontend and backend each Off/Starting/Building/Ready/Error{output = compiler output tail}, plus the page URL once built.
     - Frontend states come from the plan's `frontend_log` markers; the backend is ready on its stdout prefix, and an exit is an error.

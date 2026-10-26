@@ -57,7 +57,7 @@ That first request is only the start. You can ask the AI for changes at any time
 
 macOS / Linux versions coming later.
 
-1. Download `AgentKnife-1.0.0-windows-x64.zip` from the [Releases](../../releases/latest) page.
+1. Download `AgentKnife-1.0.1-windows-x64.zip` from the [Releases](../../releases/latest) page.
 2. Unzip it to a folder of your choice, and keep `agentknife.exe` and `agentknife-mcp.exe` together.
 3. Run `agentknife.exe`. It is not signed: if Windows shows "Windows protected your PC", choose "More info", then "Run anyway".
 
