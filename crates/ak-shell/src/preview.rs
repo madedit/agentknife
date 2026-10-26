@@ -98,6 +98,26 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
     let reload = RwSignal::new(0u32);
     let opening = RwSignal::new(false);
     let window_error = RwSignal::new(None::<String>);
+    // "Clear data and start over": asking, then working, then a failure if any.
+    let confirm_clear = RwSignal::new(false);
+    let clearing = RwSignal::new(false);
+    let clear_error = RwSignal::new(None::<String>);
+    let clear_backend = StoredValue::new(backend.clone());
+    let clear = move |_| {
+        confirm_clear.set(false);
+        clearing.set(true);
+        clear_error.set(None);
+        let backend = clear_backend.get_value();
+        leptos::task::spawn_local(async move {
+            if let Err(e) = backend.clear_preview_data().await {
+                clear_error.set(Some(match e {
+                    CallError::Connect(c) => c.to_string(),
+                    CallError::Other(d) => d,
+                }));
+            }
+            clearing.set(false);
+        });
+    };
     let stage_size = RwSignal::new((0.0f64, 0.0f64));
     let stage = NodeRef::<leptos::html::Div>::new();
     let frame = NodeRef::<leptos::html::Iframe>::new();
@@ -271,6 +291,16 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
                 >
                     {t("preview-reload")}
                 </button>
+                <button
+                    title=t("preview-clear-data-tip")
+                    type="button"
+                    data-action="clear-data"
+                    disabled=move || url().is_none() || clearing.get() || chat.log.with(|l| l.running)
+                    class=TOOL
+                    on:click=move |_| confirm_clear.set(true)
+                >
+                    {move || if clearing.get() { t("preview-clearing-data")() } else { t("preview-clear-data")() }}
+                </button>
                 <span class="flex-1"></span>
                 <Show when=move || opening.get()>
                     <span class="text-xs text-gray-500 dark:text-gray-400">{t("preview-opening-window")}</span>
@@ -286,6 +316,30 @@ pub fn PreviewPane(layout: RwSignal<Layout>) -> impl IntoView {
                     {t("preview-run-app")}
                 </button>
             </div>
+            <Show when=move || confirm_clear.get()>
+                <div data-dialog="clear-data" role="alertdialog" class="shrink-0 border-b border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100">
+                    <p>{t("preview-clear-data-about")}</p>
+                    <div class="mt-2 flex gap-2">
+                        <button title=t("common-cancel-tip") type="button" data-action="cancel-clear-data" class="rounded-lg border border-gray-300 bg-white px-3 py-1 text-xs hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800" on:click=move |_| confirm_clear.set(false)>
+                            {t("common-cancel")}
+                        </button>
+                        <button title=t("preview-clear-data-tip") type="button" data-action="confirm-clear-data" class="rounded-lg bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700" on:click=clear>
+                            {t("preview-clear-data-confirm")}
+                        </button>
+                    </div>
+                </div>
+            </Show>
+            {move || clear_error.get().map(|output| view! {
+                <div data-notice="clear-failed" role="alert" class="shrink-0 bg-red-50 px-3 py-1.5 text-sm text-red-900 dark:bg-red-950 dark:text-red-100">
+                    <div class="flex items-start gap-2">
+                        <p class="flex-1">{t("preview-clear-data-failed")}</p>
+                        <button title=t("common-ok-tip") type="button" data-action="dismiss-clear-error" class="text-xs underline" on:click=move |_| clear_error.set(None)>
+                            {t("common-ok")}
+                        </button>
+                    </div>
+                    <p class="mt-1 text-xs">{output}</p>
+                </div>
+            })}
             {move || window_error.get().map(|output| view! {
                 <div data-notice="window-failed" role="alert" class="shrink-0 bg-red-50 px-3 py-1.5 text-sm text-red-900 dark:bg-red-950 dark:text-red-100">
                     <div class="flex items-start gap-2">

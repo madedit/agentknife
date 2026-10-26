@@ -24,13 +24,6 @@ pub trait StackProfile: Send + Sync {
     fn add_missing_ids(&self, _rel_path: &str, _source: &str) -> Option<String> {
         None
     }
-
-    /// The folder the app saves its data in, relative to the OS's per-user data
-    /// folder (`%APPDATA%`, `~/Library/Application Support`, `~/.local/share`),
-    /// read from the project at `root`. `None` if unknown.
-    fn app_data_folder(&self, _root: &std::path::Path) -> Option<String> {
-        None
-    }
 }
 
 impl DoctorReport {
@@ -220,7 +213,8 @@ pub enum Tool {
 
 /// A command in the project. `args` and env values may contain placeholders:
 /// `{port}` (frontend dev server), `{bridge_port}`, `{bridge_token}`,
-/// `{bridge_origin}`.
+/// `{bridge_origin}`, and `{data_dir_json}` (the preview's data folder,
+/// [`PreviewPlan::data_dir`], absolute, as a JSON string with its quotes).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandSpec {
     pub tool: Tool,
@@ -273,6 +267,10 @@ pub struct PreviewPlan {
     pub bridge_url_param: &'static str,
     /// How the backend reports a crash while running (shown to the agent).
     pub backend_crash: CrashMarkers,
+    /// Where the previewed app keeps what it saves, relative to the project:
+    /// its own folder, never the installed app's. "Clear data and start over"
+    /// deletes it.
+    pub data_dir: &'static str,
 }
 
 /// A crash report in a program's output: a line containing `start`, then its

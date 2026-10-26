@@ -235,6 +235,44 @@ async fn backend_restarts_only_for_backend_code_and_keeps_its_port() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn clearing_the_data_deletes_the_preview_folder_and_starts_on_a_new_address() {
+    let mut s = Setup::new("ok", "ok");
+    let mut rx = s.preview.subscribe();
+    s.preview.start().unwrap();
+    wait(&mut rx, "ready", PreviewStatus::ready).await;
+
+    // The backend was told to keep its data in the preview's folder.
+    let data = s.preview.data_dir();
+    assert!(data.starts_with(s.dir.path()));
+    let config = s
+        .log()
+        .lines()
+        .find_map(|l| l.strip_prefix("config ").map(str::to_owned))
+        .unwrap();
+    let config: serde_json::Value = serde_json::from_str(&config).unwrap();
+    assert_eq!(
+        config["app"]["appDirectoriesOverride"],
+        data.to_string_lossy().as_ref()
+    );
+
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("sheet.json"), "{}").unwrap();
+    let before = s.preview.page_url();
+    s.preview.clear_data().await.unwrap();
+    assert!(!data.exists(), "the saved data is gone");
+    assert_ne!(
+        s.preview.page_url(),
+        before,
+        "a new address: an empty web storage"
+    );
+    wait(&mut rx, "ready again", PreviewStatus::ready).await;
+    // Nothing saved yet is fine too.
+    s.preview.clear_data().await.unwrap();
+    wait(&mut rx, "ready again", PreviewStatus::ready).await;
+    s.preview.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_dying_dev_server_is_an_error_and_drop_stops_everything() {
     let mut s = Setup::new("ok", "ok");
     let mut rx = s.preview.subscribe();

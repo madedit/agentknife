@@ -85,6 +85,7 @@ const COMMANDS: &[&str] = &[
     "mcp_status",
     "set_mcp",
     "set_selection",
+    "clear_preview_data",
     "open_terminal",
     "open_in_files",
 ];
@@ -134,6 +135,7 @@ pub fn with_commands<R: Runtime>(builder: Builder<R>, state: state::AppState) ->
             mcp::mcp_status,
             mcp::set_mcp,
             workspace::set_selection,
+            workspace::clear_preview_data,
             mcp::open_terminal,
             home::open_in_files,
         ])

@@ -65,6 +65,14 @@ const PREVIEW_MARKERS: &[PreviewMarker] = &[
 /// build writes there, and the preview would then serve screens without `dev`.
 const PREVIEW_DIST: &str = "target/ak-preview-dist";
 
+/// The preview's data folder in the project (under `target/`: not part of the
+/// versions, gone with the project).
+pub const PREVIEW_DATA: &str = "target/ak-preview-data";
+
+/// `TAURI_CONFIG` for the preview: every app folder in [`PREVIEW_DATA`]
+/// (`{data_dir_json}` is filled in). Tauri 2.12's `app > appDirectoriesOverride`.
+pub const DATA_OVERRIDE: &str = r#"{"app":{"appDirectoriesOverride":{data_dir_json}}}"#;
+
 fn strings(items: &[&str]) -> Vec<String> {
     items.iter().map(|s| (*s).to_owned()).collect()
 }
@@ -153,6 +161,10 @@ impl StackProfile for TauriLeptos {
                     (BRIDGE_ENV[0].into(), "{bridge_port}".into()),
                     (BRIDGE_ENV[1].into(), "{bridge_token}".into()),
                     (BRIDGE_ENV[2].into(), "{bridge_origin}".into()),
+                    // Merged into tauri.conf.json when the backend is built: the
+                    // app's folders (app_data_dir and the rest) move to the
+                    // preview's own, so it never touches the installed app's data.
+                    ("TAURI_CONFIG".into(), DATA_OVERRIDE.into()),
                 ]
                 .into_iter()
                 .chain(progress_env())
@@ -168,6 +180,7 @@ impl StackProfile for TauriLeptos {
                 start: " panicked at ",
                 end: "note: ",
             },
+            data_dir: PREVIEW_DATA,
         }
     }
 
@@ -183,16 +196,6 @@ impl StackProfile for TauriLeptos {
             .unwrap_or("screen");
         let (out, added) = crate::ids::add_missing_ids(source, stem).ok()?;
         (!added.is_empty()).then_some(out)
-    }
-
-    /// Tauri's `app_data_dir()`: the identifier in tauri.conf.json.
-    fn app_data_folder(&self, root: &std::path::Path) -> Option<String> {
-        let conf = std::fs::read_to_string(root.join("src-tauri/tauri.conf.json")).ok()?;
-        let conf: serde_json::Value = serde_json::from_str(&conf).ok()?;
-        let id = conf["identifier"].as_str()?.trim();
-        // A folder name, never a path.
-        (!id.is_empty() && !id.contains(['/', '\\', ':']) && id != "." && id != "..")
-            .then(|| id.to_owned())
     }
 
     fn bundle(&self) -> BundlePlan {
@@ -257,19 +260,27 @@ mod tests {
     }
 
     #[test]
-    fn the_app_data_folder_is_the_identifier() {
-        let dir = tempfile::tempdir().unwrap();
-        let p = TauriLeptos;
-        assert_eq!(p.app_data_folder(dir.path()), None);
-        std::fs::create_dir_all(dir.path().join("src-tauri")).unwrap();
-        let conf = dir.path().join("src-tauri/tauri.conf.json");
-        std::fs::write(&conf, r#"{ "identifier": "com.agentknife.ledger" }"#).unwrap();
-        assert_eq!(
-            p.app_data_folder(dir.path()).as_deref(),
-            Some("com.agentknife.ledger")
-        );
-        std::fs::write(&conf, r#"{ "identifier": "../elsewhere" }"#).unwrap();
-        assert_eq!(p.app_data_folder(dir.path()), None);
+    fn the_preview_keeps_its_data_apart_and_packaging_does_not() {
+        let p = TauriLeptos.preview();
+        let backend = p.backend.unwrap();
+        let (_, config) = backend
+            .env
+            .iter()
+            .find(|(k, _)| k == "TAURI_CONFIG")
+            .unwrap();
+        let filled = ak_types::stack::fill(config, &[("data_dir_json", r#""C:\\x\\data""#)]);
+        let json: serde_json::Value = serde_json::from_str(&filled).unwrap();
+        assert_eq!(json["app"]["appDirectoriesOverride"], r"C:\x\data");
+        assert_eq!(p.data_dir, PREVIEW_DATA);
+        for t in TauriLeptos.bundle().targets {
+            assert!(!t.command.env.iter().any(|(k, _)| k == "TAURI_CONFIG"));
+            assert!(
+                !t.command
+                    .args
+                    .iter()
+                    .any(|a| a.contains("appDirectoriesOverride"))
+            );
+        }
     }
 
     #[test]

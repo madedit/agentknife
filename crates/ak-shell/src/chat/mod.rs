@@ -22,6 +22,9 @@ pub struct Chat {
     pub log: RwSignal<ChatLog>,
     /// What the user pointed at in the preview; goes with the next message.
     pub selection: RwSignal<Option<Picked>>,
+    /// The log keeps the newest message in view; off while the user has
+    /// scrolled up to read, on again at the bottom or when they send.
+    pub follow: RwSignal<bool>,
 }
 
 impl Chat {
@@ -29,6 +32,7 @@ impl Chat {
         Chat {
             log: RwSignal::new(log),
             selection: RwSignal::new(None),
+            follow: RwSignal::new(true),
         }
     }
 }
@@ -124,6 +128,7 @@ pub fn send_message(chat: Chat, message: String) {
     chat.log
         .update(|l| l.user_sent(&message, selection.as_ref().map(selection_label)));
     chat.selection.set(None);
+    chat.follow.set(true);
     call(chat.log, move |b| async move {
         b.send_message(&SendMessage {
             text: message,
@@ -133,19 +138,35 @@ pub fn send_message(chat: Chat, message: String) {
     });
 }
 
+/// How close to the bottom (px) still counts as at the bottom.
+const FOLLOW_SLACK: i32 = 40;
+
 #[component]
 pub fn ChatPane() -> impl IntoView {
     let chat = expect_context::<Chat>();
     let backend = StoredValue::new(expect_context::<Backend>());
     let list = NodeRef::<leptos::html::Div>::new();
-    // Keep the newest message in view (browser only: effects need its executor).
+    // Keep the newest message in view while following (browser only: effects
+    // need its executor).
     #[cfg(target_arch = "wasm32")]
     Effect::new(move |_| {
         chat.log.track();
-        if let Some(el) = list.get() {
+        if chat.follow.get()
+            && let Some(el) = list.get()
+        {
             el.set_scroll_top(el.scroll_height());
         }
     });
+    // Scrolling up stops following; back at the bottom it follows again.
+    let on_scroll = move |_| {
+        if let Some(el) = list.get_untracked() {
+            let gap = el.scroll_height() - el.scroll_top() - el.client_height();
+            let at_bottom = gap <= FOLLOW_SLACK;
+            if chat.follow.get_untracked() != at_bottom {
+                chat.follow.set(at_bottom);
+            }
+        }
+    };
     let usage = move || {
         chat.log.with(|l| l.usage).map(|(s, d)| {
             let (id, args) = usage_text(&s, &d);
@@ -193,7 +214,8 @@ pub fn ChatPane() -> impl IntoView {
             </button>
         </div>
         {budget}
-        <div node_ref=list data-chat="log" class="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-3 pb-3">
+        <div class="relative flex min-h-0 flex-1 flex-col">
+        <div node_ref=list data-chat="log" on:scroll=on_scroll class="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-3 pb-3">
             <Show when=move || chat.log.with(|l| l.items.is_empty() && l.interrupted.is_none())>
                 <p class="px-1 text-sm text-gray-500 dark:text-gray-400">{t("chat-empty")}</p>
             </Show>
@@ -205,6 +227,18 @@ pub fn ChatPane() -> impl IntoView {
                 <ItemView index />
             </For>
             {move || chat.log.with(|l| l.interrupted.clone()).map(|request| view! { <Interrupted request /> })}
+        </div>
+            <Show when=move || !chat.follow.get()>
+                <button
+                    type="button"
+                    data-action="chat-newest"
+                    title=t("chat-newest-tip")
+                    class="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-gray-300 bg-white px-3 py-1 text-xs shadow hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
+                    on:click=move |_| chat.follow.set(true)
+                >
+                    {t("chat-newest")}
+                </button>
+            </Show>
         </div>
         <Composer />
     }

@@ -376,6 +376,15 @@ APP and E2E integrate all tracks.
   - Idempotent.
   - Tested on sample files.
 
+### P1-PREV-004 — Preview data apart from the installed app
+- Crate(s): ak-preview, ak-app, ak-shell
+- Owner: coordinator
+- Depends on: P1-PREV-001
+- Acceptance:
+  - The preview and the real window keep what the app saves in the project's `target/ak-preview-data` (Tauri `appDirectoriesOverride`), never in the installed app's folders; packaging is unchanged.
+  - "Clear data and start over" in the preview toolbar asks first, then deletes that folder and starts the preview again with an empty web storage; refused while an AI works.
+  - Existing data is not copied (owner, 2026-10-26).
+
 ### P1-BUNDLE-001 — Host-platform bundling
 - Crate(s): ak-bundle
 - Owner: unassigned

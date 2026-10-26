@@ -4,7 +4,10 @@ Users expect what they entered to be there next time. Choose one way per app.
 
 ## Recommended: a JSON file written by the backend
 Survives updates, works the same in the preview and the installed app, easy to back
-up. Backend (`src-tauri/src/main.rs`):
+up. In AgentKnife's preview (and its real window) `app_data_dir()` and the other app
+folders point to the project's `target/ak-preview-data`, never the installed app's
+folder; "Clear data and start over" deletes it, so the app must handle a first run
+(nothing saved yet) without an error. Backend (`src-tauri/src/main.rs`):
 ```rust
 use serde::{Deserialize, Serialize};
 use tauri::Manager;

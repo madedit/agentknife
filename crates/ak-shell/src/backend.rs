@@ -110,6 +110,10 @@ impl Backend {
         self.call(cmd::RUN_APP, None::<()>).await
     }
 
+    pub async fn clear_preview_data(&self) -> Result<(), CallError> {
+        self.call(cmd::CLEAR_PREVIEW_DATA, None::<()>).await
+    }
+
     /// New lines of the open project's log, a batch at a time.
     pub fn listen_log(&self, f: impl Fn(Vec<LogLine>) + Send + Sync + 'static) {
         self.on(LOG_EVENT, f);

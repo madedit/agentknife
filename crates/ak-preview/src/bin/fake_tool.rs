@@ -83,6 +83,7 @@ fn run() {
         env("AK_BRIDGE_TOKEN"),
         env("AK_BRIDGE_ORIGIN")
     ));
+    log(&format!("config {}", env("TAURI_CONFIG")));
     println!("   Compiling app v0.1.0");
     if env("FAKE_BACK") == "fail" {
         eprintln!("error[E0425]: cannot find value `x` in this scope");

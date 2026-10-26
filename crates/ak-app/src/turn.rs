@@ -218,14 +218,11 @@ pub(crate) fn workbench(
         notes.push_str(&note);
     }
     references.extend(allowed);
-    // What the app itself saved (in the preview too), so the AI can check it.
-    if let Some(data) = profile
-        .app_data_folder(root)
-        .and_then(|f| dirs::data_dir().map(|d| d.join(f)))
-    {
-        notes.push_str(&app_data_note(&data));
-        references.push(data);
-    }
+    // What the app saved in the preview (its own folder, not the installed
+    // app's), so the AI can check it.
+    let data = root.join(profile.preview().data_dir);
+    notes.push_str(&app_data_note(&data));
+    references.push(data);
     let bridge = Arc::new(UiBridge(state.pending.clone()));
     let env = ToolEnv {
         path_prefix: state.tools.path_prefix.clone(),
@@ -297,9 +294,11 @@ pub fn library_note(cargo_home: &std::path::Path) -> String {
 /// Tells the AI where the app saves its data (English: for the model).
 pub fn app_data_note(folder: &std::path::Path) -> String {
     format!(
-        "\n\nThe app saves its data (app_data_dir) in {}; it appears once the app \
+        "\n\nIn the preview the app saves its data (app_data_dir and its other app \
+         folders) in {}, not where the installed app keeps it; it appears once the app \
          first saves something. To check what the app wrote, read_file and list_files \
-         take absolute paths there. Read only: never change anything in it.",
+         take absolute paths there. Read only: never change anything in it. The user \
+         can delete it with \"Clear data and start over\".",
         folder.display()
     )
 }

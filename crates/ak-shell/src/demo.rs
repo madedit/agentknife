@@ -337,6 +337,7 @@ impl Demo {
             | cmd::REVEAL
             | cmd::CLEAR_LOG
             | cmd::SET_SELECTION
+            | cmd::CLEAR_PREVIEW_DATA
             | cmd::OPEN_TERMINAL
             | cmd::OPEN_IN_FILES => Ok(Value::Null),
             cmd::GET_LOG => Ok(json!(demo_log())),

@@ -192,6 +192,34 @@ pub async fn set_selection(state: State<'_, AppState>, request: Option<Picked>) 
     Ok(())
 }
 
+/// "Clear data and start over": deletes what the app saved in the preview and
+/// starts the preview again as on its first run. Never while the AI changes
+/// the project. The real window shares that folder, so it closes.
+#[tauri::command]
+pub async fn clear_preview_data(state: State<'_, AppState>) -> Res<()> {
+    let preview = {
+        let mut inner = state.inner.lock().await;
+        let open = inner
+            .open
+            .as_mut()
+            .ok_or_else(|| fail("no project is open"))?;
+        if open.cancel.is_some() || crate::mcp::busy(&state) {
+            return Err(fail("the AI is working; try again when it is done"));
+        }
+        if let Some(window) = open.app_window.take()
+            && let Some(pid) = window.id()
+        {
+            kill_tree(pid).await;
+        }
+        open.log.push(
+            LogSource::Screens,
+            "> clear the preview's data and start over",
+        );
+        open.preview.clone()
+    };
+    preview.clear_data().await.map_err(fail)
+}
+
 #[tauri::command]
 pub async fn preview_status(state: State<'_, AppState>) -> Res<PreviewStatus> {
     Ok(state
@@ -264,11 +292,19 @@ pub async fn run_app(state: State<'_, AppState>) -> Res<()> {
             kill_tree(pid).await;
         }
         let target = open.root.join("target").join(WINDOW_TARGET);
+        // Still a test: the window keeps its data where the preview does, never
+        // in the installed app's folders.
+        let data = open
+            .root
+            .join(crate::home::profile_of_root(open).preview().data_dir);
+        let config = serde_json::json!({ "app": { "appDirectoriesOverride": data } });
         let spec = CommandSpec {
             tool: Tool::CargoTauri,
             // After `--`: arguments for `cargo run`.
             args: vec![
                 "dev".into(),
+                "--config".into(),
+                config.to_string(),
                 "--".into(),
                 "--target-dir".into(),
                 target.to_string_lossy().into_owned(),

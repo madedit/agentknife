@@ -109,6 +109,9 @@ pub mod cmd {
     /// points at in the preview now, for `get_selection` (also another AI
     /// tool's, which sends no message through the chat).
     pub const SET_SELECTION: &str = "set_selection";
+    /// `()` → `()`: "Clear data and start over": deletes what the app saved in
+    /// the preview and starts it again (refused while the AI works).
+    pub const CLEAR_PREVIEW_DATA: &str = "clear_preview_data";
     /// `()` → `()`: opens a terminal in the projects folder (setting up
     /// another AI tool there).
     pub const OPEN_TERMINAL: &str = "open_terminal";
@@ -164,6 +167,7 @@ pub mod cmd {
         MCP_STATUS,
         SET_MCP,
         SET_SELECTION,
+        CLEAR_PREVIEW_DATA,
         OPEN_TERMINAL,
         OPEN_IN_FILES,
     ];

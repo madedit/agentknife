@@ -158,12 +158,22 @@ impl Preview {
         format!("{}&role=controller", self.bridge_ws())
     }
 
+    /// Where the previewed app keeps what it saves ([`PreviewPlan::data_dir`]).
+    pub fn data_dir(&self) -> PathBuf {
+        self.root.join(self.plan.data_dir)
+    }
+
     fn values(&self) -> Vec<(&'static str, String)> {
+        let data_dir = self.data_dir().to_string_lossy().into_owned();
         vec![
             ("port", self.port.to_string()),
             ("bridge_port", self.bridge_port.to_string()),
             ("bridge_token", self.token.clone()),
             ("bridge_origin", self.origin()),
+            (
+                "data_dir_json",
+                serde_json::Value::String(data_dir).to_string(),
+            ),
         ]
     }
 
@@ -207,6 +217,17 @@ impl Preview {
 
     pub async fn restart(&mut self) -> std::io::Result<()> {
         self.stop().await;
+        self.start()
+    }
+
+    /// "Clear data and start over": stops both sides (so nothing saves while
+    /// the folder goes), deletes the app's data folder, and starts again on a
+    /// new port. A new address is a new, empty web storage (localStorage,
+    /// IndexedDB, cookies) for the page.
+    pub async fn clear_data(&mut self) -> std::io::Result<()> {
+        self.stop().await;
+        remove_dir(&self.data_dir()).await?;
+        self.port = free_port()?;
         self.start()
     }
 
@@ -311,6 +332,23 @@ impl Drop for Preview {
                 kill_tree_now(pid);
             }
             r.task.abort();
+        }
+    }
+}
+
+/// Deletes `dir` and everything in it (nothing to do when it is not there).
+/// Windows may hold the files of a program that just exited for a moment.
+async fn remove_dir(dir: &Path) -> std::io::Result<()> {
+    let mut tries = 0;
+    loop {
+        match std::fs::remove_dir_all(dir) {
+            Ok(()) => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(_) if tries < 10 => {
+                tries += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }
+            Err(e) => return Err(e),
         }
     }
 }

@@ -71,6 +71,13 @@ impl PreviewSession {
         self.preview.lock().await.stop().await;
     }
 
+    /// Deletes what the previewed app saved and starts it again, as on its
+    /// first run ([`Preview::clear_data`]). The user's pick goes too.
+    pub async fn clear_data(&self) -> std::io::Result<()> {
+        self.set_selection(None);
+        self.preview.lock().await.clear_data().await
+    }
+
     /// Checks the backend code on disk every [`WATCH_EVERY`] while the
     /// session lives, and restarts the backend when it changed without a
     /// [`PreviewSession::files_changed`].

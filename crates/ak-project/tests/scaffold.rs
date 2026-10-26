@@ -78,6 +78,7 @@ impl StackProfile for Fake {
                 start: "CRASH",
                 end: "END",
             },
+            data_dir: "target/data",
         }
     }
     fn bundle(&self) -> BundlePlan {
