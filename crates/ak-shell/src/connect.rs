@@ -376,6 +376,7 @@ fn ChooseStep(w: RwSignal<Wizard>, on_cancel: Option<Callback<()>>) -> impl Into
         <section data-group="external" class="mt-6">
             <h2 class="font-medium">{t("connect-external")}</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400">{t("connect-external-about")}</p>
+            <crate::external::ExternalSwitch />
             <div class="mt-3 grid gap-3 sm:grid-cols-2">
                 {crate::external::TOOLS.iter().map(|(id, _)| {
                     let id: &'static str = id;

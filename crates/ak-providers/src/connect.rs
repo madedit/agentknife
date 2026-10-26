@@ -34,6 +34,7 @@ pub fn provider_for(
         "ollama" => Flavor::Ollama,
         "lmstudio" => Flavor::LmStudio,
         "openrouter" => Flavor::OpenRouter,
+        "gemini" => Flavor::Gemini,
         "openai-compatible" => Flavor::Generic,
         other => {
             return Err(ConnectError::Other {
@@ -41,7 +42,7 @@ pub fn provider_for(
             });
         }
     };
-    if matches!(flavor, Flavor::OpenAi | Flavor::OpenRouter) && key.is_none() {
+    if matches!(flavor, Flavor::OpenAi | Flavor::OpenRouter | Flavor::Gemini) && key.is_none() {
         return Err(ConnectError::WrongKey);
     }
     let base_url = base

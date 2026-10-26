@@ -1,6 +1,6 @@
 //! Other AI tools operating AgentKnife (MCP, P1-MCP-001): who is connected,
-//! the setup command for each tool, the connect wizard's step and the
-//! settings page's section.
+//! the setup command for each tool, the connect wizard's step and its
+//! on/off switch.
 
 use ak_types::ipc::McpStatus;
 use leptos::prelude::*;
@@ -14,7 +14,7 @@ use crate::i18n::{t, t_with};
 pub const TOOLS: &[(&str, Option<&str>)] = &[
     ("claude-code", Some("Claude Code")),
     ("codex", Some("Codex")),
-    ("gemini", Some("Gemini CLI")),
+    ("antigravity", Some("Antigravity")),
     ("other", None),
 ];
 
@@ -85,15 +85,15 @@ pub fn tool_name(id: &str) -> String {
 
 /// What the user pastes to set up `tool` with `program` (agentknife-mcp's
 /// full path): a terminal command run in the projects folder, or for other
-/// tools the usual JSON config. Claude Code and Gemini CLI keep it for that
-/// folder only (their default), so sessions elsewhere do not start it; Codex
-/// has one setting for every folder.
+/// tools the usual JSON config. Claude Code keeps it for that folder only
+/// (its default), so sessions elsewhere do not start it; Codex and
+/// Antigravity (`agy`) have one setting for every folder.
 pub fn setup_text(tool: &str, program: &str) -> String {
     let quoted = format!("\"{program}\"");
     match tool {
         "claude-code" => format!("claude mcp add agentknife -- {quoted}"),
         "codex" => format!("codex mcp add agentknife -- {quoted}"),
-        "gemini" => format!("gemini mcp add agentknife {quoted}"),
+        "antigravity" => format!("agy mcp add agentknife {quoted}"),
         _ => {
             let config = serde_json::json!({
                 "mcpServers": { "agentknife": { "command": program } }
@@ -156,8 +156,10 @@ pub fn SetupCommand(tool: &'static str) -> impl IntoView {
                         {t("external-open-terminal")}
                     </button>
                 })}
-                {(tool == "codex").then(|| view! {
-                    <p class="mt-2 text-xs text-gray-600 dark:text-gray-400">{t("external-codex-everywhere")}</p>
+                {matches!(tool, "codex" | "antigravity").then(|| view! {
+                    <p class="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                        {t_with("external-everywhere", [("name", name.get_value())])}
+                    </p>
                 })}
                 <p class="mt-2">
                     {move || t_with("external-step2", [("name", name.get_value()), ("folder", folder())])()}
@@ -218,58 +220,33 @@ pub fn ExternalStep(
     }
 }
 
-/// The settings page's section: the setting, who is connected, the setup.
+/// The switch in the wizard's group: "let other AI tools operate AgentKnife"
+/// and who is connected. Turning it off disconnects them all.
 #[component]
-pub fn ExternalSettings() -> impl IntoView {
+pub fn ExternalSwitch() -> impl IntoView {
     let external = External::get();
     let backend = expect_context::<Backend>();
     let enabled = move || external.status.with(|s| s.enabled);
-    let shown = RwSignal::new("claude-code");
     view! {
-        <label class="flex items-center gap-2 text-sm">
-            <input
-                type="checkbox"
-                data-setting="mcp"
-                prop:checked=enabled
-                on:change=move |e| external.set(backend.clone(), event_target_checked(&e))
-            />
-            {t("settings-external-toggle")}
-        </label>
-        <p data-external-clients="" class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            {move || match external.names() {
-                Some(names) => t_with("external-connected", [("names", names)])(),
-                None => t("settings-external-none")(),
-            }}
-        </p>
-        <details class="mt-3 text-sm">
-            <summary class="cursor-pointer select-none">{t("settings-external-setup")}</summary>
-            <div role="group" class="mt-2 flex flex-wrap gap-1">
-                {TOOLS.iter().map(|(id, _)| {
-                    let id: &'static str = id;
-                    view! {
-                        <button
-                            type="button"
-                            title=t("external-show-tip")
-                            aria-pressed=move || (shown.get() == id).to_string()
-                            class=move || if shown.get() == id {
-                                "rounded-full bg-blue-600 px-3 py-0.5 text-xs text-white"
-                            } else {
-                                "rounded-full border border-gray-300 px-3 py-0.5 text-xs hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
-                            }
-                            on:click=move |_| shown.set(id)
-                        >
-                            {tool_name(id)}
-                        </button>
-                    }
-                }).collect_view()}
-            </div>
-            <div class="mt-2">
-                {move || {
-                    let tool = shown.get();
-                    view! { <SetupCommand tool /> }
-                }}
-            </div>
-        </details>
+        <div data-external-switch="" class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            <label class="flex items-center gap-2" title=t("connect-external-toggle-tip")>
+                <input
+                    type="checkbox"
+                    data-setting="mcp"
+                    prop:checked=enabled
+                    on:change=move |e| external.set(backend.clone(), event_target_checked(&e))
+                />
+                {t("connect-external-toggle")}
+            </label>
+            <Show when=enabled>
+                <span data-external-clients="" class="text-gray-600 dark:text-gray-400">
+                    {move || match external.names() {
+                        Some(names) => t_with("external-connected", [("names", names)])(),
+                        None => t("connect-external-none")(),
+                    }}
+                </span>
+            </Show>
+        </div>
     }
 }
 
@@ -288,7 +265,7 @@ mod tests {
             r#"claude mcp add agentknife -- "C:\Program Files\AgentKnife\agentknife-mcp.exe""#
         );
         assert!(setup_text("codex", p).starts_with("codex mcp add agentknife -- \""));
-        assert!(setup_text("gemini", p).starts_with("gemini mcp add agentknife \""));
+        assert!(setup_text("antigravity", p).starts_with("agy mcp add agentknife \""));
         // JSON escapes the backslashes.
         let json: serde_json::Value =
             serde_json::from_str(&setup_text("other", p)).unwrap_or_default();

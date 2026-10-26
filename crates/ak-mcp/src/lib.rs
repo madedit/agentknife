@@ -1,4 +1,4 @@
-//! Lets agent CLIs (Claude Code, Codex, Gemini CLI, …) operate AgentKnife over
+//! Lets agent CLIs (Claude Code, Codex, Antigravity, …) operate AgentKnife over
 //! MCP (P1-MCP-001).
 //!
 //! The client starts `agentknife-mcp`, which connects its stdio to AgentKnife

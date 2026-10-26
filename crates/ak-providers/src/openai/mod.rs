@@ -1,5 +1,5 @@
 //! OpenAI Chat Completions and compatible endpoints (Ollama, LM Studio, OpenRouter,
-//! any other server speaking the same protocol).
+//! Google Gemini, any other server speaking the same protocol).
 //!
 //! One adapter; a [`Flavor`] (detected from the base URL or set explicitly) selects
 //! the few protocol differences and where model capabilities come from:
@@ -40,6 +40,8 @@ pub enum Flavor {
     Ollama,
     LmStudio,
     OpenRouter,
+    /// Google's Gemini API (its OpenAI-compatible endpoint).
+    Gemini,
     /// Any other Chat Completions server (DeepSeek, Groq, vLLM, …).
     Generic,
 }
@@ -52,6 +54,7 @@ impl Flavor {
             Flavor::Ollama => "ollama",
             Flavor::LmStudio => "lmstudio",
             Flavor::OpenRouter => "openrouter",
+            Flavor::Gemini => "gemini",
             Flavor::Generic => "openai-compatible",
         }
     }
@@ -62,6 +65,7 @@ impl Flavor {
             Flavor::Ollama => Some("http://localhost:11434/v1"),
             Flavor::LmStudio => Some("http://localhost:1234/v1"),
             Flavor::OpenRouter => Some("https://openrouter.ai/api/v1"),
+            Flavor::Gemini => Some("https://generativelanguage.googleapis.com/v1beta/openai"),
             Flavor::Generic => None,
         }
     }
@@ -73,6 +77,8 @@ impl Flavor {
             Flavor::OpenAi
         } else if url.contains("openrouter.ai") {
             Flavor::OpenRouter
+        } else if url.contains("generativelanguage.googleapis.com") {
+            Flavor::Gemini
         } else if url.contains(":11434") || url.contains("ollama.com") {
             Flavor::Ollama
         } else if url.contains(":1234") {
@@ -269,10 +275,27 @@ impl OpenAiCompat {
                         ..Capabilities::default()
                     }))
             }
+            // Gemini's /models has no capability data; its chat models all call
+            // tools, see images, think and take a million tokens.
+            Flavor::Gemini => Ok(Capabilities {
+                tool_calling: true,
+                vision: true,
+                thinking: true,
+                context_window: Some(1_048_576),
+                max_output_tokens: None,
+            }),
             // OpenAI's /models has no capability data: a dated table.
             Flavor::OpenAi => Ok(responses::capabilities(model)),
         }
     }
+}
+
+/// A Gemini model that chats (not embedding, image, speech or live audio).
+fn gemini_chat_model(id: &str) -> bool {
+    id.starts_with("gemini")
+        && !["embedding", "image", "tts", "audio", "live"]
+            .iter()
+            .any(|w| id.contains(w))
 }
 
 /// Best effort for unknown servers: `meta.n_ctx` (llama.cpp), `context_length`, or
@@ -370,13 +393,23 @@ impl Provider for OpenAiCompat {
             let list = self
                 .call_json(Method::Get, self.url("/models"), None)
                 .await?;
+            let gemini = self.config.flavor == Flavor::Gemini;
             Ok(list["data"]
                 .as_array()
                 .into_iter()
                 .flatten()
                 .filter_map(|m| {
+                    let id = m["id"].as_str()?;
+                    // Gemini lists ids as `models/…`, and embedding, image,
+                    // speech and live models next to the chat models.
+                    let id = if gemini {
+                        let id = id.strip_prefix("models/").unwrap_or(id);
+                        gemini_chat_model(id).then_some(id)?
+                    } else {
+                        id
+                    };
                     Some(ModelInfo {
-                        id: m["id"].as_str()?.to_owned(),
+                        id: id.to_owned(),
                         display_name: m["name"].as_str().map(str::to_owned),
                     })
                 })
@@ -515,9 +548,27 @@ mod tests {
             Flavor::OpenRouter
         );
         assert_eq!(
+            Flavor::detect("https://generativelanguage.googleapis.com/v1beta/openai/"),
+            Flavor::Gemini
+        );
+        assert_eq!(
             Flavor::detect("https://api.deepseek.com/v1"),
             Flavor::Generic
         );
+    }
+
+    #[test]
+    fn gemini_lists_only_chat_models() {
+        assert!(gemini_chat_model("gemini-3.8-flash"));
+        for other in [
+            "gemini-embedding-001",
+            "gemini-2.5-flash-image",
+            "gemini-2.5-flash-preview-tts",
+            "gemini-live-2.5-flash",
+            "imagen-4.0-generate-001",
+        ] {
+            assert!(!gemini_chat_model(other), "{other}");
+        }
     }
 
     #[test]

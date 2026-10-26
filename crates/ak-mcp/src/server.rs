@@ -242,7 +242,7 @@ pub fn display_name(info: &Implementation) -> String {
     match name.to_ascii_lowercase().as_str() {
         "claude-code" | "claude code" => "Claude Code".to_owned(),
         n if n.starts_with("codex") => "Codex".to_owned(),
-        n if n.starts_with("gemini") => "Gemini CLI".to_owned(),
+        n if n.contains("antigravity") || n.starts_with("agy") => "Antigravity".to_owned(),
         "" => "AI tool".to_owned(),
         _ => name.to_owned(),
     }
@@ -355,7 +355,8 @@ mod tests {
         let n = |name: &str| display_name(&Implementation::new(name, "1"));
         assert_eq!(n("claude-code"), "Claude Code");
         assert_eq!(n("codex-mcp-client"), "Codex");
-        assert_eq!(n("gemini-cli-mcp-client"), "Gemini CLI");
+        assert_eq!(n("antigravity-cli"), "Antigravity");
+        assert_eq!(n("agy"), "Antigravity");
         assert_eq!(n("my-tool"), "my-tool");
         let mut titled = Implementation::new("x", "1");
         titled.title = Some("Cursor".into());

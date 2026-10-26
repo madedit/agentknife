@@ -45,8 +45,8 @@ async fn run() -> Result<(), String> {
 }
 
 const OFF: &str = "other AI tools may not operate AgentKnife: in AgentKnife, turn on \
-                   \"Let other AI tools operate AgentKnife\" (Connect AI, or Settings), then \
-                   try again.";
+                   \"Let other AI tools operate AgentKnife\" (Connect AI, \"Use an \
+                   AI tool you already have\"), then try again.";
 
 enum Problem {
     /// The setting is off (AgentKnife open or not).

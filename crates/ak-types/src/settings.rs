@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Which AI to use. API keys are never stored here (OS keychain, P1-PROV-004).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AiConnection {
-    /// Provider id: `anthropic`, `openai`, `ollama`, `lmstudio`, `openrouter`,
+    /// Provider id: `anthropic`, `openai`, `ollama`, `lmstudio`, `openrouter`, `gemini`,
     /// `openai-compatible`.
     pub provider: String,
     /// `None` uses the provider's default endpoint.

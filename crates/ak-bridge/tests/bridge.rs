@@ -222,14 +222,20 @@ fn garbage_is_answered_not_fatal() {
     });
 }
 
+/// The next message, failing instead of hanging when none comes.
 async fn next_msg(ws: &mut Ws) -> ServerMessage {
-    loop {
-        match ws.next().await {
-            Some(Ok(Message::Text(text))) => return serde_json::from_str(&text).unwrap(),
-            Some(Ok(_)) => continue,
-            other => panic!("connection ended: {other:?}"),
+    let wait = async {
+        loop {
+            match ws.next().await {
+                Some(Ok(Message::Text(text))) => return serde_json::from_str(&text).unwrap(),
+                Some(Ok(_)) => continue,
+                other => panic!("connection ended: {other:?}"),
+            }
         }
-    }
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(10), wait)
+        .await
+        .expect("no message within 10 s")
 }
 
 async fn control(ws: &mut Ws, id: u64, action: Value) {
@@ -259,8 +265,12 @@ fn control_actions_reach_the_newest_page_and_answers_come_back() {
         );
 
         // Two pages: the newest (e.g. after a reload) gets the action.
+        // The server registers a page after the handshake; one round trip
+        // each makes sure it has, so "newest" is `page`.
         let mut old_page = connect(addr, TOKEN, page_origin).await.unwrap();
+        call(&mut old_page, 100, "list_todos", Value::Null).await;
         let mut page = connect(addr, TOKEN, page_origin).await.unwrap();
+        call(&mut page, 101, "list_todos", Value::Null).await;
         control(
             &mut agent,
             7,

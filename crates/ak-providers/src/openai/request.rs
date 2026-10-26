@@ -53,6 +53,14 @@ pub fn build(req: &ChatRequest, flavor: Flavor) -> Value {
             Flavor::OpenRouter => {
                 obj.insert("reasoning".into(), json!({ "effort": effort.as_str() }));
             }
+            // Gemini knows minimal, low, medium and high.
+            Flavor::Gemini => {
+                let effort = match effort.as_str() {
+                    "xhigh" | "max" => "high",
+                    e => e,
+                };
+                obj.insert("reasoning_effort".into(), json!(effort));
+            }
             // Support unverified: sending unknown fields can fail strict servers.
             Flavor::LmStudio | Flavor::Generic => {}
         }
@@ -116,17 +124,26 @@ fn convert(history: &[Message], flavor: Flavor, out: &mut Vec<Value>) {
                     {
                         let calls: Vec<Value> = tool_calls
                             .iter()
-                            .map(|c| {
+                            .enumerate()
+                            .map(|(i, c)| {
                                 let args = if c.arguments.is_object() {
                                     c.arguments.to_string()
                                 } else {
                                     "{}".to_owned()
                                 };
-                                json!({
+                                let mut call = json!({
                                     "id": c.id,
                                     "type": "function",
                                     "function": { "name": c.name, "arguments": args },
-                                })
+                                });
+                                // Gemini 3 refuses a step's first call without a thought
+                                // signature; calls from another AI have none, and this
+                                // placeholder is what Google documents for them.
+                                if flavor == Flavor::Gemini && i == 0 {
+                                    call["extra_content"] = json!({ "google": {
+                                        "thought_signature": GEMINI_NO_SIGNATURE } });
+                                }
+                                call
                             })
                             .collect();
                         o.insert("tool_calls".into(), Value::Array(calls));
@@ -138,6 +155,9 @@ fn convert(history: &[Message], flavor: Flavor, out: &mut Vec<Value>) {
     }
     flush_images(&mut pending_images, out);
 }
+
+/// Gemini's placeholder thought signature for calls it did not make.
+const GEMINI_NO_SIGNATURE: &str = "skip_thought_signature_validator";
 
 fn flush_images(images: &mut Vec<Value>, out: &mut Vec<Value>) {
     if images.is_empty() {
@@ -306,6 +326,15 @@ mod tests {
         assert_eq!(
             out[1]["tool_calls"][0]["function"]["arguments"],
             "{\"path\":\"b\"}"
+        );
+        assert!(out[1]["tool_calls"][0].get("extra_content").is_none());
+
+        // Gemini: another AI's first call in a step gets the placeholder signature.
+        let mut out = Vec::new();
+        convert(&msgs[1..], Flavor::Gemini, &mut out);
+        assert_eq!(
+            out[0]["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
+            GEMINI_NO_SIGNATURE
         );
     }
 }

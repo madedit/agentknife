@@ -3,7 +3,8 @@
 //! Servers differ: reasoning arrives as `delta.reasoning` (Ollama, gpt-oss),
 //! `delta.reasoning_content` (LM Studio, others), `delta.reasoning_details`
 //! (OpenRouter) or inline `<think>` tags; tool calls arrive whole (Ollama) or as
-//! argument fragments (OpenAI, LM Studio). Unknown fields are ignored.
+//! argument fragments (OpenAI, LM Studio). A call's `extra_content` (Gemini's
+//! thought signature) is echoed back with it. Other unknown fields are ignored.
 
 use std::collections::BTreeMap;
 
@@ -18,6 +19,8 @@ use crate::{ProviderError, StopReason, StreamEvent, Usage};
 struct ToolCallState {
     id: String,
     name: String,
+    /// Gemini: `{ "google": { "thought_signature": … } }`, required back.
+    extra: Option<Value>,
     args: String,
     started: bool,
 }
@@ -139,6 +142,9 @@ impl Decoder {
                 if let Some(name) = call["function"]["name"].as_str().filter(|s| !s.is_empty()) {
                     state.name.push_str(name);
                 }
+                if call["extra_content"].is_object() {
+                    state.extra = Some(call["extra_content"].clone());
+                }
                 // Some local servers send the arguments as an object, not a string.
                 let object;
                 let frag = match &call["function"]["arguments"] {
@@ -255,8 +261,12 @@ impl Decoder {
                         } else {
                             "{}".to_owned()
                         };
-                        json!({ "id": t.id, "type": "function",
-                                "function": { "name": t.name, "arguments": args } })
+                        let mut call = json!({ "id": t.id, "type": "function",
+                                "function": { "name": t.name, "arguments": args } });
+                        if let Some(extra) = &t.extra {
+                            call["extra_content"] = extra.clone();
+                        }
+                        call
                     })
                     .collect();
                 o.insert("tool_calls".into(), Value::Array(calls));
@@ -382,6 +392,19 @@ mod tests {
             replay(&ev)["tool_calls"][0]["function"]["arguments"],
             "{\"a\":1}"
         );
+    }
+
+    #[test]
+    fn gemini_thought_signatures_go_back_with_their_call() {
+        let sig = json!({ "google": { "thought_signature": "c2ln" } });
+        let ev = run(
+            Flavor::Gemini,
+            vec![
+                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c","extra_content":sig,"function":{"name":"read_file","arguments":"{}"}}]}}]}),
+                json!({"choices":[{"delta":{},"finish_reason":"tool_calls"}]}),
+            ],
+        );
+        assert_eq!(replay(&ev)["tool_calls"][0]["extra_content"], sig);
     }
 
     #[test]

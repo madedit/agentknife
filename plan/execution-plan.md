@@ -496,7 +496,7 @@ APP and E2E integrate all tracks.
 
 ### External agents (MCP)
 
-Lets Claude Code, Codex, Gemini CLI and other agent CLIs operate a running AgentKnife over MCP, while the user watches in the AgentKnife window.
+Lets Claude Code, Codex, Antigravity (`agy`) and other agent CLIs operate a running AgentKnife over MCP, while the user watches in the AgentKnife window.
 
 ```
 agent CLI ──stdio──▶ agentknife-mcp (shim) ──127.0.0.1 HTTP + token──▶ AgentKnife (ak-app)
@@ -505,7 +505,7 @@ agent CLI ──stdio──▶ agentknife-mcp (shim) ──127.0.0.1 HTTP + toke
                                                                          PreviewSession, ak-project/doctor/bundle
 ```
 
-Open decisions (owner), with the recommendation in brackets: MCP library [`rmcp`, pinned in versions.toml]; shim behaviour when AgentKnife is not running [start it and wait]; whether to also expose AgentKnife's file/command tools [yes, so policy, checkpoints and preview restarts stay consistent]. Where it lives is settled (owner, 2026-10-25): a third group in the connect wizard plus management in Settings (see P1-MCP-001).
+Open decisions (owner), with the recommendation in brackets: MCP library [`rmcp`, pinned in versions.toml]; shim behaviour when AgentKnife is not running [start it and wait]; whether to also expose AgentKnife's file/command tools [yes, so policy, checkpoints and preview restarts stay consistent]. Where it lives is settled (owner, 2026-10-25): a third group in the connect wizard, which also holds the on/off switch (see P1-MCP-001; the Settings section was dropped on 2026-10-26).
 
 ### P1-MCP-001 — MCP server core (M1)
 - Crate(s): ak-mcp (new; no tauri, leptos or ak-shell dependency), ak-app, ak-preview, ak-shell, ak-types
@@ -517,8 +517,8 @@ Open decisions (owner), with the recommendation in brackets: MCP library [`rmcp`
   - The `instructions` are a short version of the system prompt's working rules: read the knowledge pack first, `data-ak-id` on every element, `build_status` after edits, never edit `ak/`, user-facing text in the user's language.
   - ak-app serves it on 127.0.0.1 only, on a random port with a 128-bit random token, written to `<data_dir>/AgentKnife/mcp.json` (readable by the user only) while the setting is on. Requests without the token, and any request with an `Origin` header, are refused.
   - A console binary `agentknife-mcp` (shipped next to AgentKnife) bridges stdio to that endpoint, reading mcp.json itself, so client configs never contain the token. Setup is one line, e.g. `claude mcp add agentknife -- <path>\agentknife-mcp.exe`.
-  - The connect wizard gets a third group after "On the internet" and "On this computer": "Use an AI tool you already have (advanced)" with Claude Code, Codex, Gemini CLI and "another MCP tool". Choosing one asks for no key or address: it shows that tool's one-line setup command to copy (and a generic JSON config), turns the setting on, and waits ("Waiting for Claude Code to connect…"); the step is done once the client connects, and the top bar then shows e.g. "Claude Code (external)". It says plainly that the user talks to the AI in that tool's window, while AgentKnife shows its steps and the preview and its own chat input is paused. Labelled advanced, because it needs a terminal. Visible in simple mode too.
-  - Settings, AI section: the setting "Let other AI tools operate AgentKnife" (off by default; on when chosen in the wizard), the clients seen so far, the setup commands again, and disconnect. All text through fluent (zh-TW and en).
+  - The connect wizard gets a third group after "On the internet" and "On this computer": "Use an AI tool you already have (advanced)" with Claude Code, Codex, Antigravity and "another MCP tool". Choosing one asks for no key or address: it shows that tool's one-line setup command to copy (and a generic JSON config), turns the setting on, and waits ("Waiting for Claude Code to connect…"); the step is done once the client connects, and the top bar then shows e.g. "Claude Code (external)". It says plainly that the user talks to the AI in that tool's window, while AgentKnife shows its steps and the preview and its own chat input is paused. Labelled advanced, because it needs a terminal. Visible in simple mode too.
+  - The setting "Let other AI tools operate AgentKnife" (off by default; on when a tool is chosen) and who is connected sit in the wizard's third group, so everything about other AI tools is in one place (owner, 2026-10-26: no separate Settings section). All text through fluent (zh-TW and en).
   - The first connection from a client name asks the user in the AgentKnife window. Actions that need confirmation (downloads, installs, deletions, outside the project) use the existing `ConfirmReason` cards in the window, not MCP elicitation.
   - API keys, the keychain and the bridge token are never reachable through MCP.
   - Only one agent changes the project at a time (shares `turn.lock`). While the built-in agent works, change tools return a plain "AgentKnife's AI is working" error, and the other way round.

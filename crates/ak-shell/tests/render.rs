@@ -178,6 +178,11 @@ fn the_wizard_offers_cloud_and_local_choices() {
     }
     let zh = wizard(Locale::ZhTw, Wizard::default());
     assert!(zh.contains("網路上的服務") && zh.contains("這台電腦上"));
+    // Other AI tools: one card each, and the on/off switch.
+    for tool in ["claude-code", "codex", "antigravity", "other"] {
+        assert!(zh.contains(&format!(r#"data-tool="{tool}""#)), "{tool}");
+    }
+    assert!(zh.contains("Antigravity") && zh.contains(r#"data-setting="mcp""#));
 
     let mut w = Wizard::default();
     w.choose(preset("anthropic").unwrap());

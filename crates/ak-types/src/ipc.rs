@@ -527,6 +527,14 @@ pub const PRESETS: &[ProviderPreset] = &[
         suggested_model: None,
     },
     ProviderPreset {
+        id: "gemini",
+        kind: PresetKind::Cloud,
+        base_url: None,
+        needs_key: true,
+        page: Some("https://aistudio.google.com/apikey"),
+        suggested_model: Some("gemini-3.8-flash"),
+    },
+    ProviderPreset {
         id: "ollama",
         kind: PresetKind::Local,
         base_url: Some("http://localhost:11434/v1"),

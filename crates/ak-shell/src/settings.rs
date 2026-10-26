@@ -205,9 +205,6 @@ pub fn SettingsScreen(
                     </div>
                 </Section>
 
-                <Section title="settings-external" about="settings-external-about">
-                    <crate::external::ExternalSettings />
-                </Section>
                 <Section title="settings-permissions">
                     <Choice
                         name="permissions"
