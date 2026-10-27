@@ -332,6 +332,7 @@ pub fn FilesPane(layout: RwSignal<Layout>) -> impl IntoView {
     view! {
         <section data-pane="file-list" class="flex min-h-0 flex-1 flex-col">
             <Heading text="shell-files">
+                <div class="flex gap-1">
                 <button
                     title=t("files-open-files-tip")
                     type="button"
@@ -346,6 +347,8 @@ pub fn FilesPane(layout: RwSignal<Layout>) -> impl IntoView {
                 >
                     {t("home-open-files")}
                 </button>
+                <crate::add_files::AddFilesButton small=true />
+                </div>
             </Heading>
             <Show
                 when=move || files.entries.with(|e| !e.is_empty())

@@ -66,6 +66,10 @@ pub struct OpenProject {
     pub app_window: Option<tokio::process::Child>,
     /// Everything the project's programs printed (the Log tab).
     pub log: LogBook,
+    /// Files the user added since the project was opened (MCP `status`).
+    pub added_files: Vec<ak_types::ipc::AddedFile>,
+    /// Added files the built-in AI has not heard of yet (next message).
+    pub unannounced: Vec<ak_types::ipc::AddedFile>,
 }
 
 pub struct Inner {

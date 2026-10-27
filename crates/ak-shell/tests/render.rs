@@ -75,6 +75,36 @@ fn pane(html: &str, name: &str) -> bool {
 }
 
 #[test]
+fn files_can_be_added_in_both_modes() {
+    // Simple mode has no Files pane: the button is in the chat bar, and the
+    // whole workspace takes dropped files (the overlay shows while dragging).
+    let simple = workspace(Locale::En, Layout::default());
+    assert_eq!(
+        simple.matches(r#"data-action="add-files""#).count(),
+        1,
+        "{simple}"
+    );
+    assert!(simple.contains("Add files…"));
+    assert!(simple.contains(r#"data-screen="workspace" class="relative"#));
+    assert!(
+        !simple.contains(r#"data-drop="files""#),
+        "only while dragging"
+    );
+    let full = Layout {
+        mode: Mode::Full,
+        ..Layout::default()
+    };
+    let full = workspace(Locale::En, full);
+    assert_eq!(
+        full.matches(r#"data-action="add-files""#).count(),
+        2,
+        "and in the Files pane"
+    );
+    let zh = workspace(Locale::ZhTw, Layout::default());
+    assert!(zh.contains("加入檔案…") && !zh.contains(">files-"), "{zh}");
+}
+
+#[test]
 fn simple_mode_shows_only_the_preview_and_the_chat() {
     let html = workspace(Locale::En, Layout::default());
     assert!(pane(&html, "preview") && pane(&html, "chat"), "{html}");

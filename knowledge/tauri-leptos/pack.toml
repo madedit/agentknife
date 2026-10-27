@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.20"
+version = "0.2.21"
 
 [versions]
 tauri = "2.12.4"
@@ -15,7 +15,7 @@ tailwind-cli = "4.3.3"
 [[topic]]
 id = "overview"
 title = "Project layout and workflow"
-summary = "Where the screens, the backend and the styles live; how the preview runs; rules for every change."
+summary = "Where the screens, the backend and the styles live; the user's own files in assets/ (never downloaded); how the preview runs; rules for every change."
 file = "overview.md"
 
 [[topic]]

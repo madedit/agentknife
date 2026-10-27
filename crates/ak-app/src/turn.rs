@@ -572,13 +572,18 @@ pub async fn send_message<R: Runtime>(
     request: SendMessage,
 ) -> Res<()> {
     let note = {
-        let inner = state.inner.lock().await;
+        let mut inner = state.inner.lock().await;
         let open = inner
             .open
-            .as_ref()
+            .as_mut()
             .ok_or_else(|| fail("no project is open"))?;
         open.preview.set_selection(request.selection.clone());
-        request.selection.as_ref().map(selection_note)
+        let added = crate::assets::note(&std::mem::take(&mut open.unannounced));
+        let notes: Vec<String> = [request.selection.as_ref().map(selection_note), added]
+            .into_iter()
+            .flatten()
+            .collect();
+        (!notes.is_empty()).then(|| notes.join("\n\n"))
     };
     spawn(
         app,

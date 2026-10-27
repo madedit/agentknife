@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod assets;
 pub mod capture;
 pub mod connect;
 pub mod crash;
@@ -87,6 +88,8 @@ const COMMANDS: &[&str] = &[
     "set_mcp",
     "set_selection",
     "set_preview_frame",
+    "pick_files",
+    "add_files",
     "clear_preview_data",
     "open_terminal",
     "open_in_files",
@@ -138,6 +141,8 @@ pub fn with_commands<R: Runtime>(builder: Builder<R>, state: state::AppState) ->
             mcp::set_mcp,
             workspace::set_selection,
             workspace::set_preview_frame,
+            assets::pick_files,
+            assets::add_files,
             workspace::clear_preview_data,
             mcp::open_terminal,
             home::open_in_files,

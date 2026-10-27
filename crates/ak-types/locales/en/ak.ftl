@@ -373,6 +373,22 @@ files-changed-outside = The AI changed this file. Reloading throws away your uns
 files-reload = Reload
 files-keep-mine = Keep mine
 files-binary = This file is not text (for example a picture), so it cannot be edited here.
+files-add = Add files…
+files-adding = Adding…
+files-drop = Drop the files to add them to the project
+files-added = { $count ->
+    [one] Added 1 file to the project. The AI hears of it with your next message.
+   *[other] Added { $count } files to the project. The AI hears of them with your next message.
+}
+files-held-title = Add these too?
+files-held-large = { $name }: { $size } MB, large for an app
+files-held-unknown = { $name }: not a picture, 3D model, sound or font
+files-held-add = Add anyway
+files-held-skip = Don’t add
+files-failed = { $name } was not added: { $error }
+files-drop-too-large = { $name } is too large to drop ({ $size } MB): add it with “Add files…”
+files-added-version = Added files: { $names }
+files-notice-close = Close this message
 timeline-mark = Mark this version
 timeline-mark-name = Name for this version
 timeline-mark-save = Save
@@ -509,6 +525,9 @@ home-delete-tip = Remove this project from the list (asks first)
 home-open-files = Open in file manager
 home-open-files-tip = Open this project’s folder in the file manager
 files-open-files-tip = Open this project’s folder in the file manager
+files-add-tip = Copy pictures, 3D models, sounds or fonts into the project for the app to use (the originals stay where they are). You can also drop files here.
+files-held-add-tip = Copy these files into the project too
+files-held-skip-tip = Leave these files out
 home-delete-forget-tip = Only take it off this list; the folder stays where it is
 home-delete-trash-tip = { $os ->
     [macos] Take it off the list and move its folder to the Trash; you can still get it back from there

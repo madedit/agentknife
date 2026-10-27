@@ -331,7 +331,8 @@ impl Demo {
                 start_preview(demo.clone());
                 Ok(json!(opened))
             }
-            cmd::OPEN_FOLDER | cmd::PICK_FOLDER => Ok(Value::Null),
+            cmd::OPEN_FOLDER | cmd::PICK_FOLDER | cmd::PICK_FILES => Ok(Value::Null),
+            cmd::ADD_FILES => Ok(json!(ak_types::ipc::AddedFiles::default())),
             cmd::PREVIEW_STATUS => Ok(json!(d.preview)),
             cmd::RUN_APP
             | cmd::REVEAL

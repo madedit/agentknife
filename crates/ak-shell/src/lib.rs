@@ -6,6 +6,7 @@
 // Leptos views nest deeply in types (the chat pane).
 #![recursion_limit = "256"]
 
+pub mod add_files;
 pub mod app;
 pub mod backend;
 pub mod chat;

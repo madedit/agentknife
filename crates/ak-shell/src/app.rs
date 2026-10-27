@@ -59,6 +59,9 @@ pub fn App() -> impl IntoView {
     let project_log = ProjectLog::new();
     provide_context(project_log);
     backend.listen_log(move |batch| project_log.append(batch));
+    // Files dropped outside the workspace must not replace AgentKnife's page.
+    #[cfg(target_arch = "wasm32")]
+    crate::add_files::browser::guard_window();
     backend.on(ak_types::ipc::DOCTOR_EVENT, move |p| {
         chat.log.update(|l| l.doctor_progress(p));
     });

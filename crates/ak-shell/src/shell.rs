@@ -3,6 +3,7 @@
 
 use leptos::prelude::*;
 
+use crate::add_files::{AddFilesUi, DropOverlay};
 use crate::chat::ChatPane;
 use crate::files::{CodePane, FilesPane, TimelinePane};
 use crate::i18n::{t, tr};
@@ -14,9 +15,40 @@ use crate::splitter::{Grows, Splitter};
 #[component]
 pub fn Workspace(layout: RwSignal<Layout>) -> impl IntoView {
     let full = move || layout.with(|l| l.mode == Mode::Full);
+    // Files added from anywhere in the workspace (buttons, dropping).
+    let adding = AddFilesUi::new();
+    provide_context(adding);
+    #[cfg(target_arch = "wasm32")]
+    let backend = StoredValue::new(expect_context::<crate::backend::Backend>());
 
     view! {
-        <div data-screen="workspace" class="flex min-h-0 flex-1">
+        <div
+            data-screen="workspace"
+            class="relative flex min-h-0 flex-1"
+            on:dragover=move |_e| {
+                #[cfg(target_arch = "wasm32")]
+                if crate::add_files::browser::has_files(&_e) {
+                    _e.prevent_default();
+                    adding.dragging.set(true);
+                }
+            }
+            on:dragleave=move |_e| {
+                // Only when leaving the workspace, not moving between its parts.
+                #[cfg(target_arch = "wasm32")]
+                if _e.related_target().is_none() {
+                    adding.dragging.set(false);
+                }
+            }
+            on:drop=move |_e| {
+                adding.dragging.set(false);
+                #[cfg(target_arch = "wasm32")]
+                if crate::add_files::browser::has_files(&_e) {
+                    _e.prevent_default();
+                    crate::add_files::browser::dropped(&_e, backend.get_value(), adding);
+                }
+            }
+        >
+                <DropOverlay />
                 <Show when=full>
                     <aside
                         data-pane="files"

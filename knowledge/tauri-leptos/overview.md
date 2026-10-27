@@ -18,7 +18,20 @@ src-tauri/
   src/main.rs         backend commands (#[tauri::command])
 ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates them;
                       read their source here to check a component's props)
+assets/               the user's own files, once they add some: images/, models/,
+                      sounds/, fonts/, files/
 ```
+
+## The user's pictures, models, sounds and fonts
+- The user adds them with "Add files…" (or by dropping them on AgentKnife's
+  window): AgentKnife copies them into `assets/<kind>/` and puts
+  `<link data-trunk rel="copy-dir" href="assets" />` into `index.html`, so the app
+  loads them as `./assets/images/cat.png`, in the preview and once installed. You
+  hear of each added file with the user's next message.
+- Never download pictures, sounds, fonts or 3D models from the internet, and do not
+  rename or move the user's files. When the app needs one that is not there, ask
+  the user to add it with "Add files…"; until then draw it (a colored box, an
+  icon from ak-ui, a three.js shape) so the app works without it.
 
 ## How the preview works
 - AgentKnife runs the screens with `trunk serve --features dev` and the backend with
@@ -60,7 +73,7 @@ ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates 
 - Splitting code: put screens in `src/` modules (`mod todos;` in `src/main.rs` and
   `src/todos.rs`) and backend code in `src-tauri/src/` modules.
 - Do not change `[features]`, the `ak/` folder, `index.html`'s trunk links (adding
-  what topic `three-d` says is fine) or
+  what topic `three-d` says is fine; keep the `assets` link) or
   `tauri.conf.json`'s `build` section: the preview and the installer depend on them.
 - New crates: only when really needed, with a fixed version. Prefer the versions the
   project already has in `Cargo.lock` (already downloaded, known to fit):

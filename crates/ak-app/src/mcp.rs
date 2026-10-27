@@ -647,11 +647,12 @@ impl<R: Runtime> Host<R> {
                     o.preview.clone(),
                     o.cancel.is_some(),
                     crate::home::profile_of_root(o),
+                    o.added_files.clone(),
                 )
             });
             (open, inner.settings.clone())
         };
-        let Some((name, root, preview, working, profile)) = open else {
+        let Some((name, root, preview, working, profile, added)) = open else {
             return ToolOutput::text(
                 "No project is open in AgentKnife. Call list_projects, then open_project.",
             );
@@ -659,8 +660,17 @@ impl<R: Runtime> Host<R> {
         let bench = workbench(&state, &root, profile, preview.clone(), &settings, true);
         let build = ak_agent::tools::preview::describe_status(&preview.status())
             + &ak_agent::tools::preview::describe_size(preview.page_size());
+        let added = if added.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\nFiles the user added to the project (in `assets/`, loaded as \
+                 `./assets/…`; use them, do not rename or move them):\n{}",
+                crate::assets::describe(&added)
+            )
+        };
         ToolOutput::text(format!(
-            "Project: {name} ({})\n{build}\nAgentKnife's own AI: {}{}",
+            "Project: {name} ({})\n{build}\nAgentKnife's own AI: {}{added}{}",
             root.display(),
             if working {
                 "working (changes are refused until it finishes)"

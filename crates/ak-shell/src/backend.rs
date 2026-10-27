@@ -203,6 +203,17 @@ impl Backend {
         self.call(cmd::SET_SELECTION, Some(picked)).await
     }
 
+    pub async fn pick_files(&self) -> Result<Option<Vec<String>>, CallError> {
+        self.call(cmd::PICK_FILES, None::<()>).await
+    }
+
+    pub async fn add_files(
+        &self,
+        request: &ak_types::ipc::AddFiles,
+    ) -> Result<ak_types::ipc::AddedFiles, CallError> {
+        self.call(cmd::ADD_FILES, Some(request)).await
+    }
+
     pub async fn set_preview_frame(
         &self,
         frame: Option<ak_types::preview::PreviewFrame>,

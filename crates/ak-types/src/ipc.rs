@@ -113,6 +113,13 @@ pub mod cmd {
     /// the preview page shows in the window now (`None`: not shown), for
     /// screenshots.
     pub const SET_PREVIEW_FRAME: &str = "set_preview_frame";
+    /// `()` → `Option<Vec<String>>`: lets the user choose files to add to the
+    /// project (their full paths), or `None` when cancelled.
+    pub const PICK_FILES: &str = "pick_files";
+    /// [`AddFiles`](super::AddFiles) → [`AddedFiles`](super::AddedFiles):
+    /// copies the user's own files (pictures, 3D models, sounds, fonts) into
+    /// the open project's `assets/`.
+    pub const ADD_FILES: &str = "add_files";
     /// `()` → `()`: "Clear data and start over": deletes what the app saved in
     /// the preview and starts it again (refused while the AI works).
     pub const CLEAR_PREVIEW_DATA: &str = "clear_preview_data";
@@ -172,6 +179,8 @@ pub mod cmd {
         SET_MCP,
         SET_SELECTION,
         SET_PREVIEW_FRAME,
+        PICK_FILES,
+        ADD_FILES,
         CLEAR_PREVIEW_DATA,
         OPEN_TERMINAL,
         OPEN_IN_FILES,
@@ -208,6 +217,80 @@ pub struct DoctorCheck {
 pub enum BundleProgress {
     Stage { message: String },
     Output { line: String },
+}
+
+/// A file the user adds to the project: one picked in the file dialog (its
+/// path), or one dropped on the window (its contents: the web view does not
+/// see a dropped file's path).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "from", rename_all = "snake_case")]
+pub enum NewFile {
+    Path { path: String },
+    Dropped { name: String, data_base64: String },
+}
+
+/// The request of `add_files`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddFiles {
+    pub files: Vec<NewFile>,
+    /// The user agreed to add files that were held back (large or of an
+    /// unknown kind).
+    #[serde(default)]
+    pub allow: bool,
+}
+
+/// What a file added to the project is; it decides the folder under
+/// `assets/` (`images/`, `models/`, `sounds/`, `fonts/`, `files/`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AssetKind {
+    Image,
+    Model,
+    Sound,
+    Font,
+    Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddedFile {
+    /// Project-relative, with `/` (`assets/images/cat.png`).
+    pub path: String,
+    pub kind: AssetKind,
+    pub size: u64,
+}
+
+/// Why a file waits for the user's yes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HoldReason {
+    /// Larger than the window would like to copy without asking.
+    Large,
+    /// Not a picture, model, sound or font.
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeldFile {
+    /// Its place in the request's `files`.
+    pub index: usize,
+    pub name: String,
+    pub size: u64,
+    pub reason: HoldReason,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FailedFile {
+    pub name: String,
+    pub error: String,
+}
+
+/// The result of `add_files`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddedFiles {
+    pub added: Vec<AddedFile>,
+    /// Not copied yet: the window asks, then sends them again with `allow`.
+    pub held: Vec<HeldFile>,
+    pub failed: Vec<FailedFile>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
