@@ -345,6 +345,30 @@ APP and E2E integrate all tracks.
   - The agent tool `read_knowledge(topic)` serves them.
   - Version metadata matches `versions.toml`.
 
+### P1-KNOW-002 — 3D models from files
+- Crate(s): xtask (`vendor-libs`), knowledge/, ak-preview (profile's library list)
+- Owner: unassigned
+- Depends on: P1-KNOW-001, P1-SHELL-007
+- Acceptance:
+  - `add_library("three")` also copies three.js's model loaders for glTF (`.glb`/`.gltf`, the recommended format), OBJ (with MTL) and FBX, each with every module it imports (vendored from the pinned three.js tarball by `cargo xtask vendor-libs`, listed in `xtask/src/libs.rs` and the profile, under `vendor/three/addons/`). Compressed models (Draco, KTX2 textures, meshopt) stay unsupported, and the topic says so and how to tell.
+  - Model files live in the project's `assets/models/` (copied by trunk like `vendor`); they come from the user (P1-SHELL-007), never downloaded by the AI.
+  - Topic `three-d`: loading a model (async, with a progress/failed state in `state_json()` and on screen), scaling and centering it (`Box3`), giving its parts a `name` for `pick`, playing its animations (`AnimationMixer`), freeing it in `dispose()`, and a hint on file size (the preview reloads the whole page after each change). The note "no model loaders" from 0.2.20 is replaced.
+  - A model's license travels with the app (a `LICENSE`/`CREDITS` file next to it); the topic says to ask the user where a model comes from.
+  - `cargo xtask check-knowledge` builds the topic's code with a small sample model in the check project; a test in ak-preview's library tests checks the copied files.
+  - Verified live: the user drops a `.glb` into the project and the AI shows it, turning, in the preview and in the packaged app.
+
+### P1-KNOW-003 — Music and sound effects from files
+- Crate(s): knowledge/, ak-bundle (Linux), ak-doctor (Linux)
+- Owner: unassigned
+- Depends on: P1-KNOW-001, P1-SHELL-007
+- Acceptance:
+  - Sound files live in `assets/sounds/` (copied by trunk); they come from the user (P1-SHELL-007). The topic recommends MP3 (plays in WebView2, WKWebView and WebKitGTK) and says which formats not to rely on.
+  - A new topic `sound` (for any app, not only 3D): background music (`HtmlAudioElement`: loop, volume, fade), short effects played many times at once (Web Audio API: `decodeAudioData` once, a new `AudioBufferSourceNode` per play), starting only after the first click or key (browsers keep sound off until then), a mute/volume control kept in the app's settings (topic `storage`), stopping everything when the screen goes away. Rust (web-sys features listed) and the three.js `game.js` side both shown; the synthesized sounds from `three-d` 0.2.20 stay as the option without files.
+  - What the AI can check: the app reports what plays in `state_json()`/`set_state_reader` (no sound is heard in tests).
+  - Linux: WebKitGTK plays sound through GStreamer. The doctor checks the GStreamer plugins on Linux, and packaging/install steps name them (`gstreamer1.0-plugins-good` and the like), or the topic says so if that is not done.
+  - `cargo xtask check-knowledge` builds the topic's Rust code.
+  - Verified live: music and an effect play in the preview and in the packaged app on Windows (and macOS/Linux when those builds exist).
+
 ---
 
 ### Preview & bundling
@@ -475,6 +499,18 @@ APP and E2E integrate all tracks.
 - Acceptance:
   - Doctor progress and system-dependency guidance render inside the chat flow.
   - The bundle result shows install steps and an "open folder" button.
+
+### P1-SHELL-007 — The user's own files in the project
+- Crate(s): ak-shell, ak-app, ak-types (ipc), ak-agent (policy), knowledge/
+- Owner: unassigned
+- Depends on: P1-SHELL-005
+- Acceptance:
+  - In the Files pane, "Add files…" (a file dialog) and dropping files onto it copy pictures, 3D models, sounds and fonts into the project's `assets/` (`images/`, `models/`, `sounds/`, `fonts/` by kind; other kinds asked about), never moving or changing the originals. A name already there gets a number, not overwritten.
+  - Before copying: a file over a size limit (e.g. 50 MB) or an unknown kind is explained in plain words and needs a yes.
+  - The added files show in the Files pane at once, and the AI hears of them (a note in the next message, and over MCP in `status`), with their kind and size.
+  - `index.html` gets the `copy-dir` link for `assets` when it is missing (so the preview and the packaged app serve them); topic `overview` says where assets go and that the AI never downloads them.
+  - The AI cannot fetch such files itself: the policy keeps downloads behind a confirmation as now, and the knowledge says to ask the user for the file.
+  - Tests: the command copies with kinds, numbering and limits; the shell test for the button and the drop target.
 
 ### P1-APP-001 — Tauri wiring
 - Crate(s): ak-app
