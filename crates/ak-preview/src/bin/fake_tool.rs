@@ -21,7 +21,14 @@ fn log(text: &str) {
         .append(true)
         .open(path)
     {
-        let _ = writeln!(f, "{text}");
+        // One write per line: the frontend and the backend append at once.
+        let _ = f.write_all(
+            format!(
+                "{text}
+"
+            )
+            .as_bytes(),
+        );
     }
 }
 

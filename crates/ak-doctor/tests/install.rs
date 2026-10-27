@@ -378,7 +378,7 @@ async fn install_runs_rustup_init_privately_and_places_prebuilt_tools() {
         .iter()
         .find(|(_, a, _)| a.contains(&"wasm-bindgen-cli".to_owned()))
         .unwrap();
-    assert_eq!(Path::new(cargo), tc.cargo_bin().join("cargo.exe"));
+    assert_eq!(Path::new(cargo), tc.exe(&tc.cargo_bin(), "cargo"));
     assert!(args.windows(2).any(|w| w == ["--version", "0.2.129"]));
     assert!(args.contains(&"--locked".to_owned()));
     let env: HashMap<_, _> = env.iter().cloned().collect();

@@ -37,6 +37,20 @@ pub fn strip_ansi(line: &str) -> String {
     out.trim_end_matches('\r').to_owned()
 }
 
+/// The line without emoji and other symbols, spaces collapsed: trunk writes
+/// "INFO ✅ success" where the terminal shows emoji (macOS, Linux) and
+/// "INFO success" where it does not (Windows).
+fn without_symbols(line: &str) -> String {
+    let kept: String = line
+        .chars()
+        .filter(|c| c.is_ascii() || c.is_alphanumeric())
+        .collect();
+    kept.split(' ')
+        .filter(|w| !w.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// The last lines, joined, at most [`MAX_CHARS`] (the end is kept: errors summarise
 /// at the bottom).
 pub fn tail(lines: &VecDeque<String>) -> String {
@@ -83,7 +97,8 @@ impl BuildTracker {
     /// error, if the error output grew).
     pub fn feed(&mut self, raw: &str) -> Option<ServerState> {
         let line = strip_ansi(raw);
-        let has = |list: &[&str]| list.iter().any(|m| line.contains(m));
+        let words = without_symbols(&line);
+        let has = |list: &[&str]| list.iter().any(|m| words.contains(m));
         if has(self.markers.building) {
             self.lines.clear();
             push(&mut self.lines, line);
@@ -404,6 +419,30 @@ mod tests {
             strip_ansi("\u{1b}[3m\u{1b}[1mtailwind\u{1b}[0m"),
             "tailwind"
         );
+    }
+
+    /// Trunk on macOS and Linux (seen in CI): the same words with emoji.
+    #[test]
+    fn trunk_emoji_do_not_hide_its_state() {
+        let mut t = BuildTracker::new(TRUNK);
+        assert_eq!(
+            t.feed("2026-10-27T06:07:01.1Z  INFO 📦 starting build"),
+            None
+        );
+        assert_eq!(
+            t.feed("2026-10-27T06:09:01.4Z  INFO ✅ success"),
+            Some(ServerState::Ready)
+        );
+        assert_eq!(
+            t.feed("2026-10-27T06:10:01.1Z  INFO 📦 starting build"),
+            Some(ServerState::Building)
+        );
+        assert!(
+            t.feed("2026-10-27T06:10:03.1Z ERROR ❌ error")
+                .is_some_and(|s| s.is_error())
+        );
+        // Words in other scripts are not symbols.
+        assert_eq!(without_symbols("找不到 ✅  檔案"), "找不到 檔案");
     }
 
     /// Real trunk 0.21.14 output: build, spurious rebuild, error, recovery.
