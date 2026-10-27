@@ -58,7 +58,8 @@ pub fn run(root: &Path) -> Result<()> {
         )
     })?;
     step("test", || {
-        cargo(root, &["test", "--workspace"])?;
+        // Every failing crate at once, not only the first.
+        cargo(root, &["test", "--workspace", "--no-fail-fast"])?;
         cargo(root, &["test", "-p", "ak-bridge", "--features", "dev"])
     })?;
     step("layering", || layering::check(root))?;

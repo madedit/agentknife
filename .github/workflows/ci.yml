@@ -24,6 +24,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2.9.2
 
+      # What Tauri needs on Linux (AgentKnife and the generated apps).
+      - name: System packages (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
       # Only crates are downloaded. `cargo xtask ci` itself never fetches anything.
       - name: cargo xtask ci
         run: cargo xtask ci
@@ -47,12 +54,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2.9.2
 
-      # What the generated apps need on Linux (Tauri prerequisites).
+      # What Tauri needs on Linux, and a virtual screen for the generated app.
       - name: System packages (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev xvfb
 
       - name: AgentKnife toolchain cache
         uses: actions/cache@v4.2.3
@@ -61,7 +68,15 @@ jobs:
           key: ak-toolchain-${{ runner.os }}-${{ hashFiles('versions.toml') }}
 
       - name: cargo xtask e2e
-        run: cargo xtask e2e
+        shell: bash
+        # The generated app opens a window: on Linux there is no screen
+        # without xvfb ("Failed to initialize GTK").
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a cargo xtask e2e
+          else
+            cargo xtask e2e
+          fi
         env:
           AK_E2E_TOOLCHAIN: ${{ runner.temp }}/ak-toolchain
           AK_E2E_PROVISION: "1"

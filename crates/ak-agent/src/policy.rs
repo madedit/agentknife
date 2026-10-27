@@ -563,9 +563,13 @@ mod tests {
         // Reading: no question with the reference folder, the old question without.
         for c in [
             format!("type \"{file}\""),
-            format!("findstr /n resolve \"{file}\""),
             format!("rg -n \"fn x\" \"{folder}\""),
             format!("Get-Content \"{file}\" | Select-String x"),
+            if cfg!(windows) {
+                format!("findstr /n resolve \"{file}\"")
+            } else {
+                format!("grep -n resolve \"{file}\"")
+            },
         ] {
             assert_eq!(cmd(&policy, &c), "allow", "{c}");
             assert_eq!(cmd(&plain, &c), "ask:OutsideProject", "{c}");
@@ -678,11 +682,6 @@ mod tests {
             ("run_command", json!({ "command": "git status" }), "allow"),
             (
                 "run_command",
-                json!({ "command": "dir /b /s src" }),
-                "allow",
-            ),
-            (
-                "run_command",
                 json!({ "command": "echo hi > out/log.txt" }),
                 "allow",
             ),
@@ -741,16 +740,6 @@ mod tests {
             ),
             (
                 "run_command",
-                json!({ "command": "del /q old.txt" }),
-                "ask:Delete",
-            ),
-            (
-                "run_command",
-                json!({ "command": "rd /s /q build" }),
-                "ask:Delete",
-            ),
-            (
-                "run_command",
                 json!({ "command": "Remove-Item -Recurse temp" }),
                 "ask:Delete",
             ),
@@ -775,11 +764,6 @@ mod tests {
                 "ask:Delete",
             ),
             // Outside the project
-            (
-                "run_command",
-                json!({ "command": "type ..\\..\\secrets.txt" }),
-                "ask:OutsideProject",
-            ),
             (
                 "run_command",
                 json!({ "command": "cd .." }),
@@ -848,8 +832,35 @@ mod tests {
                 "deny:Dangerous",
             ),
         ];
+        // cmd: `/x` is a flag there and `\` a separator.
+        let cmd_cases: Vec<(&str, Value, &str)> = if cfg!(windows) {
+            vec![
+                (
+                    "run_command",
+                    json!({ "command": "dir /b /s src" }),
+                    "allow",
+                ),
+                (
+                    "run_command",
+                    json!({ "command": "del /q old.txt" }),
+                    "ask:Delete",
+                ),
+                (
+                    "run_command",
+                    json!({ "command": "rd /s /q build" }),
+                    "ask:Delete",
+                ),
+                (
+                    "run_command",
+                    json!({ "command": "type ..\\..\\secrets.txt" }),
+                    "ask:OutsideProject",
+                ),
+            ]
+        } else {
+            Vec::new()
+        };
         let mut failures = Vec::new();
-        for (tool, args, expected) in &cases {
+        for (tool, args, expected) in cases.iter().chain(&cmd_cases) {
             let got = kind(&policy.check(tool, args, &ctx));
             if got != *expected {
                 failures.push(format!("{tool} {args}: expected {expected}, got {got}"));

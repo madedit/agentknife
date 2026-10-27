@@ -23,7 +23,10 @@ use ak_app::state::AppState;
 use ak_project::Registry;
 use ak_types::agent::{AgentEvent, TurnOutcome};
 use ak_types::i18n::Locale;
-use ak_types::ipc::{AGENT_EVENT, BUNDLE_EVENT, BundleResult, DoctorCheck, PREVIEW_EVENT};
+use ak_types::ipc::{
+    AGENT_EVENT, BUNDLE_EVENT, BundleResult, DoctorCheck, LOG_EVENT, PREVIEW_EVENT,
+};
+use ak_types::log::LogLine;
 use ak_types::preview::PreviewStatus;
 use serde_json::{Value, json};
 use tauri::test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder, mock_context};
@@ -61,6 +64,8 @@ const COLOR_DONE: &str = "「加入」按鈕改成綠色了。";
 /// A cold build of the generated app (frontend and backend).
 const BUILD_WAIT: Duration = Duration::from_secs(40 * 60);
 const TURN_WAIT: Duration = Duration::from_secs(20 * 60);
+/// Build-log lines shown when a step fails.
+const LOG_TAIL: usize = 80;
 
 fn scripts() -> Vec<Script> {
     vec![
@@ -112,7 +117,7 @@ impl Harness {
             .build(mock_context(tauri::test::noop_assets()))
             .unwrap();
         let events = Arc::new(Mutex::new(Vec::new()));
-        for name in [AGENT_EVENT, PREVIEW_EVENT, BUNDLE_EVENT] {
+        for name in [AGENT_EVENT, PREVIEW_EVENT, BUNDLE_EVENT, LOG_EVENT] {
             let events = events.clone();
             app.listen_any(name, move |e| {
                 let payload = serde_json::from_str(e.payload()).unwrap_or(Value::Null);
@@ -172,6 +177,24 @@ impl Harness {
             .collect()
     }
 
+    /// The last lines of the build log (progress reports left out), for a
+    /// failed step: CI keeps nothing else of the preview's output.
+    fn log_tail(&self) -> String {
+        let events = self.events.lock().unwrap();
+        let lines: Vec<String> = events
+            .iter()
+            .filter(|(name, _)| *name == LOG_EVENT)
+            .filter_map(|(_, v)| serde_json::from_value::<Vec<LogLine>>(v.clone()).ok())
+            .flatten()
+            .filter(|l| l.progress.is_none())
+            .map(|l| format!("{:?}: {}", l.source, l.text))
+            .collect();
+        lines[lines.len().saturating_sub(LOG_TAIL)..].join(
+            "
+",
+        )
+    }
+
     fn count(&self, name: &str) -> usize {
         self.events
             .lock()
@@ -212,11 +235,15 @@ impl Harness {
             }
             assert!(
                 status.error().is_none(),
-                "{what}: the preview failed: {status:#?}"
+                "{what}: the preview failed: {status:#?}
+{}",
+                self.log_tail()
             );
             assert!(
                 started.elapsed() < BUILD_WAIT,
-                "{what}: the preview is not ready: {status:#?}"
+                "{what}: the preview is not ready: {status:#?}
+{}",
+                self.log_tail()
             );
             std::thread::sleep(Duration::from_secs(1));
         }

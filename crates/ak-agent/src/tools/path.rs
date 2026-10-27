@@ -184,16 +184,16 @@ mod tests {
     fn escapes_are_rejected() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        for bad in [
-            "../secret.txt",
-            "src/../../x",
-            "/etc/passwd",
-            "\\\\server\\share\\x",
-        ] {
+        for bad in ["../secret.txt", "src/../../x", "/etc/passwd"] {
             assert!(resolve(root, bad).is_err(), "{bad}");
         }
+        // Elsewhere `\` is part of a file name.
         #[cfg(windows)]
-        for bad in ["C:\\Windows\\win.ini", "C:relative.txt"] {
+        for bad in [
+            "C:\\Windows\\win.ini",
+            "C:relative.txt",
+            "\\\\server\\share\\x",
+        ] {
             assert!(resolve(root, bad).is_err(), "{bad}");
         }
     }

@@ -149,6 +149,7 @@ async fn connection(
         id,
         admission: tokio::sync::Mutex::new(Admission::Pending),
         admitted: admitted.clone(),
+        stop: stop.clone(),
     };
     // Initialize runs inside `serve` for older clients; newer ones are let in
     // on their first request, so who connected is known only afterwards.
@@ -188,6 +189,9 @@ struct Handler {
     admission: tokio::sync::Mutex<Admission>,
     /// The client once let in (for `disconnected`).
     admitted: Arc<Mutex<Option<Client>>>,
+    /// Fires when the setting is turned off. The connection closes a moment
+    /// later; requests in between are refused already.
+    stop: CancellationToken,
 }
 
 enum Admission {
@@ -202,6 +206,12 @@ impl Handler {
     /// handshake and names itself in each request's metadata. Asked once per
     /// connection; nothing is listed or run before the user agrees.
     async fn admit(&self, info: Option<Implementation>) -> Result<Client, ErrorData> {
+        if self.stop.is_cancelled() {
+            return Err(ErrorData::invalid_request(
+                "Other AI tools were just turned off in AgentKnife.",
+                None,
+            ));
+        }
         let mut admission = self.admission.lock().await;
         match &*admission {
             Admission::In(c) => return Ok(c.clone()),
