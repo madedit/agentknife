@@ -178,6 +178,15 @@ pub mod cmd {
 pub const DOCTOR_EVENT: &str = "doctor-progress";
 /// Tauri event carrying [`BundleProgress`] while the app is packaged.
 pub const BUNDLE_EVENT: &str = "bundle-progress";
+/// Tauri event carrying the [`DoctorCheck`] after another AI tool checked or
+/// installed the tools, so the window's tools card shows it.
+pub const DOCTOR_CHECKED_EVENT: &str = "doctor-checked";
+/// Tauri event (no payload): another AI tool started packaging the app; the
+/// window shows the packaging card ([`BUNDLE_EVENT`] follows).
+pub const BUNDLE_STARTED_EVENT: &str = "bundle-started";
+/// Tauri event carrying `Result<`[`BundleResult`]`, `[`BundleFailure`]`>` when
+/// packaging started by another AI tool has finished.
+pub const BUNDLE_FINISHED_EVENT: &str = "bundle-finished";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DoctorCheck {

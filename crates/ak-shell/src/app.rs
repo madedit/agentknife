@@ -65,6 +65,16 @@ pub fn App() -> impl IntoView {
     backend.on(ak_types::ipc::BUNDLE_EVENT, move |p| {
         chat.log.update(|l| l.bundle_progress(p));
     });
+    // Checks and packaging another AI tool ran.
+    backend.on(ak_types::ipc::DOCTOR_CHECKED_EVENT, move |c| {
+        chat.log.update(|l| l.doctor_checked(c));
+    });
+    backend.on(ak_types::ipc::BUNDLE_STARTED_EVENT, move |()| {
+        chat.log.update(|l| l.bundle_started());
+    });
+    backend.on(ak_types::ipc::BUNDLE_FINISHED_EVENT, move |r| {
+        chat.log.update(|l| l.bundle_finished(r));
+    });
     let external = crate::external::External::new();
     provide_context(external);
     external.follow(&backend);

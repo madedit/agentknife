@@ -6,11 +6,14 @@
 use std::sync::{Arc, Mutex};
 
 use ak_agent::tool::ToolOutput;
-use ak_mcp::{Client, Endpoint, HELLO, INSTRUCTIONS, McpHost, Server};
+use ak_mcp::{Client, Document, Endpoint, HELLO, INSTRUCTIONS, McpHost, Server};
 use ak_types::chat::ToolSpec;
 use futures_util::future::BoxFuture;
 use rmcp::ServiceExt;
-use rmcp::model::{CallToolRequestParams, ClientCapabilities, ClientConfig, Implementation};
+use rmcp::model::{
+    CallToolRequestParams, ClientCapabilities, ClientConfig, GetPromptRequestParams,
+    Implementation, ReadResourceRequestParams,
+};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
@@ -69,7 +72,25 @@ impl McpHost for FakeHost {
     fn disconnected(&self, client: &Client) {
         self.seen.lock().unwrap().push(format!("-{}", client.name));
     }
+
+    fn documents(&self) -> BoxFuture<'_, Vec<Document>> {
+        Box::pin(async {
+            vec![Document {
+                uri: OVERVIEW.into(),
+                name: "knowledge/overview".into(),
+                title: "Overview".into(),
+                description: "Read first".into(),
+                mime_type: "text/markdown",
+            }]
+        })
+    }
+
+    fn read<'a>(&'a self, uri: &'a str) -> BoxFuture<'a, Option<String>> {
+        Box::pin(async move { (uri == OVERVIEW).then(|| "# Overview".to_owned()) })
+    }
 }
+
+const OVERVIEW: &str = "agentknife://knowledge/overview";
 
 async fn open(file: &std::path::Path, token: &str) -> (TcpStream, String) {
     let ep = Endpoint::read(file).unwrap();
@@ -230,4 +251,55 @@ async fn a_client_without_a_handshake_is_asked_before_anything() {
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
     assert_eq!(*host.seen.lock().unwrap(), ["+Claude Code", "-Claude Code"]);
+}
+
+#[tokio::test]
+async fn documents_and_the_workflow_prompt() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("mcp.json");
+    let host = Arc::new(FakeHost {
+        allow: true,
+        ..FakeHost::default()
+    });
+    let _server = Server::start(host.clone(), file.clone()).await.unwrap();
+    let token = Endpoint::read(&file).unwrap().token.unwrap();
+    let (stream, _) = open(&file, &token).await;
+    let client = claude().serve(stream).await.unwrap();
+    let caps = &client.peer_info().unwrap().capabilities;
+    assert!(caps.resources.is_some() && caps.prompts.is_some());
+
+    let docs = client.list_all_resources().await.unwrap();
+    assert_eq!(docs.len(), 1);
+    assert_eq!(docs[0].uri, OVERVIEW);
+    assert_eq!(docs[0].mime_type.as_deref(), Some("text/markdown"));
+    let read = client
+        .read_resource(ReadResourceRequestParams::new(OVERVIEW))
+        .await
+        .unwrap();
+    let read = serde_json::to_value(&read).unwrap();
+    assert_eq!(read["contents"][0]["text"], "# Overview");
+    assert!(
+        client
+            .read_resource(ReadResourceRequestParams::new("agentknife://nothing"))
+            .await
+            .is_err()
+    );
+
+    let prompts = client.list_all_prompts().await.unwrap();
+    assert_eq!(prompts.len(), 1);
+    assert_eq!(prompts[0].name, ak_mcp::workflow::BUILD_APP);
+    let mut get = GetPromptRequestParams::new(ak_mcp::workflow::BUILD_APP);
+    get.arguments = json!({ "idea": "一個記帳 App" }).as_object().cloned();
+    let prompt = serde_json::to_value(client.get_prompt(get).await.unwrap()).unwrap();
+    let text = prompt["messages"][0]["content"]["text"].as_str().unwrap();
+    assert!(
+        text.contains("一個記帳 App") && text.contains("`check_tools`"),
+        "{text}"
+    );
+    assert!(
+        client
+            .get_prompt(GetPromptRequestParams::new("other"))
+            .await
+            .is_err()
+    );
 }

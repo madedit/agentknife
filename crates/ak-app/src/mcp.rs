@@ -15,19 +15,24 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use ak_agent::Step;
+use ak_agent::permission::{ConfirmRequest, Confirmer};
 use ak_agent::tool::{ToolContext, ToolOutput};
 use ak_agent::tools::PreviewAccess;
-use ak_mcp::{Client, Endpoint, McpHost, Server};
+use ak_mcp::{Client, Document, Endpoint, McpHost, Server};
 use ak_preview::profiles;
-use ak_project::{CheckpointKind, Timeline};
-use ak_types::agent::AgentEvent;
+use ak_project::{AGENTKNIFE_DIR, CheckpointKind, Timeline};
+use ak_types::agent::{AgentEvent, ConfirmKind, ConfirmReason};
 use ak_types::chat::{ContentPart, ToolCall, ToolSpec};
+use ak_types::doctor::{CheckScope, CheckStatus};
 use ak_types::i18n::{I18n, args};
 use ak_types::ipc::{
-    AGENT_EVENT, MCP_EVENT, McpStatus, PROJECT_CHANGED_EVENT, PROJECT_OPENED_EVENT,
+    AGENT_EVENT, BUNDLE_FINISHED_EVENT, BUNDLE_STARTED_EVENT, BundleFailure, DOCTOR_CHECKED_EVENT,
+    DoctorCheck, MCP_EVENT, McpStatus, PROJECT_CHANGED_EVENT, PROJECT_OPENED_EVENT,
 };
+use ak_types::log::LogSource;
 use ak_types::preview::{ControlAction, Picked, PreviewStatus};
 use ak_types::settings::AppSettings;
+use ak_types::stack::StackProfile;
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
@@ -35,7 +40,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tokio_util::sync::CancellationToken;
 
 use crate::state::{AppState, SettingsFile};
-use crate::turn::{Workbench, log_step, workbench};
+use crate::turn::{UiBridge, Workbench, log_step, workbench};
 use crate::{Res, fail, ui_locale};
 
 /// Quiet time after a tool's last change before its changes become a version.
@@ -272,6 +277,50 @@ impl<R: Runtime> Host<R> {
 const STATUS: &str = "status";
 const LIST_PROJECTS: &str = "list_projects";
 const OPEN_PROJECT: &str = "open_project";
+const NEW_PROJECT: &str = "new_project";
+const CHECK_TOOLS: &str = "check_tools";
+const RUN_APP: &str = "run_app";
+const PACKAGE_APP: &str = "package_app";
+const CHECKPOINT: &str = "checkpoint";
+const LIST_VERSIONS: &str = "list_versions";
+const RESTORE: &str = "restore";
+const GET_LOG: &str = "get_log";
+/// The tools above that are steps in the chat.
+const APP_STEPS: &[&str] = &[
+    NEW_PROJECT,
+    CHECK_TOOLS,
+    RUN_APP,
+    PACKAGE_APP,
+    CHECKPOINT,
+    LIST_VERSIONS,
+    RESTORE,
+    GET_LOG,
+];
+/// `get_log`: lines by default and at most.
+const LOG_LINES: usize = 80;
+const LOG_MAX: usize = 400;
+/// Characters of a step's output shown in its details.
+const DETAIL_CHARS: usize = 2_000;
+const NO_PROJECT: &str =
+    "No project is open in AgentKnife. Call list_projects, then open_project (or new_project).";
+const OWN_AI_WORKING: &str = "AgentKnife's own AI is working on this project right now. Wait \
+                              until it has finished (see `status`), then try again.";
+/// Documents (MCP resources).
+const KNOWLEDGE_URI: &str = "agentknife://knowledge/";
+const PROJECT_URI: &str = "agentknife://project/";
+/// The project's notes a client may read: name, file under `.agentknife/`, what it is.
+const NOTES: &[(&str, &str, &str)] = &[
+    (
+        "PROJECT.md",
+        "PROJECT.md",
+        "What the app is for and what was decided; kept up to date for the next session.",
+    ),
+    (
+        "STATUS.md",
+        "plan/STATUS.md",
+        "What is done, what is being worked on, what is next.",
+    ),
+];
 /// Project tools other AI tools do not get: they ask their user themselves.
 const HIDDEN: &[&str] = &["ask_user"];
 
@@ -303,6 +352,90 @@ fn app_tools() -> Vec<ToolSpec> {
                     "project": { "type": "string", "description": "Its id or name from list_projects." },
                 },
                 "required": ["project"],
+            }),
+        },
+        ToolSpec {
+            name: NEW_PROJECT.into(),
+            description: "Makes a new project with the starter app and opens it in AgentKnife \
+                          (its preview starts). Agree on the name with the user first."
+                .into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "A short name for the app, in the user's language." },
+                },
+                "required": ["name"],
+            }),
+        },
+        ToolSpec {
+            name: CHECK_TOOLS.into(),
+            description: "Checks that everything needed to build apps is on this computer. \
+                          AgentKnife's own tools are installed once the user agrees in its \
+                          window (minutes, a few GB); parts of the system the user installs \
+                          themselves, with the steps this returns. Call it before the first \
+                          build on a new computer, and again after the user installed something."
+                .into(),
+            input_schema: json!({ "type": "object", "properties": {} }),
+        },
+        ToolSpec {
+            name: RUN_APP.into(),
+            description: "Opens the app in its own window, as it runs once installed (the \
+                          preview is a test page), so the user can try it. Returns once it \
+                          runs, or with the build output when it did not start."
+                .into(),
+            input_schema: json!({ "type": "object", "properties": {} }),
+        },
+        ToolSpec {
+            name: PACKAGE_APP.into(),
+            description: "Packages the app into one file the user can keep and share (a few \
+                          minutes), and returns where it is and the steps to install and start \
+                          it, which you pass on to the user."
+                .into(),
+            input_schema: json!({ "type": "object", "properties": {} }),
+        },
+        ToolSpec {
+            name: CHECKPOINT.into(),
+            description: "Saves the project as a version the user can go back to. Call it \
+                          after each part that works."
+                .into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "What the version has, in a few words in the user's language (\"login page works\")." },
+                },
+            }),
+        },
+        ToolSpec {
+            name: LIST_VERSIONS.into(),
+            description: "The project's versions, newest first: id, kind, name, changed files."
+                .into(),
+            input_schema: json!({ "type": "object", "properties": {} }),
+        },
+        ToolSpec {
+            name: RESTORE.into(),
+            description: "Takes the project back to an earlier version, after the user agrees \
+                          in AgentKnife's window. The work before it stays a version too."
+                .into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "version": { "type": "string", "description": "An id from list_versions." },
+                },
+                "required": ["version"],
+            }),
+        },
+        ToolSpec {
+            name: GET_LOG.into(),
+            description: "The last lines of the open project's log: the preview's builds \
+                          (`screens`, `backend`), the real window (`window`), packaging \
+                          (`bundle`) and the steps taken (`ai`)."
+                .into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "source": { "type": "string", "enum": ["screens", "backend", "window", "bundle", "ai"], "description": "Only this part of the log." },
+                    "lines": { "type": "integer", "minimum": 1, "maximum": LOG_MAX, "description": "How many lines (default 80)." },
+                },
             }),
         },
     ]
@@ -359,6 +492,7 @@ impl<R: Runtime> McpHost for Host<R> {
                 STATUS => self.status_text().await,
                 LIST_PROJECTS => self.list_projects().await,
                 OPEN_PROJECT => self.open_project(&args).await,
+                n if APP_STEPS.contains(&n) => self.app_step(client, n, label, args, cancel).await,
                 n if HIDDEN.contains(&n) => {
                     ToolOutput::error(format!("There is no tool named `{n}`."))
                 }
@@ -408,6 +542,68 @@ impl<R: Runtime> McpHost for Host<R> {
             emit_status(&app).await;
         });
     }
+
+    fn documents(&self) -> BoxFuture<'_, Vec<Document>> {
+        Box::pin(async move {
+            let (profile, root) = self.open_profile().await;
+            let mut docs: Vec<Document> = profile
+                .knowledge_pack()
+                .topics
+                .iter()
+                .map(|t| Document {
+                    uri: format!("{KNOWLEDGE_URI}{}", t.id),
+                    name: format!("knowledge/{}", t.id),
+                    title: t.title.into(),
+                    description: t.summary.into(),
+                    mime_type: MARKDOWN,
+                })
+                .collect();
+            if let Some(root) = root {
+                for (name, rel, about) in NOTES {
+                    if root.join(AGENTKNIFE_DIR).join(rel).is_file() {
+                        docs.push(Document {
+                            uri: format!("{PROJECT_URI}{name}"),
+                            name: format!("project/{name}"),
+                            title: format!("The project's {name}"),
+                            description: (*about).into(),
+                            mime_type: MARKDOWN,
+                        });
+                    }
+                }
+            }
+            docs
+        })
+    }
+
+    fn read<'a>(&'a self, uri: &'a str) -> BoxFuture<'a, Option<String>> {
+        Box::pin(async move {
+            let (profile, root) = self.open_profile().await;
+            if let Some(id) = uri.strip_prefix(KNOWLEDGE_URI) {
+                return profile
+                    .knowledge_pack()
+                    .topic(id)
+                    .map(|t| t.body.to_owned());
+            }
+            let name = uri.strip_prefix(PROJECT_URI)?;
+            let (_, rel, _) = NOTES.iter().find(|(n, _, _)| *n == name)?;
+            std::fs::read_to_string(root?.join(AGENTKNIFE_DIR).join(rel)).ok()
+        })
+    }
+}
+
+const MARKDOWN: &str = "text/markdown";
+/// `list_versions` shows this many.
+const VERSIONS_SHOWN: usize = 30;
+
+/// The ids of what is missing (or the wrong version) in `scope`.
+fn missing(check: &DoctorCheck, scope: CheckScope) -> Vec<String> {
+    check
+        .report
+        .items
+        .iter()
+        .filter(|i| i.status != CheckStatus::Ok && i.scope == scope)
+        .map(|i| i.id.clone())
+        .collect()
 }
 
 impl<R: Runtime> Host<R> {
@@ -528,6 +724,472 @@ impl<R: Runtime> Host<R> {
             }
             Err(e) => ToolOutput::error(format!("Could not open it: {e}")),
         }
+    }
+
+    /// The open project's stack and folder (the default stack without one).
+    async fn open_profile(&self) -> (&'static dyn StackProfile, Option<PathBuf>) {
+        let state = self.state();
+        let inner = state.inner.lock().await;
+        match inner.open.as_ref() {
+            Some(o) => (crate::home::profile_of_root(o), Some(o.root.clone())),
+            None => (profiles::default_profile(), None),
+        }
+    }
+
+    /// The open project's folder, unless AgentKnife's own AI is working in it.
+    async fn idle_project(&self) -> Result<PathBuf, ToolOutput> {
+        let state = self.state();
+        let inner = state.inner.lock().await;
+        match inner.open.as_ref() {
+            None => Err(ToolOutput::error(NO_PROJECT)),
+            Some(o) if o.cancel.is_some() => Err(ToolOutput::error(OWN_AI_WORKING)),
+            Some(o) => Ok(o.root.clone()),
+        }
+    }
+
+    fn step_id(&self, client: &Client) -> String {
+        let n = self
+            .state()
+            .mcp
+            .with(|r| {
+                r.next_step += 1;
+                r.next_step
+            })
+            .unwrap_or_default();
+        format!("mcp-{}-{n}", client.id)
+    }
+
+    /// Shows a step's progress in the chat and the project's log.
+    async fn show(&self, event: AgentEvent) {
+        let log = {
+            let state = self.state();
+            let inner = state.inner.lock().await;
+            inner.open.as_ref().map(|o| o.log.clone())
+        };
+        if let Some(log) = log {
+            log_step(&log, &event);
+        }
+        let _ = self.app.emit(AGENT_EVENT, event);
+    }
+
+    /// Asks the user with a confirmation card in the chat, as a project tool's
+    /// risky step does.
+    async fn confirm(
+        &self,
+        step: &str,
+        tool: &str,
+        label: &str,
+        kind: ConfirmKind,
+        detail: String,
+    ) -> bool {
+        let reason = ConfirmReason { kind, detail };
+        let request = ConfirmRequest {
+            request_id: format!("{step}-confirm"),
+            tool: tool.into(),
+            label: label.into(),
+            reason: reason.clone(),
+        };
+        self.show(AgentEvent::NeedsConfirmation {
+            request_id: request.request_id.clone(),
+            tool: tool.into(),
+            label: label.into(),
+            reason,
+        })
+        .await;
+        UiBridge(self.state().pending.clone())
+            .confirm(request)
+            .await
+    }
+
+    /// One of AgentKnife's own tools (not a project tool), shown as a step.
+    async fn app_step(
+        &self,
+        client: &Client,
+        name: &str,
+        label: Option<String>,
+        args: Value,
+        cancel: CancellationToken,
+    ) -> ToolOutput {
+        let step = self.step_id(client);
+        let shown = label.unwrap_or_else(|| name.to_owned());
+        let title = words(
+            "mcp-step",
+            &[("name", client.name.as_str()), ("label", shown.as_str())],
+        );
+        let detail = match &args {
+            Value::Object(m) if !m.is_empty() => args.to_string(),
+            _ => String::new(),
+        };
+        self.show(AgentEvent::StepStarted {
+            step_id: step.clone(),
+            tool: name.into(),
+            label: title.clone(),
+            detail,
+        })
+        .await;
+        let out = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => ToolOutput::error("Cancelled."),
+            out = self.app_tool(client, name, &step, &title, &args) => out,
+        };
+        let text: String = out
+            .content
+            .iter()
+            .filter_map(|c| match c {
+                ContentPart::Text { text } => Some(text.as_str()),
+                ContentPart::Image { .. } => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            .chars()
+            .take(DETAIL_CHARS)
+            .collect();
+        self.show(AgentEvent::StepFinished {
+            step_id: step,
+            ok: !out.is_error,
+            output: text,
+        })
+        .await;
+        out
+    }
+
+    async fn app_tool(
+        &self,
+        client: &Client,
+        name: &str,
+        step: &str,
+        title: &str,
+        args: &Value,
+    ) -> ToolOutput {
+        match name {
+            NEW_PROJECT => self.new_project(args).await,
+            CHECK_TOOLS => self.check_tools(step, title).await,
+            RUN_APP => self.run_app().await,
+            PACKAGE_APP => self.package_app().await,
+            CHECKPOINT => self.checkpoint(client, title, args).await,
+            LIST_VERSIONS => self.list_versions().await,
+            RESTORE => self.restore(client, step, title, args).await,
+            GET_LOG => self.get_log(args).await,
+            n => ToolOutput::error(format!("There is no tool named `{n}`.")),
+        }
+    }
+
+    async fn new_project(&self, args: &Value) -> ToolOutput {
+        let Some(name) = args["name"]
+            .as_str()
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+        else {
+            return ToolOutput::error("`name` is required: a short name agreed with the user.");
+        };
+        let state = self.state();
+        if state
+            .inner
+            .lock()
+            .await
+            .open
+            .as_ref()
+            .is_some_and(|o| o.cancel.is_some())
+        {
+            return ToolOutput::error(OWN_AI_WORKING);
+        }
+        match crate::home::create_project_quietly(self.app.clone(), &state, name).await {
+            Ok(opened) => {
+                let _ = self.app.emit(PROJECT_OPENED_EVENT, opened);
+                self.status_text().await
+            }
+            Err(e) => ToolOutput::error(format!("Could not make it: {e}")),
+        }
+    }
+
+    async fn check_tools(&self, step: &str, title: &str) -> ToolOutput {
+        let check = match crate::tools::doctor_check(self.state()).await {
+            Ok(c) => c,
+            Err(e) => return ToolOutput::error(format!("The check failed: {e}")),
+        };
+        let _ = self.app.emit(DOCTOR_CHECKED_EVENT, &check);
+        if check.report.ready() {
+            return ToolOutput::text(
+                "Everything AgentKnife needs to build apps is on this computer.",
+            );
+        }
+        let own = missing(&check, CheckScope::Isolated);
+        let check = if own.is_empty() {
+            check
+        } else {
+            let names: Vec<String> = own
+                .iter()
+                .map(|id| words(&format!("doctor-item-{id}"), &[]))
+                .collect();
+            if !self
+                .confirm(
+                    step,
+                    CHECK_TOOLS,
+                    title,
+                    ConfirmKind::Download,
+                    names.join(", "),
+                )
+                .await
+            {
+                return ToolOutput::error(format!(
+                    "The user did not want AgentKnife to install its tools now ({}). Apps \
+                     cannot be built without them: ask when it suits them.",
+                    own.join(", ")
+                ));
+            }
+            match crate::tools::doctor_install(self.app.clone(), self.state()).await {
+                Ok(c) => c,
+                Err(e) => return ToolOutput::error(format!("The install failed: {e}")),
+            }
+        };
+        let _ = self.app.emit(DOCTOR_CHECKED_EVENT, &check);
+        if check.report.ready() {
+            return ToolOutput::text(
+                "AgentKnife installed its tools; everything needed to build apps is there. \
+                 The preview starts by itself.",
+            );
+        }
+        let mut out = String::new();
+        let failed: Vec<String> = check
+            .report
+            .items
+            .iter()
+            .filter(|i| i.status != CheckStatus::Ok && i.scope == CheckScope::Isolated)
+            .map(|i| format!("- {}: {}", i.id, i.detail.as_deref().unwrap_or("not there")))
+            .collect();
+        if !failed.is_empty() {
+            out.push_str(&format!(
+                "Some of AgentKnife's own tools did not install:\n{}\n",
+                failed.join("\n")
+            ));
+        }
+        let system = missing(&check, CheckScope::System);
+        if !system.is_empty() {
+            out.push_str(&format!(
+                "The user installs these parts of the system themselves: {}. AgentKnife's \
+                 window shows them the steps (with an Install button where it can start the \
+                 official installer); then they click \"Check again\". Tell them in plain \
+                 words, and call check_tools again when they are done. The steps as the \
+                 window shows them:\n",
+                system.join(", ")
+            ));
+            for g in &check.guides {
+                for s in &g.steps {
+                    out.push_str(&format!("- {}", words(&s.message, &[])));
+                    if let Some(c) = &s.command {
+                        out.push_str(&format!("\n  {c}"));
+                    }
+                    if let Some(l) = &s.link {
+                        out.push_str(&format!("\n  {l}"));
+                    }
+                    out.push('\n');
+                }
+            }
+        }
+        ToolOutput::error(out.trim_end().to_owned())
+    }
+
+    async fn run_app(&self) -> ToolOutput {
+        if let Err(refused) = self.idle_project().await {
+            return refused;
+        }
+        match crate::workspace::run_app(self.state()).await {
+            Ok(()) => ToolOutput::text(
+                "The app is open in its own window, as it runs once installed (its data \
+                 stays apart from an installed copy). The user can try it there; calling \
+                 run_app again replaces that window.",
+            ),
+            Err(e) => ToolOutput::error(format!("The app did not start:\n{e}")),
+        }
+    }
+
+    async fn package_app(&self) -> ToolOutput {
+        if let Err(refused) = self.idle_project().await {
+            return refused;
+        }
+        let _ = self.app.emit(BUNDLE_STARTED_EVENT, ());
+        let result = crate::tools::bundle(self.app.clone(), self.state())
+            .await
+            .map_err(|v| {
+                serde_json::from_value::<BundleFailure>(v).unwrap_or(BundleFailure {
+                    kind: "other".into(),
+                    detail: String::new(),
+                })
+            });
+        let _ = self.app.emit(BUNDLE_FINISHED_EVENT, &result);
+        match result {
+            Ok(r) => {
+                let a = [("file", r.file.as_str()), ("app", r.app.as_str())];
+                let steps: Vec<String> = r
+                    .steps
+                    .iter()
+                    .enumerate()
+                    .map(|(n, s)| {
+                        let mut line = format!("{}. {}", n + 1, words(&s.message, &a));
+                        if let Some(c) = &s.command {
+                            line.push_str(&format!("\n   {c}"));
+                        }
+                        line
+                    })
+                    .collect();
+                ToolOutput::text(format!(
+                    "Packaged: {}\nPass these steps on to the user, in their language:\n{}",
+                    r.path,
+                    steps.join("\n")
+                ))
+            }
+            Err(f) => ToolOutput::error(format!("Packaging failed ({}).\n{}", f.kind, f.detail)),
+        }
+    }
+
+    async fn checkpoint(&self, client: &Client, title: &str, args: &Value) -> ToolOutput {
+        let root = match self.idle_project().await {
+            Ok(r) => r,
+            Err(refused) => return refused,
+        };
+        let label = match args["name"]
+            .as_str()
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+        {
+            Some(n) => words("mcp-step", &[("name", client.name.as_str()), ("label", n)]),
+            None => title.to_owned(),
+        };
+        let saved = {
+            let label = label.clone();
+            tokio::task::spawn_blocking(move || {
+                Timeline::open(&root)
+                    .and_then(|mut t| t.checkpoint(CheckpointKind::Turn, &label, None))
+            })
+            .await
+        };
+        match saved {
+            Ok(Ok(entry)) => {
+                // What it saves is no longer waiting for a version.
+                self.state().mcp.with(|r| r.unsaved.remove(&client.id));
+                let _ = self.app.emit(PROJECT_CHANGED_EVENT, ());
+                match entry {
+                    Some(e) => ToolOutput::text(format!("Saved version {}: {label}", e.id)),
+                    None => ToolOutput::text(
+                        "Nothing changed since the last version, so no new one was made.",
+                    ),
+                }
+            }
+            Ok(Err(e)) => ToolOutput::error(format!("Could not save a version: {e}")),
+            Err(e) => ToolOutput::error(format!("Could not save a version: {e}")),
+        }
+    }
+
+    async fn list_versions(&self) -> ToolOutput {
+        if self.open_profile().await.1.is_none() {
+            return ToolOutput::error(NO_PROJECT);
+        }
+        match crate::workspace::timeline(self.state()).await {
+            Ok(rows) if rows.is_empty() => ToolOutput::text("The project has no versions yet."),
+            Ok(rows) => {
+                let lines: Vec<String> = rows
+                    .iter()
+                    .take(VERSIONS_SHOWN)
+                    .map(|r| {
+                        format!(
+                            "- {} | {} | {} | {} files{}",
+                            r.id,
+                            r.kind,
+                            r.label,
+                            r.changed_files.len(),
+                            if r.current { " | current" } else { "" }
+                        )
+                    })
+                    .collect();
+                ToolOutput::text(format!(
+                    "id | kind | name | changed files (newest first)\n{}",
+                    lines.join("\n")
+                ))
+            }
+            Err(e) => ToolOutput::error(format!("Could not read the versions: {e}")),
+        }
+    }
+
+    async fn restore(&self, client: &Client, step: &str, title: &str, args: &Value) -> ToolOutput {
+        if let Err(refused) = self.idle_project().await {
+            return refused;
+        }
+        let Some(id) = args["version"]
+            .as_str()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        else {
+            return ToolOutput::error("`version` is required: an id from list_versions.");
+        };
+        let rows = match crate::workspace::timeline(self.state()).await {
+            Ok(rows) => rows,
+            Err(e) => return ToolOutput::error(format!("Could not read the versions: {e}")),
+        };
+        let Some(row) = rows.iter().find(|r| r.id == id) else {
+            return ToolOutput::error(format!(
+                "There is no version `{id}`. Call list_versions for the ids."
+            ));
+        };
+        if row.current {
+            return ToolOutput::text("The project is at that version already.");
+        }
+        if !self
+            .confirm(step, RESTORE, title, ConfirmKind::Delete, row.label.clone())
+            .await
+        {
+            return ToolOutput::error(
+                "The user did not want to go back to that version. Ask what they would \
+                 prefer instead.",
+            );
+        }
+        let state = self.state();
+        state.mcp.with(|r| r.changing += 1);
+        let _done = Done(Some(&state.mcp));
+        if let Err(e) = crate::workspace::restore(self.state(), id.to_owned()).await {
+            return ToolOutput::error(format!("Could not go back: {e}"));
+        }
+        state.mcp.with(|r| r.unsaved.remove(&client.id));
+        let _ = self.app.emit(PROJECT_CHANGED_EVENT, ());
+        ToolOutput::text(format!(
+            "The project is back at version {id} ({}). The work before it is kept as a \
+             version too (see list_versions).",
+            row.label
+        ))
+    }
+
+    async fn get_log(&self, args: &Value) -> ToolOutput {
+        if self.open_profile().await.1.is_none() {
+            return ToolOutput::error(NO_PROJECT);
+        }
+        let source: Option<LogSource> = match args.get("source").filter(|s| !s.is_null()) {
+            Some(s) => match serde_json::from_value(s.clone()) {
+                Ok(s) => Some(s),
+                Err(_) => {
+                    return ToolOutput::error(
+                        "`source` is one of screens, backend, window, bundle, ai.",
+                    );
+                }
+            },
+            None => None,
+        };
+        let wanted = args["lines"]
+            .as_u64()
+            .map_or(LOG_LINES, |n| (n as usize).clamp(1, LOG_MAX));
+        let lines = crate::workspace::get_log(self.state())
+            .await
+            .unwrap_or_default();
+        let shown: Vec<String> = lines
+            .iter()
+            .filter(|l| l.progress.is_none() && source.is_none_or(|s| l.source == s))
+            .map(|l| {
+                let from = serde_json::to_value(l.source).unwrap_or_default();
+                format!("[{}] {}", from.as_str().unwrap_or_default(), l.text)
+            })
+            .collect();
+        if shown.is_empty() {
+            return ToolOutput::text("The log has nothing there yet.");
+        }
+        ToolOutput::text(shown[shown.len().saturating_sub(wanted)..].join("\n"))
     }
 
     async fn project_call(

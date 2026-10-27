@@ -10,9 +10,11 @@ use ak_agent::tool::{LABEL_ARG, ToolOutput};
 use ak_types::chat::{ContentPart, ToolSpec};
 use futures_util::future::BoxFuture;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation,
-    InitializeRequestParams, InitializeResult, ListToolsResult, PaginatedRequestParams,
-    ServerCapabilities, ServerConfig, Tool,
+    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, GetPromptRequestParams,
+    GetPromptResponse, GetPromptResult, Implementation, InitializeRequestParams, InitializeResult,
+    ListPromptsResult, ListResourcesResult, ListToolsResult, PaginatedRequestParams, Prompt,
+    PromptArgument, PromptMessage, ReadResourceRequestParams, ReadResourceResponse,
+    ReadResourceResult, Resource, ResourceContents, Role, ServerCapabilities, ServerConfig, Tool,
 };
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler, ServiceExt};
@@ -22,6 +24,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_util::sync::CancellationToken;
 
 use crate::endpoint::{Endpoint, random_token};
+use crate::workflow::{BUILD_APP, BUILD_APP_DESCRIPTION, IDEA_ARG, build_app};
 use crate::{HELLO, INSTRUCTIONS};
 
 /// One connected client (one `agentknife-mcp` process).
@@ -54,6 +57,24 @@ pub trait McpHost: Send + Sync + 'static {
     fn connected<'a>(&'a self, client: &'a Client) -> BoxFuture<'a, bool>;
 
     fn disconnected(&self, client: &Client);
+
+    /// What a client may read (MCP resources): the knowledge pack, and the
+    /// open project's notes.
+    fn documents(&self) -> BoxFuture<'_, Vec<Document>>;
+
+    /// One document's text, by its `uri`; `None` when there is no such one.
+    fn read<'a>(&'a self, uri: &'a str) -> BoxFuture<'a, Option<String>>;
+}
+
+/// A document a client may read (one MCP resource).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Document {
+    /// `agentknife://…`
+    pub uri: String,
+    pub name: String,
+    pub title: String,
+    pub description: String,
+    pub mime_type: &'static str,
 }
 
 /// AgentKnife's listener. Writes the endpoint file when started; dropping it
@@ -300,9 +321,15 @@ fn mcp_result(out: ToolOutput) -> CallToolResult {
 
 impl ServerHandler for Handler {
     fn get_info(&self) -> ServerConfig {
-        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("agentknife", env!("CARGO_PKG_VERSION")))
-            .with_instructions(INSTRUCTIONS)
+        ServerConfig::new(
+            ServerCapabilities::builder()
+                .enable_prompts()
+                .enable_resources()
+                .enable_tools()
+                .build(),
+        )
+        .with_server_info(Implementation::new("agentknife", env!("CARGO_PKG_VERSION")))
+        .with_instructions(INSTRUCTIONS)
     }
 
     async fn initialize(
@@ -343,6 +370,92 @@ impl ServerHandler for Handler {
             .call(&client, request.name.into_owned(), label, args, context.ct)
             .await;
         Ok(mcp_result(out).into())
+    }
+
+    async fn list_resources(
+        &self,
+        _: Option<PaginatedRequestParams>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<ListResourcesResult, ErrorData> {
+        self.admit(context.client_info()).await?;
+        let resources = self
+            .host
+            .documents()
+            .await
+            .into_iter()
+            .map(|d| {
+                Resource::new(d.uri, d.name)
+                    .with_title(d.title)
+                    .with_description(d.description)
+                    .with_mime_type(d.mime_type)
+            })
+            .collect();
+        Ok(ListResourcesResult::with_all_items(resources))
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResponse, ErrorData> {
+        self.admit(context.client_info()).await?;
+        let mime = self
+            .host
+            .documents()
+            .await
+            .into_iter()
+            .find(|d| d.uri == request.uri)
+            .map(|d| d.mime_type);
+        match (mime, self.host.read(&request.uri).await) {
+            (Some(mime), Some(text)) => Ok(ReadResourceResult::new(vec![
+                ResourceContents::text(text, request.uri).with_mime_type(mime),
+            ])
+            .into()),
+            _ => Err(ErrorData::resource_not_found(
+                format!("There is no resource `{}`.", request.uri),
+                None,
+            )),
+        }
+    }
+
+    async fn list_prompts(
+        &self,
+        _: Option<PaginatedRequestParams>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<ListPromptsResult, ErrorData> {
+        self.admit(context.client_info()).await?;
+        let idea = PromptArgument::new(IDEA_ARG)
+            .with_description("What the app should do, in the user's words.")
+            .with_required(false);
+        Ok(ListPromptsResult::with_all_items(vec![Prompt::new(
+            BUILD_APP,
+            Some(BUILD_APP_DESCRIPTION),
+            Some(vec![idea]),
+        )]))
+    }
+
+    async fn get_prompt(
+        &self,
+        request: GetPromptRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<GetPromptResponse, ErrorData> {
+        self.admit(context.client_info()).await?;
+        if request.name != BUILD_APP {
+            return Err(ErrorData::invalid_params(
+                format!("There is no prompt `{}`.", request.name),
+                None,
+            ));
+        }
+        let idea = request
+            .arguments
+            .as_ref()
+            .and_then(|a| a.get(IDEA_ARG))
+            .and_then(Value::as_str);
+        Ok(
+            GetPromptResult::new(vec![PromptMessage::new_text(Role::User, build_app(idea))])
+                .with_description(BUILD_APP_DESCRIPTION)
+                .into(),
+        )
     }
 }
 

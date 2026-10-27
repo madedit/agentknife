@@ -1,18 +1,6 @@
 # STATUS
 
 ## Doing
-- P1-CORE-003 — coordinator — started 2026-10-27
-  Notes: the first runs on GitHub (v1.0.0, main, v1.0.1) failed on every job but e2e on Windows:
-  - Windows ci: `an_allowed_tool_gets_agentknifes_tools` raced: a call right after turning MCP off could still be answered before the connection closed. The handler now refuses every request once the server stops.
-  - macOS ci: tests with cmd syntax (`dir /b`, `del /q`, `rd /s`, `findstr /n`, `..\..\`, `\\server\share`) ran on Unix, where `/x` is a path and `\` part of a file name; they now run on Windows only (`grep -n` stands in for findstr).
-  - Linux ci: no GTK/WebKit packages (glib-sys build script failed); the ci job installs the same Tauri packages as e2e.
-  - Linux e2e: the generated app panicked with "Failed to initialize GTK" (no screen); e2e runs under `xvfb-run -a`.
-  - macOS e2e: the frontend stayed "Building" for the whole 40 minutes; the cause is not in the CI output. A failed preview step now prints the last 80 build-log lines.
-  - Second run (1e465e7):
-    - macOS and Linux e2e: the log showed the cause. trunk writes "INFO ✅ success" (and 📦, ❌) where the terminal shows emoji, and the frontend markers expected "INFO success" as on Windows, so the preview never became ready. This was also a product bug on macOS and Linux. `BuildTracker` now matches the markers on the line without symbols. xvfb worked: the app started.
-    - ak-preview dev_server tests (Windows and macOS): the fake tool's log line and its newline were two writes, and the frontend and backend processes append to the same file, so lines got joined (`…49227serve port…`). It now writes each line in one call.
-    - ak-doctor install test (macOS, Linux): `cargo.exe` was hard-coded; it now uses the toolchain's name for the OS.
-  - `cargo xtask ci` runs the workspace tests with `--no-fail-fast`, so one run shows every failing crate.
 ## Blocked
 - P1-MCP-001 (follow-up) — needs: P1-APP-003 — installers must ship `agentknife-mcp` next to AgentKnife (Tauri `externalBin`); `cargo xtask build` already puts it in target/release.
 - P1-APP-001 (follow-up) — needs: decision — the real preview screenshot (Capturer: WebView2 CapturePreview / CDP with clip, WKWebView takeSnapshot, webkit) is not wired: screenshot_preview stays off and the agent reads the DOM summary.
@@ -620,3 +608,24 @@
   - Owner: Settings had "Other AI tools" and the wizard "Use an AI tool you already have", the same thing in two places. The Settings section is gone; the on/off switch and who is connected are now in the wizard's group (Settings → Change AI reaches it).
   - Owner: Gemini CLI is retired; its place in the wizard is Antigravity (`agy mcp add agentknife "<shim>"`). agy 1.3.5 has no scope flag and writes the global ~/.gemini/config/mcp_config.json (the workspace file .agents/mcp_config.json is reported not to load: google-antigravity/antigravity-cli#60), so it gets the same "every folder" note as Codex. Its client name is unverified ("antigravity…"/"agy…" map to "Antigravity").
   - Closed 2026-10-27 (owner): Antigravity verified live, its client name included. Codex is unverified (not installed here) and waits for user reports.
+- P1-CORE-003 — (hash in next commit) — GitHub Actions CI: `cargo xtask ci` and `cargo xtask e2e` on windows-latest, macos-latest and ubuntu-latest for every push and PR.
+  - The first runs on GitHub (v1.0.0, main, v1.0.1) failed on every job but e2e on Windows:
+  - Windows ci: `an_allowed_tool_gets_agentknifes_tools` raced: a call right after turning MCP off could still be answered before the connection closed. The handler now refuses every request once the server stops.
+  - macOS ci: tests with cmd syntax (`dir /b`, `del /q`, `rd /s`, `findstr /n`, `..\..\`, `\\server\share`) ran on Unix, where `/x` is a path and `\` part of a file name; they now run on Windows only (`grep -n` stands in for findstr).
+  - Linux ci: no GTK/WebKit packages (glib-sys build script failed); the ci job installs the same Tauri packages as e2e.
+  - Linux e2e: the generated app panicked with "Failed to initialize GTK" (no screen); e2e runs under `xvfb-run -a`.
+  - macOS e2e: the frontend stayed "Building" for the whole 40 minutes; the cause is not in the CI output. A failed preview step now prints the last 80 build-log lines.
+  - Second run (1e465e7):
+    - macOS and Linux e2e: the log showed the cause. trunk writes "INFO ✅ success" (and 📦, ❌) where the terminal shows emoji, and the frontend markers expected "INFO success" as on Windows, so the preview never became ready. This was also a product bug on macOS and Linux. `BuildTracker` now matches the markers on the line without symbols. xvfb worked: the app started.
+    - ak-preview dev_server tests (Windows and macOS): the fake tool's log line and its newline were two writes, and the frontend and backend processes append to the same file, so lines got joined (`…49227serve port…`). It now writes each line in one call.
+    - ak-doctor install test (macOS, Linux): `cargo.exe` was hard-coded; it now uses the toolchain's name for the OS.
+  - `cargo xtask ci` runs the workspace tests with `--no-fail-fast`, so one run shows every failing crate.
+  - Third run (3b2521b): all six jobs pass (ci 5–8 min, e2e 10–12 min per OS), so the first-use story, packaging included, now runs on macOS and Linux too. Left: actions/cache@v4.2.3 is flagged for Node.js 20.
+- P1-MCP-002 — (hash in next commit) — full workflow over MCP: tools to make, check, run, package, save and restore; resources; the `build_app` prompt.
+  - Tools (ak-app `mcp`), each a step in the chat like the project tools: `new_project` (no greeting, `home::create_project_quietly`), `check_tools`, `run_app`, `package_app`, `checkpoint`, `list_versions`, `restore`, `get_log`. `list_versions` is new (not in the plan): `restore` needs the ids.
+  - Confirmations use the chat's cards (`NeedsConfirmation`, answered with `answer_confirmation`): installing AgentKnife's own tools is a `Download` card naming them; going back is a `Delete` card naming the version. System parts (C++ Build Tools, WebView2, Xcode, Linux packages) are not installed over MCP: the result gives the window's guide steps for the AI to explain.
+  - Refused while AgentKnife's own AI works: new_project, run_app, package_app, checkpoint, restore. `restore` counts as a change (`mcp::busy`); `checkpoint` and `restore` drop the tool's pending burst version.
+  - The window follows: `DOCTOR_CHECKED_EVENT` updates the tools card after a check or install, `BUNDLE_STARTED_EVENT` / `BUNDLE_FINISHED_EVENT` show the packaging card as when the user packages.
+  - Resources (`McpHost::documents`/`read`): knowledge topics `agentknife://knowledge/<id>`, and the open project's `agentknife://project/PROJECT.md` and `STATUS.md` (`.agentknife/plan/STATUS.md`). Prompt `build_app` (argument `idea`) in `ak_mcp::workflow`. INSTRUCTIONS mention the new tools.
+  - Tests: ak-mcp fake host (resources list/read/missing, prompt list/get/unknown); ak-app on the mock runtime over a real socket: new project, PROJECT.md resource, write, checkpoint (and "nothing changed"), list_versions, restore declined then allowed, check_tools declined, run_app and package_app failing without tools, the window's card events, get_log by source.
+  - Live check (owner, 2026-10-27): every step tried from Claude Code works, packaging included.

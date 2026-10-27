@@ -435,6 +435,15 @@ impl ChatLog {
         self.doctor().progress = Some(p);
     }
 
+    /// A check (or install) another AI tool ran: the card shows its result.
+    pub fn doctor_checked(&mut self, check: DoctorCheck) {
+        let card = self.doctor();
+        card.check = Some(check);
+        card.progress = None;
+        card.busy = false;
+        card.error = None;
+    }
+
     pub fn bundle_started(&mut self) {
         self.items.push(Item::Bundle(BundleCard::Running {
             stage: None,
@@ -635,6 +644,21 @@ mod tests {
         ));
         log.doctor().busy = false;
         assert_eq!(log.items.len(), 1, "updates, not a second card");
+        // Another AI tool's check replaces what the card shows.
+        log.doctor_checked(DoctorCheck {
+            report: ak_types::doctor::DoctorReport { items: Vec::new() },
+            guides: Vec::new(),
+        });
+        assert!(matches!(
+            &log.items[0],
+            Item::Doctor(DoctorCard {
+                check: Some(_),
+                progress: None,
+                busy: false,
+                ..
+            })
+        ));
+        assert_eq!(log.items.len(), 1);
 
         log.bundle_started();
         assert!(log.bundling());

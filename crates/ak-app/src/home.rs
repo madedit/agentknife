@@ -159,6 +159,26 @@ pub async fn create_project<R: Runtime>(
     open(app, &state, project, true).await
 }
 
+/// Makes and opens a project for another AI tool (MCP), without a greeting
+/// from AgentKnife's own AI.
+pub async fn create_project_quietly<R: Runtime>(
+    app: AppHandle<R>,
+    state: &State<'_, AppState>,
+    name: &str,
+) -> Res<OpenedProject> {
+    let mut project = {
+        let mut inner = state.inner.lock().await;
+        inner
+            .registry
+            .create(name, None, ui_locale())
+            .map_err(fail)?
+    };
+    project
+        .scaffold(profiles::default_profile())
+        .map_err(fail)?;
+    open(app, state, project, false).await
+}
+
 #[tauri::command]
 pub async fn open_project<R: Runtime>(
     app: AppHandle<R>,

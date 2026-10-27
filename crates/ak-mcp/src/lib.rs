@@ -11,9 +11,10 @@
 
 pub mod endpoint;
 mod server;
+pub mod workflow;
 
 pub use endpoint::Endpoint;
-pub use server::{Client, McpHost, Server, display_name, mcp_tool};
+pub use server::{Client, Document, McpHost, Server, display_name, mcp_tool};
 
 /// First line a connection sends, followed by a space and the token.
 pub const HELLO: &str = "AGENTKNIFE-MCP/1";
@@ -27,7 +28,9 @@ user's app running (the preview) and every step you take here.
 - Use these tools rather than your own file and shell tools: then the user sees your \
 steps, AgentKnife asks them before risky steps, keeps versions they can go back to, \
 and restarts the app's background part when its code changes.
-- Start with `status`. If no project is open, use `list_projects` and `open_project`.
+- Start with `status`. If no project is open, use `list_projects` and `open_project`, \
+or `new_project`. `check_tools` checks (and, once the user agrees, installs) what \
+building needs.
 - Before writing app code, read the stack's docs with `read_knowledge` (start with \
 `overview`). The library versions are pinned and differ from what you may know.
 - Give every element a `data-ak-id`. Never edit the `ak/` folder (it is generated).
@@ -35,6 +38,8 @@ and restarts the app's background part when its code changes.
 or similar, call `get_selection` to see what they picked.
 - After changing files, call `build_status`; check the screen with `dom_summary`, \
 `interact` and `screenshot_preview`.
+- `checkpoint` after each working part; `restore` goes back (the user confirms). \
+`run_app` opens the app in a real window, `package_app` makes the file to share.
 - Text the user sees in the app is in the user's language. Give each call a short \
 `label` in the user's language: AgentKnife shows it as the step.
 - While AgentKnife's own AI is working, changes are refused: wait and try again.";
