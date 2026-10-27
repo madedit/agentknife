@@ -44,6 +44,10 @@ now). Make the layout work there:
   grows `min-h-0 flex-1 overflow-auto`. Then the page itself never scrolls.
 - A list or a form may instead be one page that scrolls as a whole
   (`min-h-screen`, as in the starter app).
+- Short labels must not wrap into a second line when space is tight: titles
+  and buttons in a toolbar `shrink-0 whitespace-nowrap`; in table cells, numbers,
+  sizes, dates and types `whitespace-nowrap`, and long names `truncate` (with
+  `min-w-0` on their cell).
 
 ## Own colors or fonts
 In `style/input.css`, after `@import "tailwindcss";` (keep the `@source` lines):

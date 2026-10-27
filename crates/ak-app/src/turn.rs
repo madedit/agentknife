@@ -284,7 +284,8 @@ pub fn library_note(cargo_home: &std::path::Path) -> String {
         "\n\nThe source code of the project's downloaded libraries (crates) is in {} \
          (one folder per index, then `<crate>-<version>`, e.g. `leptos-0.8.22`). To check \
          a library's API, list_files, search_files and read_file take absolute paths \
-         there; search one crate's folder, not the whole registry. Read only. \
+         there; search one crate's folder, not the whole registry. Read only. A \
+         crate's optional parts are the `[features]` of its `Cargo.toml` there. \
          ak-ui and ak-bridge are not there: their source is in the project's `ak/` \
          folder (`ak/ak-ui/src`, `ak/ak-bridge/src`).",
         cargo_home.join("registry").join("src").display()

@@ -52,9 +52,15 @@ builds again.
   implements FnOnce`**, often pointing at the start or end of a whole `view!` —
   a closure moves a `String` out each time it runs, or one `String` is used by
   several `move ||` closures (`class:x={move || …}`, `when`): make it a
-  `StoredValue` or clone it per closure. Inside `Show`/`For` rows:
-  topic `leptos-components` ("Lists"). One handler for two events: a `Callback`,
-  called with `.run(…)`.
+  `StoredValue` or clone it per closure. A handler inside `<Show>` (or `For`
+  rows) that uses a `String` from outside, like `on:click=move |_|
+  open(path.clone())`: `<Show>` runs its children again each time, so turn the
+  value into a `StoredValue` first (topic `leptos-components`, "Lists"). One
+  handler for two events: a `Callback`, called with `.run(…)`.
+- **Paths look like `\\?\C:\Users\…`** on Windows — `std::fs::canonicalize` adds
+  that prefix, which users cannot read and which breaks splitting the path into
+  parts. For paths the user sees, use `std::path::absolute(&p)` (no prefix), or
+  remove it: `let s = p.to_string_lossy(); s.strip_prefix(r"\\?\").unwrap_or(&s)`.
 - **`expected Callback<()>, found closure`** on your own component — give the prop
   `#[prop(into)]` (topic `leptos-components`).
 - **`cannot assign to *n, which is behind a & reference`** in `with_value`, or

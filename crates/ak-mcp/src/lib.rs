@@ -27,7 +27,9 @@ user's app running (the preview) and every step you take here.
 
 - Use these tools rather than your own file and shell tools: then the user sees your \
 steps, AgentKnife asks them before risky steps, keeps versions they can go back to, \
-and restarts the app's background part when its code changes.
+and restarts the app's background part when its code changes. `list_files` and \
+`search_files` skip build output (`target/`) and `.git`; a shell listing of the \
+project does not, and is huge.
 - Start with `status`. If no project is open, use `list_projects` and `open_project`, \
 or `new_project`. `check_tools` checks (and, once the user agrees, installs) what \
 building needs.

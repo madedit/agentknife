@@ -165,11 +165,16 @@ async fn keys_never_reach_settings_logs_or_errors() {
 #[ignore = "touches the real OS keychain"]
 fn real_keychain_round_trip() {
     use ak_providers::credentials::Keychain;
-    let account = "agentknife-selftest";
-    let key = ApiKey::new("sk-selftest-not-a-real-key").unwrap();
-    Keychain.set(account, &key).unwrap();
-    assert_eq!(Keychain.get(account).unwrap(), Some(key));
-    Keychain.delete(account).unwrap();
-    assert_eq!(Keychain.get(account).unwrap(), None);
-    Keychain.delete(account).unwrap();
+    // A plain name, and one with an address as local servers get.
+    for account in [
+        "agentknife-selftest",
+        "agentknife-selftest@http://127.0.0.1:8080/v1",
+    ] {
+        let key = ApiKey::new("sk-selftest-not-a-real-key").unwrap();
+        Keychain.set(account, &key).unwrap();
+        assert_eq!(Keychain.get(account).unwrap(), Some(key), "{account}");
+        Keychain.delete(account).unwrap();
+        assert_eq!(Keychain.get(account).unwrap(), None);
+        Keychain.delete(account).unwrap();
+    }
 }

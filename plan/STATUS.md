@@ -11,6 +11,11 @@
     - `edit_file` failed on longer blocks: after the exact (and CRLF) match it now compares line by line without trailing spaces and line ends (one match only; indentation still counts), and a miss says which file line the first line matches and where it starts to differ, naming look-alikes (− and -).
     - `checkpoint` answered "Nothing changed" because the quiet-minute version already held the changes: it is now a `Task` entry, recorded every time (kept by GC); its description says AgentKnife also saves by itself.
     - Screenshots could show the old page: right after `files_changed`, the dev server says "ready" until it notices the change. `PreviewSession::settled` now first waits (at most 1.5 s) for the build that change starts; every preview tool and the turn's build check go through it.
+  - Second report (owner, Antigravity, a file manager with picture preview), knowledge pack 0.2.19:
+    - images-dialogs: the thumbnail is PNG when the picture has transparency (was always JPEG: transparent parts went black); new `picture_url` (the file as it is up to 8 MB, keeping transparency, GIF animation and SVG) and `picture_size` (`ImageReader::into_dimensions`, no decoding). Mirrored in check/backend.rs.
+    - troubleshooting: `\\?\` paths from `canonicalize` on Windows (use `std::path::absolute` or strip it); the FnOnce entry names handlers inside `<Show>` (the StoredValue fix was already in leptos-components).
+    - tailwind: `shrink-0 whitespace-nowrap` for toolbar titles and buttons, `whitespace-nowrap`/`truncate` in table cells.
+    - The library note (system prompt, MCP `status`) says a crate's features are in its Cargo.toml there; MCP INSTRUCTIONS say `list_files`/`search_files` skip `target/` and `.git` while a shell listing does not.
   - Left: the live check on Windows; macOS (WKWebView `takeSnapshot`) and Linux (WebKitGTK snapshot) are not written, so the tool is not offered there. The selection outline AgentKnife draws over the page shows in screenshots.
 ## Blocked
 - P1-MCP-001 (follow-up) — needs: P1-APP-003 — installers must ship `agentknife-mcp` next to AgentKnife (Tauri `externalBin`); `cargo xtask build` already puts it in target/release.

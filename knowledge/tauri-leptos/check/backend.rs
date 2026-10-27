@@ -122,26 +122,76 @@ fn today() -> String {
 // ---- images-dialogs ----
 use base64::Engine;
 use std::io::Cursor;
+use std::path::Path;
 
-/// A JPEG thumbnail of the picture at `path` (at most `size` pixels wide and high),
-/// as text the screens can put in `<img src=…>`.
-fn thumbnail_url(path: &std::path::Path, size: u32) -> Result<String, String> {
+/// Picture files up to this size are shown as they are (see `picture_url`).
+const AS_IS_MAX: u64 = 8 * 1024 * 1024;
+
+fn data_url(mime: &str, bytes: &[u8]) -> String {
+    let text = base64::engine::general_purpose::STANDARD.encode(bytes);
+    format!("data:{mime};base64,{text}")
+}
+
+/// A small copy of the picture at `path` (at most `size` pixels wide and high),
+/// as text the screens can put in `<img src=…>`: for grids of many pictures.
+/// PNG when it has transparency, else JPEG (much smaller). An animated GIF
+/// becomes its first frame.
+fn thumbnail_url(path: &Path, size: u32) -> Result<String, String> {
     let picture = image::open(path)
         .map_err(|e| format!("Could not open {}: {e}", path.display()))?;
-    // Keeps the proportions. JPEG has no transparency: convert to RGB first.
-    let small = image::DynamicImage::ImageRgb8(picture.thumbnail(size, size).to_rgb8());
+    // Keeps the proportions.
+    let small = picture.thumbnail(size, size);
     let mut bytes = Vec::new();
-    small
-        .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Jpeg)
-        .map_err(|e| e.to_string())?;
-    let text = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    Ok(format!("data:image/jpeg;base64,{text}"))
+    if small.color().has_alpha() {
+        small
+            .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
+            .map_err(|e| e.to_string())?;
+        Ok(data_url("image/png", &bytes))
+    } else {
+        // JPEG has no transparency: convert to RGB first.
+        image::DynamicImage::ImageRgb8(small.to_rgb8())
+            .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Jpeg)
+            .map_err(|e| e.to_string())?;
+        Ok(data_url("image/jpeg", &bytes))
+    }
+}
+
+/// One picture shown large: the file as it is (transparency, animation and
+/// full quality kept; no decoding), or a 2048-pixel copy when it is very big.
+fn picture_url(path: &Path) -> Result<String, String> {
+    let size = std::fs::metadata(path)
+        .map_err(|e| format!("Could not open {}: {e}", path.display()))?
+        .len();
+    if size > AS_IS_MAX {
+        return thumbnail_url(path, 2048);
+    }
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let svg = path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
+    let mime = if svg {
+        "image/svg+xml"
+    } else {
+        image::guess_format(&bytes)
+            .map_err(|e| format!("Not a picture: {e}"))?
+            .to_mime_type()
+    };
+    Ok(data_url(mime, &bytes))
+}
+
+/// Width and height, read from the file's first bytes (nothing is decoded).
+fn picture_size(path: &Path) -> Result<(u32, u32), String> {
+    image::ImageReader::open(path)
+        .and_then(|r| r.with_guessed_format())
+        .map_err(|e| format!("Could not open {}: {e}", path.display()))?
+        .into_dimensions()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn thumbnail(path: String) -> Result<String, String> {
     // Decoding pictures is slow: keep it off the window's thread.
-    tauri::async_runtime::spawn_blocking(move || thumbnail_url(std::path::Path::new(&path), 240))
+    tauri::async_runtime::spawn_blocking(move || thumbnail_url(Path::new(&path), 240))
         .await
         .map_err(|e| e.to_string())?
 }
