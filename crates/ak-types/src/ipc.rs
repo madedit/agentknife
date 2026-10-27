@@ -109,6 +109,10 @@ pub mod cmd {
     /// points at in the preview now, for `get_selection` (also another AI
     /// tool's, which sends no message through the chat).
     pub const SET_SELECTION: &str = "set_selection";
+    /// `Option<`[`PreviewFrame`](crate::preview::PreviewFrame)`>` → `()`: where
+    /// the preview page shows in the window now (`None`: not shown), for
+    /// screenshots.
+    pub const SET_PREVIEW_FRAME: &str = "set_preview_frame";
     /// `()` → `()`: "Clear data and start over": deletes what the app saved in
     /// the preview and starts it again (refused while the AI works).
     pub const CLEAR_PREVIEW_DATA: &str = "clear_preview_data";
@@ -167,6 +171,7 @@ pub mod cmd {
         MCP_STATUS,
         SET_MCP,
         SET_SELECTION,
+        SET_PREVIEW_FRAME,
         CLEAR_PREVIEW_DATA,
         OPEN_TERMINAL,
         OPEN_IN_FILES,

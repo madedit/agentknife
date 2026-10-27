@@ -31,8 +31,19 @@ e.g. `bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100`. ak-ui compone
 already have them.
 
 ## Window sizes
-Apps are resizable: use `sm:` (≥640px), `md:` (≥768px), `lg:` (≥1024px) for wider
-layouts, e.g. `flex flex-col md:flex-row`.
+Apps are resizable, and AgentKnife's preview is often narrower than a desktop
+window: about 700–900 px wide and 500–700 px high (`dom_summary` ends with the size
+now). Make the layout work there:
+- Wider layouts switch on at `sm:` (≥640px) or `md:` (≥768px), e.g.
+  `flex flex-col md:flex-row`. A layout that only appears at `lg:` (≥1024px) or
+  wider is not seen in the preview.
+- A side panel next to the main area: `flex` with `w-64 shrink-0` and
+  `min-w-0 flex-1`, rather than a 12-column grid.
+- App-like screens (toolbars, panels, an editor) fill the window and scroll
+  inside: the outer element `flex h-screen flex-col overflow-hidden`, the part that
+  grows `min-h-0 flex-1 overflow-auto`. Then the page itself never scrolls.
+- A list or a form may instead be one page that scrolls as a whole
+  (`min-h-screen`, as in the starter app).
 
 ## Own colors or fonts
 In `style/input.css`, after `@import "tailwindcss";` (keep the `@source` lines):

@@ -56,6 +56,7 @@ version = "1.0.1"
 dependencies = [
  "ak-agent",
  "ak-bundle",
+ "ak-capture",
  "ak-doctor",
  "ak-mcp",
  "ak-preview",
@@ -63,6 +64,7 @@ dependencies = [
  "ak-providers",
  "ak-types",
  "anyhow",
+ "base64 0.22.1",
  "dirs",
  "futures-util",
  "ignore",
@@ -113,6 +115,15 @@ dependencies = [
  "tokio",
  "tokio-util",
  "zip",
+]
+
+[[package]]
+name = "ak-capture"
+version = "1.0.1"
+dependencies = [
+ "png 0.18.1",
+ "webview2-com",
+ "windows",
 ]
 
 [[package]]

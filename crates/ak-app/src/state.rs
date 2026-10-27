@@ -12,6 +12,7 @@ use ak_project::{Project, Registry};
 use ak_providers::Provider;
 use ak_types::agent::PlanDecision;
 use ak_types::chat::Conversation;
+use ak_types::preview::PreviewFrame;
 use ak_types::settings::AppSettings;
 use tokio::sync::{Mutex, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -92,6 +93,8 @@ pub struct AppState {
     pub provider: Option<Arc<dyn Provider>>,
     /// Other AI tools operating AgentKnife (MCP).
     pub mcp: crate::mcp::McpState,
+    /// Where the preview page shows in the window (screenshots).
+    pub frame: Arc<std::sync::Mutex<Option<PreviewFrame>>>,
 }
 
 impl AppState {
@@ -126,6 +129,7 @@ impl AppState {
             state_dir,
             provider: None,
             mcp: crate::mcp::McpState::default(),
+            frame: Arc::default(),
         })
     }
 }

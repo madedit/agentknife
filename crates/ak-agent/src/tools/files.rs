@@ -187,11 +187,36 @@ impl Tool for EditFile {
                     new = new.replace('\n', "\r\n");
                     count = text.matches(old.as_str()).count();
                 }
+                if count == 0 && !replace_all {
+                    // The same lines, but with other trailing spaces or line ends.
+                    match loose_match(&text, &old) {
+                        Loose::One(range) => {
+                            let mut updated = text.clone();
+                            updated.replace_range(range, &new);
+                            std::fs::write(&path, updated).map_err(|e| {
+                                ToolOutput::error(format!("Cannot write the file: {e}"))
+                            })?;
+                            let shown = display(root, &path);
+                            return Ok(ToolOutput {
+                                touched: vec![shown.clone()],
+                                ..ToolOutput::text(format!(
+                                    "Edited {shown} (1 replacement; the lines matched apart \
+                                     from trailing spaces or line ends)."
+                                ))
+                            });
+                        }
+                        Loose::Many(n) => {
+                            return Err(ToolOutput::error(format!(
+                                "`old_text` appears {n} times (ignoring trailing spaces). \
+                                 Include more surrounding lines so it is unique."
+                            )));
+                        }
+                        Loose::None => {}
+                    }
+                }
                 match count {
                     0 => {
-                        return Err(ToolOutput::error(
-                            "`old_text` was not found. Read the file again and copy the exact text.",
-                        ));
+                        return Err(ToolOutput::error(not_found_hint(&text, &old)));
                     }
                     n if n > 1 && !replace_all => {
                         return Err(ToolOutput::error(format!(
@@ -218,6 +243,86 @@ impl Tool for EditFile {
             run().unwrap_or_else(|e| e)
         })
     }
+}
+
+/// Where `old` is in `text` when lines are compared without their trailing
+/// spaces and line ends (indentation still counts).
+enum Loose {
+    None,
+    /// The byte range to replace.
+    One(std::ops::Range<usize>),
+    Many(usize),
+}
+
+fn loose_match(text: &str, old: &str) -> Loose {
+    let wanted: Vec<&str> = old.lines().map(str::trim_end).collect();
+    if wanted.iter().all(|l| l.is_empty()) {
+        return Loose::None;
+    }
+    // Each line of the file: where it starts, where its text ends (before the
+    // line end), and its text without trailing spaces.
+    let mut lines = Vec::new();
+    let mut at = 0;
+    for raw in text.split_inclusive('\n') {
+        let body = raw.trim_end_matches(['\n', '\r']);
+        lines.push((at, at + body.len(), body.trim_end()));
+        at += raw.len();
+    }
+    let found: Vec<usize> = (0..lines.len().saturating_sub(wanted.len() - 1))
+        .filter(|&i| {
+            lines[i..i + wanted.len()]
+                .iter()
+                .zip(&wanted)
+                .all(|(l, w)| l.2 == *w)
+        })
+        .collect();
+    match found.as_slice() {
+        [] => Loose::None,
+        [i] => {
+            let start = lines[*i].0;
+            let last = lines[i + wanted.len() - 1];
+            // `old_text` ending in a line end replaces that line end too.
+            let end = if old.ends_with('\n') {
+                lines
+                    .get(i + wanted.len())
+                    .map_or(text.len(), |next| next.0)
+            } else {
+                last.1
+            };
+            Loose::One(start..end)
+        }
+        many => Loose::Many(many.len()),
+    }
+}
+
+/// Why `old` was not found, as far as can be seen: where its first line is,
+/// and where the text starts to differ.
+fn not_found_hint(text: &str, old: &str) -> String {
+    const BASE: &str = "`old_text` was not found.";
+    let first = old.lines().map(str::trim).find(|l| !l.is_empty());
+    let Some(first) = first else {
+        return format!("{BASE} Read the file again and copy the exact text.");
+    };
+    let file: Vec<&str> = text.lines().collect();
+    let Some(n) = file.iter().position(|l| l.trim() == first) else {
+        return format!(
+            "{BASE} Not even its first line is in the file. Read the file again and copy \
+             the exact text."
+        );
+    };
+    let wanted: Vec<&str> = old.lines().skip_while(|l| l.trim().is_empty()).collect();
+    let differs = wanted
+        .iter()
+        .zip(&file[n..])
+        .position(|(w, f)| w.trim_end() != f.trim_end())
+        .unwrap_or(wanted.len().min(file.len() - n));
+    format!(
+        "{BASE} Its first line is line {} of the file, but line {} differs from it (check \
+         indentation, and look-alike characters such as − and -, or “ and \"). Read those \
+         lines again and copy them exactly, or replace fewer lines.",
+        n + 1,
+        n + 1 + differs
+    )
 }
 
 pub struct ListFiles;
@@ -398,6 +503,60 @@ mod tests {
             .await;
         assert!(text(&miss).contains("not found"));
         assert_eq!(all.touched, ["a.css"]);
+    }
+
+    #[tokio::test]
+    async fn lines_match_without_trailing_spaces_and_misses_say_where() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = ctx(&dir);
+        let file = dir.path().join("m.rs");
+        // Mixed line ends and trailing spaces, as hand-edited files have.
+        std::fs::write(
+            &file,
+            "fn a() {  \r\n    let x = 1;\n    x\r\n}\r\nfn b() {}\n",
+        )
+        .unwrap();
+        let out = EditFile
+            .call(
+                json!({
+                    "path": "m.rs",
+                    "old_text": "fn a() {\n    let x = 1;\n    x\n}",
+                    "new_text": "fn a() -> i32 {\n    2\n}",
+                }),
+                &c,
+            )
+            .await;
+        assert!(!out.is_error, "{}", text(&out));
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "fn a() -> i32 {\r\n    2\r\n}\r\nfn b() {}\n",
+            "only those lines (with the file's line ends), the rest as it was"
+        );
+
+        // Indentation still counts, and a miss names the line that differs.
+        let miss = EditFile
+            .call(
+                json!({
+                    "path": "m.rs",
+                    "old_text": "fn a() -> i32 {\n    3\n}",
+                    "new_text": "x",
+                }),
+                &c,
+            )
+            .await;
+        assert!(miss.is_error);
+        let hint = text(&miss);
+        assert!(
+            hint.contains("line 1 of the file") && hint.contains("line 2 differs"),
+            "{hint}"
+        );
+        let nowhere = EditFile
+            .call(
+                json!({ "path": "m.rs", "old_text": "fn c() {}", "new_text": "x" }),
+                &c,
+            )
+            .await;
+        assert!(text(&nowhere).contains("Not even its first line"));
     }
 
     #[tokio::test]

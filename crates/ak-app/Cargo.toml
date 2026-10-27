@@ -16,6 +16,7 @@ tauri-build.workspace = true
 [dependencies]
 ak-agent = { path = "../ak-agent" }
 ak-bundle = { path = "../ak-bundle" }
+ak-capture = { path = "../ak-capture" }
 ak-doctor = { path = "../ak-doctor" }
 ak-mcp = { path = "../ak-mcp" }
 ak-preview = { path = "../ak-preview" }
@@ -23,6 +24,7 @@ ak-project = { path = "../ak-project" }
 ak-providers.workspace = true
 ak-types.workspace = true
 anyhow.workspace = true
+base64.workspace = true
 dirs.workspace = true
 futures-util.workspace = true
 ignore.workspace = true

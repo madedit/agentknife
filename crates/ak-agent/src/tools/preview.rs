@@ -8,7 +8,7 @@ use ak_preview::PreviewSession;
 use ak_types::chat::{ContentPart, ToolSpec};
 use ak_types::preview::{
     ControlAction, DomSummary, MAX_HOLD_MS, PAGE_CLOSED, PAGE_RELOADED_STUCK, PAGE_TIMEOUT, Picked,
-    PreviewStatus, ServerState,
+    PreviewStatus, ServerState, Size,
 };
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
@@ -47,9 +47,30 @@ pub trait PreviewAccess: Send + Sync {
     fn backend_crashes(&self) -> Vec<String> {
         Vec::new()
     }
+    /// The page's size in the preview pane now (CSS pixels), where known.
+    fn page_size(&self) -> Option<Size> {
+        None
+    }
+}
+
+/// The preview's size for the model: it is often narrower than a desktop
+/// window, which wide-screen layouts (`lg:`) do not expect.
+pub fn describe_size(size: Option<Size>) -> String {
+    size.map(|s| {
+        format!(
+            "\nPreview size: {:.0}×{:.0} px (the app's window in AgentKnife now; the user's \
+             window may be larger or smaller, so the layout should work at this size too).",
+            s.width, s.height
+        )
+    })
+    .unwrap_or_default()
 }
 
 impl PreviewAccess for PreviewSession {
+    fn page_size(&self) -> Option<Size> {
+        PreviewSession::page_size(self)
+    }
+
     fn status(&self) -> PreviewStatus {
         PreviewSession::status(self)
     }
@@ -271,6 +292,7 @@ impl Tool for DomSummaryTool {
                 Ok(v) => match serde_json::from_value::<DomSummary>(v) {
                     Ok(summary) => ToolOutput::text(
                         cap(&summary.render(), MAX_OUTPUT_CHARS)
+                            + &describe_size(self.0.page_size())
                             + &describe_crashes(&self.0.backend_crashes()),
                     ),
                     Err(e) => ToolOutput::error(format!("Unexpected answer from the page: {e}")),

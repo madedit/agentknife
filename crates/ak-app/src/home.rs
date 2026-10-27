@@ -275,7 +275,10 @@ async fn open<R: Runtime>(
     let preview = Preview::new(&root, profile.preview(), state.tools.clone()).map_err(fail)?;
     let log = preview.log();
     forward_log(app.clone(), log.clone());
-    let session = Arc::new(PreviewSession::new(preview, None));
+    let session = Arc::new(PreviewSession::new(
+        preview,
+        crate::capture::capturer(&app, state),
+    ));
     // A page stuck in a loop cannot reload itself; the preview pane can.
     let reload_app = app.clone();
     session.set_reloader(move || {

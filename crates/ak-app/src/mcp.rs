@@ -395,8 +395,10 @@ fn app_tools() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: CHECKPOINT.into(),
-            description: "Saves the project as a version the user can go back to. Call it \
-                          after each part that works."
+            description: "Marks the project as it is now as a finished part the user can go \
+                          back to (kept for good). Call it after each part that works. \
+                          AgentKnife also saves your changes by itself a minute after the \
+                          last one; this names a working state."
                 .into(),
             input_schema: json!({
                 "type": "object",
@@ -655,7 +657,8 @@ impl<R: Runtime> Host<R> {
             );
         };
         let bench = workbench(&state, &root, profile, preview.clone(), &settings, true);
-        let build = ak_agent::tools::preview::describe_status(&preview.status());
+        let build = ak_agent::tools::preview::describe_status(&preview.status())
+            + &ak_agent::tools::preview::describe_size(preview.page_size());
         ToolOutput::text(format!(
             "Project: {name} ({})\n{build}\nAgentKnife's own AI: {}{}",
             root.display(),
@@ -1059,7 +1062,9 @@ impl<R: Runtime> Host<R> {
             let label = label.clone();
             tokio::task::spawn_blocking(move || {
                 Timeline::open(&root)
-                    .and_then(|mut t| t.checkpoint(CheckpointKind::Turn, &label, None))
+                    // A finished part: recorded even when the changes are
+                    // already in the version made after a quiet minute.
+                    .and_then(|mut t| t.checkpoint(CheckpointKind::Task, &label, None))
             })
             .await
         };
@@ -1070,9 +1075,7 @@ impl<R: Runtime> Host<R> {
                 let _ = self.app.emit(PROJECT_CHANGED_EVENT, ());
                 match entry {
                     Some(e) => ToolOutput::text(format!("Saved version {}: {label}", e.id)),
-                    None => ToolOutput::text(
-                        "Nothing changed since the last version, so no new one was made.",
-                    ),
+                    None => ToolOutput::error("Could not save a version."),
                 }
             }
             Ok(Err(e)) => ToolOutput::error(format!("Could not save a version: {e}")),
@@ -1387,8 +1390,9 @@ impl PreviewAccess for NoPreview {
     fn selection(&self) -> Option<Picked> {
         None
     }
+    /// As the open project's preview will: the tool list is the same then.
     fn can_capture(&self) -> bool {
-        false
+        ak_capture::AVAILABLE
     }
     fn screenshot(&self, _: Option<String>) -> BoxFuture<'_, Result<ContentPart, String>> {
         Box::pin(async { Err("no preview".to_owned()) })

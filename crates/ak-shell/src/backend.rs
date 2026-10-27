@@ -203,6 +203,13 @@ impl Backend {
         self.call(cmd::SET_SELECTION, Some(picked)).await
     }
 
+    pub async fn set_preview_frame(
+        &self,
+        frame: Option<ak_types::preview::PreviewFrame>,
+    ) -> Result<(), CallError> {
+        self.call(cmd::SET_PREVIEW_FRAME, Some(frame)).await
+    }
+
     pub async fn open_in_files(&self, project: Option<&str>) -> Result<(), CallError> {
         self.call(cmd::OPEN_IN_FILES, Some(project)).await
     }

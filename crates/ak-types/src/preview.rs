@@ -234,6 +234,20 @@ pub struct ScreenshotArea {
     pub device_pixel_ratio: f64,
 }
 
+/// Where the preview page shows in AgentKnife's window, for screenshots: the
+/// window captures its own pixels and cuts the page's part out.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PreviewFrame {
+    /// The iframe's box in the window (CSS pixels of the window).
+    pub rect: Rect,
+    /// Window pixels per page pixel: below 1 when a phone or tablet frame is
+    /// scaled down to fit.
+    pub scale: f64,
+    /// The window's width in CSS pixels (the capture's pixels per CSS pixel
+    /// follow from it).
+    pub window_width: f64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CanvasPoint {
     pub x: f64,

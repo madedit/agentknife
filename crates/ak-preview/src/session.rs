@@ -7,7 +7,7 @@ use std::time::Duration;
 use ak_types::log::LogSource;
 use ak_types::preview::{
     AppState, ControlAction, DomSummary, PAGE_CLOSED, PAGE_NOT_OPEN, PAGE_RELOADED_STUCK,
-    PAGE_TIMEOUT, Picked, PreviewStatus, ScreenshotArea, ServerState,
+    PAGE_TIMEOUT, Picked, PreviewStatus, ScreenshotArea, ServerState, Size,
 };
 use futures_util::future::BoxFuture;
 use tokio::sync::watch;
@@ -19,6 +19,9 @@ use crate::control::Controller;
 const ACTION_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long to wait for the page to come back (it reloads after each rebuild).
 const RELOAD_GRACE: Duration = Duration::from_secs(10);
+/// How long a dev server may take to notice changed files and start building:
+/// until then the preview still says "ready", with the old page.
+const PICKUP: Duration = Duration::from_millis(1_500);
 
 /// A captured image of the preview.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +34,11 @@ pub struct Image {
 /// that shows it can (ak-app, with the platform web view's capture).
 pub trait Capturer: Send + Sync {
     fn capture<'a>(&'a self, area: &'a ScreenshotArea) -> BoxFuture<'a, Result<Image, String>>;
+
+    /// The page's size as the window shows it now (CSS pixels), if shown.
+    fn page_size(&self) -> Option<Size> {
+        None
+    }
 }
 
 pub struct PreviewSession {
@@ -42,6 +50,8 @@ pub struct PreviewSession {
     crashes: crate::log::CrashLog,
     /// Loads the page again in whoever shows it (the app's preview pane).
     reloader: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    /// When files last changed, until `settled` has seen the build it starts.
+    changed_at: Mutex<Option<tokio::time::Instant>>,
 }
 
 /// How often the backend code on disk is checked.
@@ -61,6 +71,7 @@ impl PreviewSession {
             preview: tokio::sync::Mutex::new(preview),
             selection: Mutex::new(None),
             capturer,
+            changed_at: Mutex::new(None),
         }
     }
 
@@ -150,9 +161,27 @@ impl PreviewSession {
     }
 
     /// Waits until nothing is building (or `timeout`), then returns the state.
+    /// Right after files changed, first waits for the build they start (at
+    /// most [`PICKUP`]): a screenshot then shows the new page, not the old.
     pub async fn settled(&self, timeout: Duration) -> PreviewStatus {
         let mut rx = self.status.clone();
+        let changed = self.changed_at.lock().ok().and_then(|mut c| c.take());
         let wait = async {
+            if let Some(at) = changed {
+                let deadline = at + PICKUP;
+                loop {
+                    {
+                        let s = rx.borrow_and_update();
+                        if busy(&s.frontend) || busy(&s.backend) {
+                            break;
+                        }
+                    }
+                    match tokio::time::timeout_at(deadline, rx.changed()).await {
+                        Ok(Ok(())) => {}
+                        _ => break,
+                    }
+                }
+            }
             loop {
                 {
                     let s = rx.borrow_and_update();
@@ -171,6 +200,9 @@ impl PreviewSession {
 
     /// See `Preview::files_changed`.
     pub async fn files_changed(&self, paths: &[String]) -> std::io::Result<bool> {
+        if let Ok(mut c) = self.changed_at.lock() {
+            *c = Some(tokio::time::Instant::now());
+        }
         self.preview.lock().await.files_changed(paths).await
     }
 
@@ -226,6 +258,11 @@ impl PreviewSession {
 
     pub fn can_capture(&self) -> bool {
         self.capturer.is_some()
+    }
+
+    /// The page's size in the preview pane now (CSS pixels), where known.
+    pub fn page_size(&self) -> Option<Size> {
+        self.capturer.as_ref().and_then(|c| c.page_size())
     }
 
     /// Scrolls `ak_id` (or nothing) into view, lets the page paint, captures.

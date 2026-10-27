@@ -325,9 +325,11 @@ fn the_workflow_tools_make_save_restore_and_ask_first() {
             "{}",
             text(&saved)
         );
-        let again = tool(&peer, "checkpoint", json!({})).await;
+        // Also when nothing changed since (the changes may already be in the
+        // version AgentKnife made by itself): a finished part is marked.
+        let again = tool(&peer, "checkpoint", json!({ "name": "確認可用" })).await;
         assert!(
-            text(&again).starts_with("Nothing changed"),
+            text(&again).starts_with("Saved version"),
             "{}",
             text(&again)
         );
@@ -337,6 +339,7 @@ fn the_workflow_tools_make_save_restore_and_ask_first() {
             versions.contains("Claude Code") && versions.contains("第一版"),
             "{versions}"
         );
+        assert_eq!(versions.matches("| task |").count(), 2, "{versions}");
         let initial = versions
             .lines()
             .find(|l| l.contains("| initial |"))

@@ -10,7 +10,7 @@ use ak_preview::process::{kill_tree, read_lines};
 use ak_project::{CheckpointKind, Timeline};
 use ak_types::ipc::{FileEntry, FileText, MarkVersion, SaveFile, TimelineRow};
 use ak_types::log::{LogLine, LogSource};
-use ak_types::preview::{Picked, PreviewStatus};
+use ak_types::preview::{Picked, PreviewFrame, PreviewStatus};
 use ak_types::stack::{CommandSpec, Tool};
 use tauri::State;
 use tokio::sync::mpsc;
@@ -188,6 +188,15 @@ pub async fn mark_version(state: State<'_, AppState>, request: MarkVersion) -> R
 pub async fn set_selection(state: State<'_, AppState>, request: Option<Picked>) -> Res<()> {
     if let Some(o) = state.inner.lock().await.open.as_ref() {
         o.preview.set_selection(request);
+    }
+    Ok(())
+}
+
+/// Where the preview page shows in the window now, for screenshots.
+#[tauri::command]
+pub fn set_preview_frame(state: State<'_, AppState>, request: Option<PreviewFrame>) -> Res<()> {
+    if let Ok(mut f) = state.frame.lock() {
+        *f = request;
     }
     Ok(())
 }

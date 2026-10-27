@@ -473,7 +473,7 @@ fn CoverView(chat: Chat) -> impl IntoView {
 mod browser {
     //! Talking to the page (postMessage) and measuring the stage.
 
-    use ak_types::preview::{InspectorCommand, InspectorEvent};
+    use ak_types::preview::{InspectorCommand, InspectorEvent, PreviewFrame, Rect};
     use leptos::prelude::*;
     use wasm_bindgen::JsCast;
     use wasm_bindgen::closure::Closure;
@@ -493,6 +493,8 @@ mod browser {
         // The pane goes away when the code tab shows, but window listeners and the
         // size observer outlive it: everything below uses `try_` and stops quietly
         // once the pane's signals are gone (and the listeners are removed then).
+        let reporter = StoredValue::new(backend.clone());
+        let gone = backend.clone();
         let post = move |cmd: InspectorCommand| {
             let (Some(Some(iframe)), Some(origin)) =
                 (frame.try_get_untracked(), url().and_then(|u| origin_of(&u)))
@@ -546,11 +548,49 @@ mod browser {
                 preview.picking.set(false);
             }
         });
+        // Where the page shows, for screenshots: AgentKnife captures its own
+        // window and cuts this part out. Measured after layout, whenever the
+        // frame comes or goes, the stage resizes or the window does.
+        let report = move || {
+            let Some(backend) = reporter.try_get_value() else {
+                return;
+            };
+            let shown = frame.try_get_untracked().flatten().and_then(|f| {
+                let el: &web_sys::Element = f.unchecked_ref();
+                let r = el.get_bounding_client_rect();
+                let laid_out = f64::from(el.client_width());
+                let window_width = web_sys::window()?.inner_width().ok()?.as_f64()?;
+                (r.width() > 0.0 && r.height() > 0.0 && laid_out > 0.0).then(|| PreviewFrame {
+                    rect: Rect {
+                        x: r.left(),
+                        y: r.top(),
+                        width: r.width(),
+                        height: r.height(),
+                    },
+                    scale: r.width() / laid_out,
+                    window_width,
+                })
+            });
+            leptos::task::spawn_local(async move {
+                let _ = backend.set_preview_frame(shown).await;
+            });
+        };
+        Effect::new(move |_| {
+            frame.track();
+            stage_size.track();
+            request_animation_frame(report);
+        });
+        let resized = window_event_listener(leptos::ev::resize, move |_| report());
         on_cleanup(move || {
             messages.remove();
             keys.remove();
+            resized.remove();
             // Leaving the preview ends point-and-select.
             preview.picking.set(false);
+            // Nothing to photograph while another tab shows.
+            leptos::task::spawn_local(async move {
+                let _ = gone.set_preview_frame(None).await;
+            });
         });
         // The stage's size, for scaling device frames (it changes with the panes).
         Effect::new(move |_| {

@@ -37,7 +37,9 @@ building needs.
 - The user can point at an element in the preview. When they say \"this\", \"here\" \
 or similar, call `get_selection` to see what they picked.
 - After changing files, call `build_status`; check the screen with `dom_summary`, \
-`interact` and `screenshot_preview`.
+`interact` and `screenshot_preview` (they wait for the build first). The preview is \
+often only 700–900 px wide (`dom_summary` gives the size): make layouts work there, \
+not only at `lg:` and wider.
 - `checkpoint` after each working part; `restore` goes back (the user confirms). \
 `run_app` opens the app in a real window, `package_app` makes the file to share.
 - Text the user sees in the app is in the user's language. Give each call a short \

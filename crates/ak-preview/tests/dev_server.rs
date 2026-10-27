@@ -293,6 +293,45 @@ async fn a_dying_dev_server_is_an_error_and_drop_stops_everything() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn settling_right_after_a_change_waits_for_its_build() {
+    let s = Setup::new("ok", "ok");
+    let trigger = s.dir.path().join("trigger");
+    let session = Arc::new(PreviewSession::new(s.preview, None));
+    let mut rx = session.subscribe();
+    session.start().await.unwrap();
+    wait(&mut rx, "ready", PreviewStatus::ready).await;
+    let long = Duration::from_secs(30);
+
+    // Nothing changed: at once.
+    let t = std::time::Instant::now();
+    session.settled(long).await;
+    assert!(
+        t.elapsed() < Duration::from_millis(500),
+        "{:?}",
+        t.elapsed()
+    );
+
+    // The dev server notices the change a moment later: until then the
+    // preview still says ready, with the old page.
+    session
+        .files_changed(&["src/main.rs".into()])
+        .await
+        .unwrap();
+    let t = std::time::Instant::now();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        std::fs::write(trigger, "ok again").unwrap();
+    });
+    assert!(session.settled(long).await.ready());
+    let took = t.elapsed();
+    assert!(
+        took >= Duration::from_millis(400) && took < Duration::from_millis(1_400),
+        "waited for that build, not for the time limit: {took:?}"
+    );
+    session.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn the_libraries_download_once_before_both_start() {
     for outcome in ["ok", "fail"] {
         let s = Setup::with_env(

@@ -1,9 +1,19 @@
 # STATUS
 
 ## Doing
+- P1-APP-001 (follow-up) — coordinator — started 2026-10-27
+  Notes: preview screenshots (`screenshot_preview`) for AgentKnife's AI and other AI tools. Owner: the platform web view's capture (option A), with `unsafe` allowed in one crate.
+  - New crate `ak-capture` (`#![deny(unsafe_code)]`, only `webview2` allows it): WebView2 `CapturePreview` into an in-memory stream (PNG), and `crop` (png crate, safe). Dependencies were already in the lockfile through Tauri (webview2-com, windows, png, base64).
+  - ak-app `capture::capturer` → `PreviewSession`: captures the main window's web view on its thread (`with_webview`), cuts out the iframe from the frame the shell reports (`set_preview_frame`: box, scale of phone/tablet frames, window width). `None` (another tab, pane gone) → the tool says the preview is not on screen.
+  - MCP lists `screenshot_preview` wherever the platform can capture (the listing's stand-in preview says so too).
+  - Live (owner, Antigravity): screenshots work. Its report on the session, and what changed:
+    - The preview's size was nowhere (a 3-panel layout at `lg:` stacked into one tall column at ~790 px): `dom_summary` and MCP `status` now end with the preview size (`Capturer::page_size` from the reported frame); the knowledge pack's "Window sizes" (pack 0.2.18) says the preview is often 700–900 px wide, to switch layouts at `sm:`/`md:`, side panels with `shrink-0`/`min-w-0 flex-1`, and app-like screens `h-screen overflow-hidden` with an inner `min-h-0 flex-1 overflow-auto`. Not done: `overflow: hidden` on the template's body (it would cut off apps that scroll as a page).
+    - `edit_file` failed on longer blocks: after the exact (and CRLF) match it now compares line by line without trailing spaces and line ends (one match only; indentation still counts), and a miss says which file line the first line matches and where it starts to differ, naming look-alikes (− and -).
+    - `checkpoint` answered "Nothing changed" because the quiet-minute version already held the changes: it is now a `Task` entry, recorded every time (kept by GC); its description says AgentKnife also saves by itself.
+    - Screenshots could show the old page: right after `files_changed`, the dev server says "ready" until it notices the change. `PreviewSession::settled` now first waits (at most 1.5 s) for the build that change starts; every preview tool and the turn's build check go through it.
+  - Left: the live check on Windows; macOS (WKWebView `takeSnapshot`) and Linux (WebKitGTK snapshot) are not written, so the tool is not offered there. The selection outline AgentKnife draws over the page shows in screenshots.
 ## Blocked
 - P1-MCP-001 (follow-up) — needs: P1-APP-003 — installers must ship `agentknife-mcp` next to AgentKnife (Tauri `externalBin`); `cargo xtask build` already puts it in target/release.
-- P1-APP-001 (follow-up) — needs: decision — the real preview screenshot (Capturer: WebView2 CapturePreview / CDP with clip, WKWebView takeSnapshot, webkit) is not wired: screenshot_preview stays off and the agent reads the DOM summary.
 - P1-APP-001 (follow-up) — needs: decision — no template-update mechanism yet: existing projects keep their config files (e.g. the old Trunk.toml watch list from PREV-002) and their ak/ kit copy.
 - P1-APP-001 (follow-up) — needs: decision — in the live run the AI edited the vendored kit (ak/ak-ui) to add a class prop; a kit update would overwrite that. Either protect ak/ in the policy and add the prop to ak-ui, or let projects own their copy.
 - P1-SHELL-003 (follow-up) — needs: nothing urgent — replies are plain text (Markdown such as **bold** shows as is); steps with thinking but no words show as small "thinking" bubbles.
@@ -608,7 +618,7 @@
   - Owner: Settings had "Other AI tools" and the wizard "Use an AI tool you already have", the same thing in two places. The Settings section is gone; the on/off switch and who is connected are now in the wizard's group (Settings → Change AI reaches it).
   - Owner: Gemini CLI is retired; its place in the wizard is Antigravity (`agy mcp add agentknife "<shim>"`). agy 1.3.5 has no scope flag and writes the global ~/.gemini/config/mcp_config.json (the workspace file .agents/mcp_config.json is reported not to load: google-antigravity/antigravity-cli#60), so it gets the same "every folder" note as Codex. Its client name is unverified ("antigravity…"/"agy…" map to "Antigravity").
   - Closed 2026-10-27 (owner): Antigravity verified live, its client name included. Codex is unverified (not installed here) and waits for user reports.
-- P1-CORE-003 — (hash in next commit) — GitHub Actions CI: `cargo xtask ci` and `cargo xtask e2e` on windows-latest, macos-latest and ubuntu-latest for every push and PR.
+- P1-CORE-003 — 6c76d18 — GitHub Actions CI: `cargo xtask ci` and `cargo xtask e2e` on windows-latest, macos-latest and ubuntu-latest for every push and PR.
   - The first runs on GitHub (v1.0.0, main, v1.0.1) failed on every job but e2e on Windows:
   - Windows ci: `an_allowed_tool_gets_agentknifes_tools` raced: a call right after turning MCP off could still be answered before the connection closed. The handler now refuses every request once the server stops.
   - macOS ci: tests with cmd syntax (`dir /b`, `del /q`, `rd /s`, `findstr /n`, `..\..\`, `\\server\share`) ran on Unix, where `/x` is a path and `\` part of a file name; they now run on Windows only (`grep -n` stands in for findstr).
@@ -621,7 +631,7 @@
     - ak-doctor install test (macOS, Linux): `cargo.exe` was hard-coded; it now uses the toolchain's name for the OS.
   - `cargo xtask ci` runs the workspace tests with `--no-fail-fast`, so one run shows every failing crate.
   - Third run (3b2521b): all six jobs pass (ci 5–8 min, e2e 10–12 min per OS), so the first-use story, packaging included, now runs on macOS and Linux too. Left: actions/cache@v4.2.3 is flagged for Node.js 20.
-- P1-MCP-002 — (hash in next commit) — full workflow over MCP: tools to make, check, run, package, save and restore; resources; the `build_app` prompt.
+- P1-MCP-002 — 6c76d18 — full workflow over MCP: tools to make, check, run, package, save and restore; resources; the `build_app` prompt.
   - Tools (ak-app `mcp`), each a step in the chat like the project tools: `new_project` (no greeting, `home::create_project_quietly`), `check_tools`, `run_app`, `package_app`, `checkpoint`, `list_versions`, `restore`, `get_log`. `list_versions` is new (not in the plan): `restore` needs the ids.
   - Confirmations use the chat's cards (`NeedsConfirmation`, answered with `answer_confirmation`): installing AgentKnife's own tools is a `Download` card naming them; going back is a `Delete` card naming the version. System parts (C++ Build Tools, WebView2, Xcode, Linux packages) are not installed over MCP: the result gives the window's guide steps for the AI to explain.
   - Refused while AgentKnife's own AI works: new_project, run_app, package_app, checkpoint, restore. `restore` counts as a change (`mcp::busy`); `checkpoint` and `restore` drop the tool's pending burst version.

@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod capture;
 pub mod connect;
 pub mod crash;
 pub mod home;
@@ -85,6 +86,7 @@ const COMMANDS: &[&str] = &[
     "mcp_status",
     "set_mcp",
     "set_selection",
+    "set_preview_frame",
     "clear_preview_data",
     "open_terminal",
     "open_in_files",
@@ -135,6 +137,7 @@ pub fn with_commands<R: Runtime>(builder: Builder<R>, state: state::AppState) ->
             mcp::mcp_status,
             mcp::set_mcp,
             workspace::set_selection,
+            workspace::set_preview_frame,
             workspace::clear_preview_data,
             mcp::open_terminal,
             home::open_in_files,

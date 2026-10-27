@@ -92,6 +92,7 @@ crates/
   ak-project/    Projects, .agentknife/ files, git checkpoints + GC, chat history.
   ak-preview/    Trunk dev-server management, bridge host, inspector protocol, screenshots.
   ak-bundle/     Host-platform bundling + install instructions.
+  ak-capture/    Pixels of AgentKnife's own web view (preview screenshots): the platform calls, the only `unsafe` outside ak-shell's interop.
   ak-mcp/        MCP server for other agent CLIs (Claude Code, Codex, …) and their stdio shim `agentknife-mcp`.
   ak-ui/         Component kit used by generated apps (Leptos + Tailwind).
   ak-ui-gallery/ Every ak-ui component on one page (trunk serve; dev only).
@@ -293,6 +294,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Tools (`ak_agent::tools::preview`, added with `with_preview_tools(registry, preview, vision)`):
     - `build_status`, `dom_summary`, `interact` (click — real pointer/mouse down and up, then click; hold for `ms`; key on the focused element; type; read_state, optionally after `wait_ms` and as `samples` over time — by data-ak-id; a page reload mid-action gets an error that says to check with dom_summary and retry, never a silent retry) and `get_selection`.
     - `screenshot_preview`, only with vision and a `Capturer` (ak-app supplies the capture).
+      - ak-app's `capture::capturer` photographs AgentKnife's own web view (`ak_capture`: WebView2 `CapturePreview` on Windows; none yet on macOS/Linux, so the tool is not offered there) and cuts out the preview iframe. The shell reports where the iframe shows (`set_preview_frame`: its box in window CSS pixels, its scale in phone/tablet frames, the window's width), measured after layout and on resize; `None` when the preview pane is gone, and the tool then says the preview is not on screen.
     - All go through the `PreviewAccess` trait (implemented by `ak_preview::PreviewSession`), and the policy allows them.
   - `Agent::with_preview`:
     - After a step that touched files, it calls `files_changed`.
@@ -364,8 +366,9 @@ plan/            STATUS.md and execution-plan.md (format in §8).
 
 - Rust edition 2024.
 - **unsafe:**
-  - Every crate has `#![forbid(unsafe_code)]`, except `ak-shell`.
+  - Every crate has `#![forbid(unsafe_code)]`, except `ak-shell` and `ak-capture`.
   - `ak-shell` uses `#![deny(unsafe_code)]`. Only its `interop` module (wasm-bindgen / CodeMirror glue) may use `#[allow(unsafe_code)]`.
+  - `ak-capture` uses `#![deny(unsafe_code)]` (owner, 2026-10-27). Only its platform modules (`webview2`: COM calls) may use `#[allow(unsafe_code)]`; cropping and everything else is safe code.
   - Every `unsafe` block needs a `// SAFETY:` comment.
 - **unwrap/expect:**
   - `unwrap()` is banned outside tests.
