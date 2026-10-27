@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.19"
+version = "0.2.20"
 
 [versions]
 tauri = "2.12.4"

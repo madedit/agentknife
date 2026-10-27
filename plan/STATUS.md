@@ -16,6 +16,10 @@
     - troubleshooting: `\\?\` paths from `canonicalize` on Windows (use `std::path::absolute` or strip it); the FnOnce entry names handlers inside `<Show>` (the StoredValue fix was already in leptos-components).
     - tailwind: `shrink-0 whitespace-nowrap` for toolbar titles and buttons, `whitespace-nowrap`/`truncate` in table cells.
     - The library note (system prompt, MCP `status`) says a crate's features are in its Cargo.toml there; MCP INSTRUCTIONS say `list_files`/`search_files` skip `target/` and `.git` while a shell listing does not.
+  - Third report (owner, Antigravity, a 3D flying game), knowledge pack 0.2.20, topic three-d:
+    - Several values from JS to Rust: an example of one JSON string parsed with `serde_json` (`Closure<dyn FnMut(String)>`), and that `serde_wasm_bindgen` is not in the project (the report said it cannot be had; it only was not added).
+    - No model loaders, said plainly at the top; a plane built from geometries in a `Group` (nose toward -Z, the propeller turning, `lookAt` + `rotateY(PI)`); which way Torus/Ring/Plane face and `setFromUnitVectors` to turn a ring onto a path; a HUD overlay with `pointer-events-none` and `-auto` on its clickable parts; sound with the Web Audio API, started on the first input.
+    - MCP INSTRUCTIONS: AgentKnife's tool paths and `run_command` are the project's, while a client's own shell may start in the projects folder (the report blamed `run_command`, which runs in the project).
   - Left: the live check on Windows; macOS (WKWebView `takeSnapshot`) and Linux (WebKitGTK snapshot) are not written, so the tool is not offered there. The selection outline AgentKnife draws over the page shows in screenshots.
 ## Blocked
 - P1-MCP-001 (follow-up) — needs: P1-APP-003 — installers must ship `agentknife-mcp` next to AgentKnife (Tauri `externalBin`); `cargo xtask build` already puts it in target/release.
@@ -635,7 +639,7 @@
     - ak-preview dev_server tests (Windows and macOS): the fake tool's log line and its newline were two writes, and the frontend and backend processes append to the same file, so lines got joined (`…49227serve port…`). It now writes each line in one call.
     - ak-doctor install test (macOS, Linux): `cargo.exe` was hard-coded; it now uses the toolchain's name for the OS.
   - `cargo xtask ci` runs the workspace tests with `--no-fail-fast`, so one run shows every failing crate.
-  - Third run (3b2521b): all six jobs pass (ci 5–8 min, e2e 10–12 min per OS), so the first-use story, packaging included, now runs on macOS and Linux too. Left: actions/cache@v4.2.3 is flagged for Node.js 20.
+  - Third run (3b2521b): all six jobs pass (ci 5–8 min, e2e 10–12 min per OS), so the first-use story, packaging included, now runs on macOS and Linux too. actions/cache@v4.2.3 was flagged for Node.js 20: now v5.1.0 (Node 24, same inputs).
 - P1-MCP-002 — 6c76d18 — full workflow over MCP: tools to make, check, run, package, save and restore; resources; the `build_app` prompt.
   - Tools (ak-app `mcp`), each a step in the chat like the project tools: `new_project` (no greeting, `home::create_project_quietly`), `check_tools`, `run_app`, `package_app`, `checkpoint`, `list_versions`, `restore`, `get_log`. `list_versions` is new (not in the plan): `restore` needs the ids.
   - Confirmations use the chat's cards (`NeedsConfirmation`, answered with `answer_confirmation`): installing AgentKnife's own tools is a `Download` card naming them; going back is a `Delete` card naming the version. System parts (C++ Build Tools, WebView2, Xcode, Linux packages) are not installed over MCP: the result gives the window's guide steps for the AI to explain.

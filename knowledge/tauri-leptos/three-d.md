@@ -10,7 +10,10 @@ work here. The Rust side is ordinary Leptos: read topics `leptos-components` and
 Call `add_library` with `"three"`. It copies into `vendor/three/`:
 `three.module.js`, `three.core.js` (three.js itself),
 `addons/controls/OrbitControls.js` (drag to turn the view) and `LICENSE` (keep it).
-Other three.js addons (model loaders, effects) are not available.
+Other three.js addons are not available: **no model loaders** (`GLTFLoader`,
+`OBJLoader`, `FBXLoader`), so `.glb`/`.gltf`/`.obj`/`.fbx` files cannot be used,
+and no effects. Build every vehicle, building and prop from three.js geometries
+grouped with `THREE.Group` ("Shapes and looks" below).
 
 ## 2. index.html
 Add the import map and the `copy-dir` link right after `<title>`, before the
@@ -315,8 +318,28 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
   let game = Game::new(&el, &on_score, &on_over);
   running.set_value(Some(Running { game, _on_score: on_score, _on_over: on_over }));
   ```
-  Numbers, strings and bools cross directly; for more, pass a JSON string and parse
-  it with `serde_json` in Rust.
+  Numbers, strings and bools cross directly. **For several values at once**
+  (speed, height, heading), JS sends one JSON string and Rust parses it with
+  `serde_json` (already in Cargo.toml above). Not `JsValue` with
+  `serde_wasm_bindgen`: that crate is not in the project.
+  ```js
+  // In frame(), a few times a second (not every frame):
+  this.onTelemetry(JSON.stringify({ speed: Math.round(this.speed), altitude: Math.round(this.pos.y) }));
+  ```
+  ```rust
+  #[derive(serde::Deserialize)]
+  struct Telemetry {
+      speed: u32,
+      altitude: u32,
+  }
+  // Declared as `on_telemetry: &Closure<dyn FnMut(String)>` in the extern block.
+  let on_telemetry = Closure::new(move |json: String| {
+      if let Ok(t) = serde_json::from_str::<Telemetry>(&json) {
+          speed.set(t.speed);
+          altitude.set(t.altitude);
+      }
+  });
+  ```
 - **Rust to the game**: add a method (`set_level(n)`, `pause()`), declare it in the
   `extern "C"` block, call it through `game.with_value`.
 - **Keyboard**: `window.addEventListener("keydown", this.onKey)` in the constructor,
@@ -363,9 +386,64 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
 - **Shapes and looks**: build from three.js geometries (`BoxGeometry`,
   `SphereGeometry`, `CylinderGeometry`, `PlaneGeometry`, `TorusGeometry`) and
   `MeshStandardMaterial({ color, roughness, metalness })`. Group parts with
-  `THREE.Group`. Images for textures go in a folder copied like `vendor`
+  `THREE.Group`; parts that move (a propeller, a wheel) are kept to turn them in
+  `frame()`. Build a vehicle with its nose toward -Z, the way a camera looks, and
+  move it along its own -Z (`translateZ(-d)`). `lookAt` points an object's +Z at
+  the target (only cameras turn their -Z), so after `plane.lookAt(p)` add
+  `plane.rotateY(Math.PI)`:
+  ```js
+  const plane = new THREE.Group();
+  plane.name = "plane";
+  const paint = new THREE.MeshStandardMaterial({ color: 0xef4444 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.2, 3, 12), paint);
+  body.rotation.x = Math.PI / 2; // cylinders stand on Y: lay it along Z
+  const wings = new THREE.Mesh(new THREE.BoxGeometry(4, 0.08, 0.8), paint);
+  this.propeller = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.1, 0.05), paint);
+  this.propeller.position.z = -1.55; // the nose is at -Z
+  plane.add(body, wings, this.propeller);
+  // In frame(): this.propeller.rotation.z += dt * 30;
+  //             plane.translateZ(-speed * dt);
+  ```
+  Images for textures go in a folder copied like `vendor`
   (`<link data-trunk rel="copy-dir" href="assets" />`), loaded with
   `new THREE.TextureLoader().load("./assets/wood.png")`.
+- **Which way a shape faces**: `TorusGeometry`, `RingGeometry`, `CircleGeometry`
+  and `PlaneGeometry` lie in the XY plane, facing +Z (a plane is a wall, not a
+  floor: `rotation.x = -Math.PI / 2` lays it down). To turn a ring so a path
+  goes through its hole, from waypoint `a` to `b`:
+  `ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), b.clone().sub(a).normalize())`.
+- **A HUD over the canvas** (gauges, score, buttons): the overlay lets the mouse
+  through, and only the parts you click take it back. Otherwise an invisible
+  overlay swallows every drag meant for the 3D view:
+  ```html
+  <main class="relative h-screen overflow-hidden">
+    <canvas class="absolute inset-0 block h-full w-full touch-none"></canvas>
+    <div class="pointer-events-none absolute inset-0 flex flex-col justify-between p-4">
+      <header class="pointer-events-auto flex justify-between">…</header>
+      <footer class="pointer-events-auto flex gap-2">…</footer>
+    </div>
+  </main>
+  ```
+- **Sound**: no sound files are needed: make sounds with the Web Audio API in
+  `game.js`. Browsers keep sound off until the user presses a key or clicks, so
+  create the `AudioContext` on the first input, not in the constructor:
+  ```js
+  // In the keydown / pointerdown handler: this.audio ??= new AudioContext();
+  beep(freq, seconds, type = "sine") {
+    if (!this.audio) return;
+    const t = this.audio.currentTime;
+    const osc = new OscillatorNode(this.audio, { type, frequency: freq });
+    const gain = new GainNode(this.audio);
+    gain.gain.setValueAtTime(0.2, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + seconds); // fade out, no click
+    osc.connect(gain).connect(this.audio.destination);
+    osc.start(t);
+    osc.stop(t + seconds);
+  }
+  // A point: this.beep(880, 0.15); a crash: this.beep(80, 0.5, "sawtooth");
+  ```
+  A steady sound (an engine): one `OscillatorNode` started once, whose
+  `frequency` follows the speed; stop it and `this.audio.close()` in `dispose()`.
 - **Speed**: reuse geometries and materials for many copies (or `InstancedMesh`);
   never create objects inside `frame()`; `dispose()` what you remove from the scene.
 - **Tuning**: put the numbers that set the difficulty at the top of `game.js` as
