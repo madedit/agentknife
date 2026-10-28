@@ -3,8 +3,9 @@
 //! - reading the reference folders (library sources, folders the user allowed) too,
 //!   with the read tools or with commands that only read;
 //! - downloads/installs, anything outside the project, and deletions ask the user;
-//! - path escapes, edits to `.git`, and commands that could damage the computer are
-//!   refused.
+//! - path escapes, edits to `.git`, `.agentknife/` state and `ak/` (with the file
+//!   tools or a command that names them), and commands that could damage the
+//!   computer are refused.
 //!
 //! Command classification is a heuristic over a quote-aware split of the command
 //! line; it errs towards asking. The file tools enforce the project sandbox again on
@@ -120,10 +121,12 @@ impl PermissionGate for ProjectPolicy {
     }
 }
 
-/// AgentKnife's own state: the user's `.git` and the `.agentknife/` internals (the
-/// agent may still edit `.agentknife/PROJECT.md` and `plan/`).
+/// AgentKnife's own state: the user's `.git`, the `.agentknife/` internals (the
+/// agent may still edit `.agentknife/PROJECT.md` and `plan/`), and the `ak/` kit
+/// (ak-bridge, ak-ui), which AgentKnife updates.
 const PROTECTED: &[&str] = &[
     ".git",
+    "ak",
     ".agentknife/checkpoints.git",
     ".agentknife/timeline.json",
     ".agentknife/chat",
@@ -257,6 +260,14 @@ fn classify_segment(tokens: &[String], root: &Path, refs: &[PathBuf], depth: u8)
         && outside_paths(tokens, root)
             .iter()
             .all(|(_, p)| refs.iter().any(|r| within(r, Path::new(p))));
+    // A command that names a protected path writes there unless it only reads
+    // (shells and `sudo` are looked into below instead).
+    if !SHELLS.contains(&word.as_str())
+        && !ELEVATORS.contains(&word.as_str())
+        && let Some(t) = protected_target(&word, tokens, root)
+    {
+        return deny(ConfirmKind::ProtectedPath, t);
+    }
     let mut decision = match paths_outside(tokens, root) {
         Some(p) if !reads_references => ask(ConfirmKind::OutsideProject, p),
         _ => Decision::Allow,
@@ -322,6 +333,49 @@ fn classify_segment(tokens: &[String], root: &Path, refs: &[PathBuf], depth: u8)
         decision = stricter(decision, ask(ConfirmKind::Download, &full));
     }
     decision
+}
+
+/// The first token of a command that may write a [`PROTECTED`] path: any token
+/// naming one, or for [`READERS`] only where their output is redirected.
+fn protected_target(word: &str, tokens: &[String], root: &Path) -> Option<String> {
+    let reader = READERS.contains(&word);
+    tokens
+        .iter()
+        .enumerate()
+        .find(|(i, t)| {
+            // An inline script's first token may be the write (`$p='ak/…'`).
+            let after_redirect = i
+                .checked_sub(1)
+                .and_then(|j| tokens.get(j))
+                .is_some_and(|prev| is_redirect(prev) && prev.ends_with('>'));
+            let written = !reader || is_redirect(t) || after_redirect;
+            written && names_protected(t, root)
+        })
+        .map(|(_, t)| t.clone())
+}
+
+/// Whether a token names one of [`PROTECTED`]: `ak/ak-ui/src/x.rs`,
+/// `ak\ak-ui`, `.git/config`, `$p=ak/…`, `>ak/x`, or the same under the
+/// project's absolute path. `.gitignore` and `akira/` are not.
+fn names_protected(token: &str, root: &Path) -> bool {
+    let root = root
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let root = root.trim_start_matches("//?/").trim_end_matches('/');
+    let t = token.replace('\\', "/").to_ascii_lowercase();
+    t.split(['=', '\'', '"', '(', ')', ',', '`', '>', '<'])
+        .map(|p| {
+            let p = p
+                .strip_prefix(root)
+                .map_or(p, |r| r.trim_start_matches('/'));
+            p.trim_start_matches("./")
+        })
+        .any(|p| {
+            PROTECTED
+                .iter()
+                .any(|prot| p == *prot || p.strip_prefix(prot).is_some_and(|r| r.starts_with('/')))
+        })
 }
 
 fn is_env_assignment(t: &str) -> bool {
@@ -524,6 +578,42 @@ mod tests {
     }
 
     #[test]
+    fn commands_cannot_write_protected_paths() {
+        let project = tempfile::tempdir().unwrap();
+        let root = project.path();
+        let check = |c: &str| kind(&classify_command(c, root));
+        // What an AI ran after edit_file was refused (2026-10-28).
+        let script = r#"powershell -NoProfile -Command "$p='ak/ak-ui/src/button.rs'; $c=[IO.File]::ReadAllText($p); $c=$c -replace 'rounded-lg','rounded-full'; [IO.File]::WriteAllText($p,$c)" && findstr /n /c:"rounded-" ak\ak-ui\src\button.rs"#;
+        assert_eq!(check(script), "deny:ProtectedPath");
+        for c in [
+            r"copy src\button.rs ak\ak-ui\src\button.rs",
+            "sed -i s/lg/full/ ./ak/ak-ui/src/button.rs",
+            "echo x > ak/ak-ui/src/lib.rs",
+            "type src\\a.rs >> .git\\config",
+            "cd ak",
+            "del .agentknife\\timeline.json",
+        ] {
+            assert_eq!(check(c), "deny:ProtectedPath", "{c}");
+        }
+        let absolute = format!(
+            "echo x > {}",
+            root.join("ak").join("ak-ui").join("x.rs").display()
+        );
+        assert_eq!(check(&absolute), "deny:ProtectedPath");
+        // Reading them, and names that only look alike, are fine.
+        for c in [
+            r#"findstr /n /c:"rounded-" ak\ak-ui\src\button.rs"#,
+            "type ak\\ak-ui\\src\\list.rs > notes.txt",
+            "echo target/ >> .gitignore",
+            "copy notes.md akira\\notes.md",
+            "cargo build --features dev",
+            "git status",
+        ] {
+            assert_eq!(check(c), "allow", "{c}");
+        }
+    }
+
+    #[test]
     fn splitting() {
         assert_eq!(
             split_segments(r#"cargo build 2>&1 && echo "a && b" | grep x; trunk serve"#),
@@ -640,6 +730,22 @@ mod tests {
                 "deny:ProtectedPath",
             ),
             ("read_file", json!({ "path": ".git/HEAD" }), "allow"),
+            (
+                "edit_file",
+                json!({ "path": "ak/ak-ui/src/button.rs" }),
+                "deny:ProtectedPath",
+            ),
+            (
+                "write_file",
+                json!({ "path": "ak/ak-bridge/Cargo.toml" }),
+                "deny:ProtectedPath",
+            ),
+            (
+                "read_file",
+                json!({ "path": "ak/ak-ui/src/list.rs" }),
+                "allow",
+            ),
+            ("write_file", json!({ "path": "akira/notes.md" }), "allow"),
             (
                 "edit_file",
                 json!({ "path": ".agentknife/timeline.json" }),

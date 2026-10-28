@@ -244,3 +244,72 @@ fn text_props_follow_signals() {
         assert!(out.contains(text), "{text} in {out}");
     }
 }
+
+#[test]
+fn class_adds_to_each_components_own() {
+    let out = html(|| {
+        let open = RwSignal::new(true);
+        view! {
+            <Button ak_id="start" class="w-full">"Start"</Button>
+            <Card ak_id="score" class="bg-slate-800!">"1"</Card>
+            <Input ak_id="name" value=RwSignal::new(String::new()) class="text-lg" />
+            <List ak_id="rows" items=RwSignal::new(vec![1u32]) key=|n: &u32| *n row=|n: u32| n class="divide-slate-700!" />
+            <Toggle ak_id="dark" checked=RwSignal::new(false) label="Dark" class="mt-2" />
+            <Nav ak_id="tabs" items=vec![NavItem::new("a", "A")] active=RwSignal::new("a".to_owned()) class="mb-4" />
+            <Dialog ak_id="wide" open=open title="Wide" close_label="Close" class="max-w-2xl!">"x"</Dialog>
+        }
+    });
+    for (own, extra) in [
+        ("bg-blue-600", "w-full"),
+        ("rounded-xl", "bg-slate-800!"),
+        ("rounded-lg", "text-lg"),
+        ("divide-y", "divide-slate-700!"),
+        ("inline-flex", "mt-2"),
+        ("max-w-md", "max-w-2xl!"),
+    ] {
+        assert!(out.contains(&format!(" {extra}\"")), "{extra}: {out}");
+        assert!(out.contains(own), "{own}");
+    }
+    assert!(out.contains(r#"class="ak-nav mb-4""#), "{out}");
+}
+
+#[test]
+fn every_part_has_a_marker_class() {
+    let out = html(|| {
+        let open = RwSignal::new(true);
+        view! {
+            <ToastHost ak_id="toasts">
+                <Button ak_id="a">"A"</Button>
+                <Button ak_id="b" variant=ButtonVariant::Ghost>"B"</Button>
+                <Card ak_id="c" title="Card">"c"</Card>
+                <Input ak_id="i" value=RwSignal::new(String::new()) label="Name" />
+                <List ak_id="l" items=RwSignal::new(vec![1u32]) key=|n: &u32| *n row=|n: u32| n />
+                <Toggle ak_id="t" checked=RwSignal::new(true) label="On" />
+                <Nav ak_id="n" items=vec![NavItem::new("x", "X")] active=RwSignal::new("x".to_owned()) />
+                <Dialog ak_id="d" open=open title="D" close_label="Close">"d"</Dialog>
+            </ToastHost>
+        }
+    });
+    for marker in [
+        "ak-button ak-button-primary",
+        "ak-button ak-button-ghost",
+        "ak-card ",
+        "ak-card-title",
+        "ak-input ",
+        "ak-input-label",
+        "ak-list ",
+        "ak-list-row",
+        "ak-toggle ",
+        "ak-toggle-switch",
+        "ak-toggle-knob",
+        "ak-nav\"",
+        "ak-nav-tab",
+        "ak-dialog ",
+        "ak-dialog-backdrop",
+        "ak-dialog-title",
+        "ak-dialog-close",
+        "ak-toasts",
+    ] {
+        assert!(out.contains(marker), "{marker}: {out}");
+    }
+}

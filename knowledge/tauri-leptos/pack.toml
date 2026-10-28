@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.25"
+version = "0.2.27"
 
 [versions]
 tauri = "2.12.4"
@@ -15,7 +15,7 @@ tailwind-cli = "4.3.3"
 [[topic]]
 id = "overview"
 title = "Project layout and workflow"
-summary = "Where the screens, the backend and the styles live; the user's own files in assets/ (never downloaded); how the preview runs; rules for every change; crates that are not here and what to use instead."
+summary = "Which topic to read for what the user asks; where the screens, the backend and the styles live; the user's own files in assets/ (never downloaded); how the preview runs; rules for every change; crates that are not here and what to use instead."
 file = "overview.md"
 
 [[topic]]
@@ -129,7 +129,7 @@ file = "ak-bridge.md"
 [[topic]]
 id = "ak-ui"
 title = "ak-ui components"
-summary = "Button, Input, Form, List, Dialog, Nav, Card, Toggle, Toast: props and examples."
+summary = "Button, Input, Form, List, Dialog, Nav, Card, Toggle, Toast: props and examples, class for more classes (! to win) and where it lands, each component's look, restyling every component of a kind with its ak-… marker class in style/input.css, your own component when one does not fit (ak/ is not edited)."
 file = "ak-ui.md"
 
 [[topic]]
@@ -141,7 +141,7 @@ file = "data-ak-id.md"
 [[topic]]
 id = "tailwind"
 title = "Styling with Tailwind CSS 4"
-summary = "Utility classes, layout, colors, dark mode, responsive design, why class names must be written out in full, and usable with the keyboard and easy to read (buttons, focus, labels, contrast)."
+summary = "Utility classes, layout, colors, dark mode (following the computer, always dark, a light/dark switch), one colour changed everywhere (@theme, ak-ui's too), Chinese fonts and wrapping, looks that hold together (page, cards, numbers, tables, empty states), the preview's small window, why class names must be written out in full, and usable with the keyboard and easy to read."
 file = "tailwind.md"
 
 [[topic]]

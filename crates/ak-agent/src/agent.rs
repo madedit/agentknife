@@ -1100,9 +1100,17 @@ impl Step<'_> {
                 None => match gate.check(&call.name, &args, ctx) {
                     Decision::Allow => Ok(()),
                     Decision::Deny { reason } => Err(ToolOutput::error(format!(
-                        "Not allowed because {} ({}). Find another way that stays inside                          the project, or explain to the user why it is needed.",
+                        "Not allowed because {} ({}). {}",
                         reason.kind.for_model(),
-                        reason.detail
+                        reason.detail,
+                        if reason.kind == ConfirmKind::ProtectedPath {
+                            "Do not change it another way (a command, a script, a copy): do \
+                             what the user wants in the project's own files, or tell the user \
+                             why it cannot be changed."
+                        } else {
+                            "Find another way that stays inside the project, or explain to \
+                             the user why it is needed."
+                        }
                     ))),
                     Decision::Ask { reason } => {
                         let request = ConfirmRequest {

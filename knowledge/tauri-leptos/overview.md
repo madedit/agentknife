@@ -16,11 +16,36 @@ src-tauri/
   capabilities/       what the window may use
   icons/              app icons
   src/main.rs         backend commands (#[tauri::command])
-ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (do not edit; AgentKnife updates them;
-                      read their source here to check a component's props)
+ak/ak-bridge, ak/ak-ui  AgentKnife's libraries (AgentKnife updates them; the tools
+                      refuse changes there; read their source to check a
+                      component's props)
 assets/               the user's own files, once they add some: images/, models/,
                       sounds/, fonts/, files/
 ```
+
+## Which topic to read
+| The user asks for | Topic |
+|---|---|
+| buttons, fields, lists, dialogs, tabs | `ak-ui`, `leptos-components` |
+| saving what they enter | `storage` (the whole app: `example-todo`) |
+| colours, dark mode, a theme, fonts, Chinese text, the layout in a small window | `tailwind` |
+| charts, printing, PDF | `reports` |
+| importing from Excel, backups, another computer | `import-backup` |
+| thousands of rows, search, sort, pages | `long-lists` |
+| Ctrl+Z, saving by itself | `undo-autosave` (plan it before the editor) |
+| dates, months, times | `date-time` |
+| dragging cards or rows | `drag-drop` |
+| diagrams, maps, a drawing board, a big grid | `canvas` |
+| text with bold and colours, find and replace | `rich-text` |
+| pictures, thumbnails, choosing a file or folder | `images-dialogs` |
+| notifications, tray icon, starting with Windows, a log | `desktop` |
+| data from the internet | `network` |
+| music, sound effects, a music player | `sound` |
+| a 3D game or scene, 3D models | `three-d` |
+| a build error | `troubleshooting` |
+
+Not sure which: `read_knowledge` with `search` (a word or two, e.g. `dark`)
+lists every line in the pack that has them, with its topic.
 
 ## The user's pictures, models, sounds and fonts
 - The user adds them with "Add files…" (or by dropping them on AgentKnife's
@@ -57,13 +82,12 @@ assets/               the user's own files, once they add some: images/, models/
   each part. In a long `view!` one mistake hides the others.
 - `run_command` on Windows is `cmd`: no `grep`/`head`; search output with
   `findstr /n /c:"text" file`.
-- Use ak-ui components (topic `ak-ui`) before writing your own.
-- Topics for what users ask next: charts, printing, PDF (`reports`); importing
-  from Excel, backups (`import-backup`); thousands of rows (`long-lists`);
-  Ctrl+Z and saving by itself (`undo-autosave`: plan it before writing the
-  editor); notifications, tray icon, starting with Windows, a log (`desktop`);
-  music and sound effects (`sound`);
-  keyboard use and readable colours (`tailwind`).
+- Use ak-ui components (topic `ak-ui`) before writing your own; `class` adds to
+  one's look, a rule for its `ak-…` marker class in `style/input.css` changes
+  them all. When one does not fit, write your own component in `src/`. Never
+  change `ak/`, not with a command or a script either.
+- Before a feature, read its topic ("Which topic to read" above); keyboard use
+  and readable colours are in `tailwind`.
 - Data from the internet: try the service with `curl` in `run_command` first,
   then fetch it (topic `network`).
 - Every meaningful element gets a stable `data-ak-id` (topic `data-ak-id`).

@@ -176,7 +176,8 @@ pub enum ConfirmKind {
     DailyCap,
     /// Refused: the path leaves the project.
     PathEscape,
-    /// Refused: AgentKnife's own history (`.git`) must not be edited directly.
+    /// Refused: AgentKnife's own files (`.git`, its `.agentknife/` state, the
+    /// `ak/` kit) must not be edited directly.
     ProtectedPath,
     /// Refused: could damage the computer (formatting disks, shutting down…).
     Dangerous,
@@ -210,7 +211,9 @@ impl ConfirmKind {
             ConfirmKind::Change => "the user approves every change",
             ConfirmKind::DailyCap => "today's spending reached the daily limit",
             ConfirmKind::PathEscape => "the path is outside the project",
-            ConfirmKind::ProtectedPath => "`.git` is managed by AgentKnife and must not be edited",
+            ConfirmKind::ProtectedPath => {
+                "AgentKnife manages it (its history and state, and the ak/ kit, which it updates): write your own code in src/ instead: `class` on one component, a rule for its ak-… class in style/input.css to restyle every one (topic ak-ui), or a component of your own"
+            }
             ConfirmKind::Dangerous => "it could damage the computer",
         }
     }

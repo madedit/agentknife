@@ -26,9 +26,45 @@ let class = if urgent { "bg-red-500 text-white" } else { "bg-gray-100 text-gray-
 - Arbitrary values when needed: `w-[420px]`, `text-[#0a7]`.
 
 ## Dark mode
-Dark styles follow the computer's setting: add `dark:` variants,
+Out of the box, dark styles follow the computer's setting: add `dark:` variants,
 e.g. `bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100`. ak-ui components
-already have them.
+and the page's `<body>` already have them.
+
+**An app that is always dark, or has its own light/dark switch**: on a computer
+set to light, `dark:` styles never apply, so ak-ui stays light. Make `dark:`
+follow a `dark` class instead. In `style/input.css`, after `@import
+"tailwindcss";` (keep the `@source` lines):
+```css
+@custom-variant dark (&:where(.dark, .dark *));
+```
+- Always dark: `<html lang="…" class="dark">` in `index.html` (only the `<html>`
+  tag; the trunk links stay as they are).
+- A switch (light, dark, like the computer): set the class from the screens, at
+  start and when the user changes it, and keep the choice (topic `storage`,
+  localStorage is enough). web-sys features `Window`, `Document`, `Element`,
+  `DomTokenList`, `MediaQueryList`:
+```rust
+/// Dark or light for the whole app: the `dark` class on `<html>` (with the
+/// `@custom-variant` line in style/input.css).
+fn set_dark(on: bool) {
+    let root = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.document_element());
+    if let Some(root) = root {
+        let _ = root.class_list().toggle_with_force("dark", on);
+    }
+}
+
+/// Whether the computer is set to dark: the choice before the user makes one.
+fn system_is_dark() -> bool {
+    web_sys::window()
+        .and_then(|w| w.match_media("(prefers-color-scheme: dark)").ok().flatten())
+        .is_some_and(|m| m.matches())
+}
+```
+At start: `set_dark(match saved.as_deref() { Some("dark") => true, Some("light") => false, _ => system_is_dark() })`.
+Then every ak-ui component, the `<body>` and your own `dark:` classes switch
+together: no `class="bg-slate-900!"` on each component.
 
 ## Window sizes
 Apps are resizable, and AgentKnife's preview is often narrower than a desktop
@@ -66,6 +102,67 @@ In `style/input.css`, after `@import "tailwindcss";` (keep the `@source` lines):
 }
 ```
 Then use `bg-brand-500`, `font-display`.
+
+**Changing a colour everywhere at once** (ak-ui included): give one of
+Tailwind's own colours a new value in `@theme`. ak-ui's accent is `blue-600`
+(the main button, the chosen tab, a switch that is on, focus rings), its
+surfaces `white` / `gray-900` (dark) and its lines `gray-200` / `gray-700`:
+```css
+@theme {
+  --color-blue-600: #0d9488;  /* the accent, in every component and your own classes */
+  --color-gray-900: #111827;  /* dark cards, lists and dialogs */
+}
+```
+This changes that colour wherever it is used in the app, which is what keeps one
+look. For one component only, use its `class` with `!`; for every component of
+a kind (all buttons rounder, no shadows), a rule for its `ak-…` marker class
+(topic `ak-ui`, "Restyling every one at once").
+
+## Chinese text and fonts
+- The whole app's font is `--font-sans`. For Traditional Chinese, name the
+  systems' own fonts first:
+  ```css
+  @theme {
+    --font-sans: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
+  }
+  ```
+- A font the user added (`assets/fonts/`, topic `overview`), in
+  `style/input.css`:
+  ```css
+  @font-face {
+    font-family: "Huninn";
+    src: url("assets/fonts/huninn.ttf");
+    font-display: swap;
+  }
+  @theme {
+    --font-display: "Huninn", "Microsoft JhengHei", sans-serif;
+  }
+  ```
+  then `font-display` on titles. Chinese fonts are large (several MB): use one
+  for titles rather than the whole app, and ask the user before adding many.
+- Chinese wraps between any two characters: short labels (buttons, tabs, table
+  headers) get `whitespace-nowrap` so they do not break in the middle of a word.
+- Full-width punctuation in Chinese text (，。：「」), and dates written the way
+  the user writes them (topic `date-time`).
+
+## Looks that hold together
+The same request should look alike every time. Unless the user asks otherwise:
+- The page: the template's `<body>` colours, content in a column
+  (`mx-auto w-full max-w-3xl p-4 sm:p-6`, wider for tables and editors) with
+  `flex flex-col gap-4` between the parts.
+- Groups in ak-ui `Card`s; one accent colour (the `blue-600` above, or the
+  user's); greys for the rest. Spacing from the same steps: `gap-2` inside a
+  row, `gap-4` between parts, `p-4` in a card.
+- A number to show (a total, a count): `<div class="rounded-xl border p-4">`
+  with the label `text-sm text-gray-500 dark:text-gray-400` above the number
+  `text-2xl font-semibold tabular-nums`; several side by side
+  `grid gap-3 sm:grid-cols-3`.
+- A table: `<table class="w-full text-sm">`, header cells `text-left font-medium
+  text-gray-500`, rows `border-t border-gray-200 dark:border-gray-700`, numbers
+  `text-right tabular-nums`.
+- Nothing yet: a short sentence of what to do (`List`'s `empty`, or a
+  `text-center text-sm text-gray-500 py-8` line with a button), never an empty
+  box.
 
 ## Usable with the keyboard, easy to read
 Some users do not use a mouse, see less well, or need larger text. The rules are

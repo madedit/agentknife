@@ -11,6 +11,9 @@ use crate::tool::{Tool, ToolContext, ToolOutput};
 
 pub const READ_KNOWLEDGE: &str = "read_knowledge";
 
+/// At most this many lines in a search's answer.
+const MAX_MATCHES: usize = 40;
+
 pub struct ReadKnowledge {
     pack: KnowledgePack,
 }
@@ -30,6 +33,43 @@ impl ReadKnowledge {
         }
         s
     }
+
+    /// Every line that has all the words of `query` (any case), with its topic
+    /// and the heading above it.
+    fn search(&self, query: &str) -> String {
+        let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+        let mut found = Vec::new();
+        for t in self.pack.topics {
+            let mut heading = "";
+            for line in t.body.lines() {
+                let text = line.trim();
+                if text.starts_with('#') {
+                    heading = text.trim_start_matches('#').trim();
+                }
+                let lower = text.to_lowercase();
+                if !text.is_empty() && words.iter().all(|w| lower.contains(w.as_str())) {
+                    found.push(format!("- {} › {heading}: {text}", t.id));
+                }
+            }
+        }
+        if found.is_empty() {
+            return format!(
+                "Nothing in the knowledge pack has `{query}`. Try another word, or pick a topic:\n{}",
+                self.index()
+            );
+        }
+        let total = found.len();
+        found.truncate(MAX_MATCHES);
+        let mut s = format!("Lines with `{query}` (read the topic for the whole section):\n");
+        s.push_str(&found.join("\n"));
+        if total > MAX_MATCHES {
+            s.push_str(&format!(
+                "\n… and {} more: add a word to narrow it down.",
+                total - MAX_MATCHES
+            ));
+        }
+        s
+    }
 }
 
 impl Tool for ReadKnowledge {
@@ -41,7 +81,8 @@ impl Tool for ReadKnowledge {
                 "Read how-to docs for this project's stack, written for the exact versions \
                  it uses. Before writing or changing app code, read the one or two topics the \
                  change needs (not all of them); read `troubleshooting` when a build error is \
-                 unclear.\n{}",
+                 unclear. Not sure which topic covers something: `search` with a word or two \
+                 lists the lines that have them, with their topics.\n{}",
                 self.index()
             ),
             input_schema: json!({
@@ -52,13 +93,21 @@ impl Tool for ReadKnowledge {
                         "enum": ids,
                         "description": "Topic id from the list above",
                     },
+                    "search": {
+                        "type": "string",
+                        "description": "Instead of a topic: words to look for in every topic (e.g. `dark mode`)",
+                    },
                 },
-                "required": ["topic"],
             }),
         }
     }
 
     fn call<'a>(&'a self, args: Value, _ctx: &'a ToolContext) -> BoxFuture<'a, ToolOutput> {
+        let query = args["search"].as_str().unwrap_or_default().trim();
+        if !query.is_empty() {
+            let out = ToolOutput::text(cap(&self.search(query), MAX_OUTPUT_CHARS));
+            return Box::pin(async move { out });
+        }
         let topic = args["topic"].as_str().unwrap_or_default().trim().to_owned();
         let out = match self.pack.topic(&topic) {
             Some(t) => ToolOutput::text(cap(t.body, MAX_OUTPUT_CHARS)),
@@ -86,7 +135,7 @@ mod tests {
             id: "storage",
             title: "Saving data",
             summary: "JSON files.",
-            body: "# Saving data",
+            body: "# Saving data\n## Settings\nThe theme (Dark mode) in localStorage.\nA JSON file.",
         },
     ];
 
@@ -132,5 +181,27 @@ mod tests {
             text(&out).contains("- ak-ui:"),
             "the index helps the model pick"
         );
+    }
+
+    #[tokio::test]
+    async fn searches_every_topic() {
+        let t = tool();
+        assert!(t.spec().input_schema["properties"]["search"].is_object());
+        let ctx = ToolContext::for_project(".");
+        // Every word, any case, with the topic and the heading above the line.
+        let out = t.call(json!({ "search": "dark THEME" }), &ctx).await;
+        assert!(!out.is_error);
+        assert!(
+            text(&out).contains("- storage › Settings: The theme (Dark mode) in localStorage."),
+            "{}",
+            text(&out)
+        );
+        assert!(!text(&out).contains("A JSON file"));
+        // A search wins over a topic; nothing found lists the topics.
+        let out = t
+            .call(json!({ "search": "router", "topic": "ak-ui" }), &ctx)
+            .await;
+        assert!(text(&out).contains("Nothing in the knowledge pack has `router`"));
+        assert!(text(&out).contains("- ak-ui:"));
     }
 }

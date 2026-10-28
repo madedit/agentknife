@@ -94,7 +94,7 @@ pub fn ToastHost(
         <div
             data-ak-id=ak_id
             aria-live="polite"
-            class="pointer-events-none fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"
+            class="ak-toasts pointer-events-none fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"
         >
             <For
                 each=move || toaster.toasts.get()
@@ -102,13 +102,13 @@ pub fn ToastHost(
                 children=move |m| {
                     let class = match m.kind {
                         ToastKind::Info => {
-                            "pointer-events-auto rounded-lg bg-gray-900 px-4 py-3 text-sm text-white shadow-lg"
+                            "ak-toast ak-toast-info pointer-events-auto rounded-lg bg-gray-900 px-4 py-3 text-sm text-white shadow-lg"
                         }
                         ToastKind::Success => {
-                            "pointer-events-auto rounded-lg bg-green-600 px-4 py-3 text-sm text-white shadow-lg"
+                            "ak-toast ak-toast-success pointer-events-auto rounded-lg bg-green-600 px-4 py-3 text-sm text-white shadow-lg"
                         }
                         ToastKind::Error => {
-                            "pointer-events-auto rounded-lg bg-red-600 px-4 py-3 text-sm text-white shadow-lg"
+                            "ak-toast ak-toast-error pointer-events-auto rounded-lg bg-red-600 px-4 py-3 text-sm text-white shadow-lg"
                         }
                     };
                     let role = if m.kind == ToastKind::Error { "alert" } else { "status" };

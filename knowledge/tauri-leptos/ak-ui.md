@@ -28,10 +28,75 @@ What the props take ("follows" = a closure or signal keeps it up to date):
 | Dialog | `on_close` | optional closure `move \|_\| …`: runs when it closes itself |
 | Nav | `items` | fixed list; `active`: `RwSignal<String>` |
 | List | `items` | follows (`RwSignal<Vec<T>>` or `Signal`) |
+| all | `class` | fixed text: more classes |
 
-**ak-ui components have no `class` prop** (`class=` on them does not build). For
-another look (a big coloured button, a game's keys) use a plain element with
-Tailwind classes and its own `data-ak-id` (see Button below).
+**`class` adds classes after the component's own**: layout such as `w-full`,
+`mt-4`, `flex-1`, `max-w-sm`. Two classes for the same thing (the component's
+`bg-white` and your `bg-slate-800`) do not reliably pick yours: end yours with
+`!` to make it win (`class="bg-slate-800! text-white!"`). On `Input` it goes on
+the field itself; on `Dialog` on its panel (`class="max-w-2xl!"` for a wider
+one). For a whole other look (a big coloured button, a game's keys) use a plain
+element with Tailwind classes and its own `data-ak-id` (see Button below).
+
+Where `class` lands, and the look you may want to change (light / dark):
+
+| Component | `class` goes on | Its look | Not reached by `class` |
+|---|---|---|---|
+| Button | the `<button>` | Primary `bg-blue-600 text-white`; Secondary `bg-white ring-gray-300` / `dark:bg-gray-800`; Danger `bg-red-600`; Ghost `text-gray-700 hover:bg-gray-100` | — |
+| Input | the `<input>` | `bg-white border-gray-300` / `dark:bg-gray-800 dark:border-gray-600` | its label (`text-gray-700` / `dark:text-gray-300`) |
+| Form | the `<form>` | `flex flex-col gap-3 sm:flex-row` | — |
+| Card | the `<section>` | `rounded-xl border-gray-200 bg-white p-4` / `dark:bg-gray-900 dark:border-gray-700` | the title (`text-gray-900` / `dark:text-gray-100`) |
+| List | the `<ul>` | `rounded-xl border-gray-200 bg-white divide-y` / `dark:bg-gray-900` | the rows (`px-4 py-3 text-gray-900`) |
+| Toggle | the outer `<label>` | on `bg-blue-600`, off `bg-gray-300` / `dark:bg-gray-600` | the switch itself |
+| Nav | the `<nav>` | chosen tab `bg-blue-600 text-white`, others `text-gray-700 hover:bg-gray-100` | the tabs |
+| Dialog | the panel | `max-w-md rounded-2xl bg-white p-6` / `dark:bg-gray-900` | the backdrop (`bg-black/40`) |
+| ToastHost | (no `class`) | dark toasts, green for success, red for errors | — |
+
+What `class` does not reach, and changes to every component of a kind, go in
+the stylesheet ("Restyling every one at once" below). A dark app is the `dark`
+class on `<html>` (topic `tailwind`, "Dark mode"), not `class="bg-…!"` on every
+component.
+
+## Restyling every one at once
+"Make the buttons rounder", "no shadows", "teal tabs": every part of every
+component carries a fixed marker class. A rule for it in `style/input.css`
+(after `@import "tailwindcss";`, outside any `@layer`) changes all of them, and
+wins over the component's own classes:
+```css
+/* Every button pill-shaped, without a shadow. */
+.ak-button { @apply rounded-full shadow-none; }
+/* The main buttons and the chosen tab in teal. */
+.ak-button-primary { @apply bg-teal-600 hover:bg-teal-700; }
+.ak-nav-tab[aria-current="page"] { @apply bg-teal-600; }
+/* Cards and lists on a dark page. */
+.ak-card, .ak-list { @apply border-slate-700 bg-slate-900 text-slate-100; }
+```
+| Component | Marker classes |
+|---|---|
+| Button | `ak-button`, and `ak-button-primary` / `-secondary` / `-danger` / `-ghost` |
+| Input | `ak-input` (the field), `ak-input-label` |
+| Form | `ak-form` |
+| Card | `ak-card`, `ak-card-title` |
+| List | `ak-list`, `ak-list-row`, `ak-list-empty` |
+| Toggle | `ak-toggle` (the label), `ak-toggle-switch` (`[aria-checked="true"]` when on), `ak-toggle-knob` |
+| Nav | `ak-nav`, `ak-nav-tab` (`[aria-current="page"]` for the chosen one) |
+| Dialog | `ak-dialog` (the panel), `ak-dialog-backdrop`, `ak-dialog-title`, `ak-dialog-close` |
+| ToastHost | `ak-toasts`, `ak-toast` and `ak-toast-info` / `-success` / `-error` |
+
+This is the way to change how every ak-ui component looks: never `ak/`
+(AgentKnife updates it, and its tools refuse changes there, commands
+included). One component only: its `class` prop. The markers are in ak-ui
+since pack 0.2.27; an older project's ak-ui has no `ak-…` classes (search
+`ak/ak-ui/src` for `ak-button`): there, change colours with `@theme` or use
+your own elements.
+
+**Do not edit `ak/`** (ak-ui, ak-bridge), not with a command or a script either:
+AgentKnife updates it, and its tools refuse changes there. Restyle with
+`class` or the marker classes below; when a component does not fit, write your
+own in `src/`.
+`class` is in ak-ui since pack 0.2.26: in an older project (`class` missing in
+`ak/ak-ui/src/button.rs`), `class=` on a component does not build; use a plain
+element there.
 
 ## Button
 ```rust
@@ -56,10 +121,10 @@ which is only for `Form`'s `on_submit`.
 
 `small=true` gives a smaller button (toolbars, a card's own buttons):
 `<Button ak_id="card-edit" variant=ButtonVariant::Ghost small=true>"Edit"</Button>`.
+`class` adds to its look: `<Button ak_id="start" class="w-full">"Start"</Button>`.
 
-`Button` has no `class` prop: its looks come from `variant` and `small`. For a control that
-must look different (big see-through arrow keys over a game), use a plain element
-with Tailwind classes and give it its own `data-ak-id`:
+A control that must look quite different (big see-through arrow keys over a
+game) is a plain element with Tailwind classes and its own `data-ak-id`:
 ```rust
 <button type="button" data-ak-id="left-key" aria-label="Left"
     class="h-16 w-16 rounded-full bg-white/30 text-2xl text-white active:bg-white/50"
@@ -100,9 +165,10 @@ put them all in one `<div class="grid w-full gap-3 sm:grid-cols-2">` inside it.
 />
 ```
 Rows are flex rows: put buttons at the end of `row`. `List` looks like a light
-card (white, rounded, a border) and has no `class` prop: on a dark or styled
-panel, draw the list yourself (`<ul>` with `<For>` and a row component, topic
-`leptos-components`).
+card (white, rounded, a border). On a dark panel, `class="bg-slate-900!
+border-slate-700! divide-slate-700!"` changes the card; rows that must look
+quite different are drawn yourself (`<ul>` with `<For>` and a row component,
+topic `leptos-components`).
 
 The `key` must be unique and stable, and printable (`Display`: numbers, `String`).
 It becomes part of each row's `data-ak-id`: spaces and signs turn into `-`
@@ -173,6 +239,7 @@ or other changing value into an id.
 ## Card
 ```rust
 <Card ak_id="settings-card" title="Settings"> …children… </Card>
+<Card ak_id="score-card" class="bg-slate-800! border-slate-700! text-white"> …children… </Card>
 ```
 
 ## Toggle

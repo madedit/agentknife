@@ -24,6 +24,10 @@ pub fn Nav(
     #[prop(into)] ak_id: String,
     items: Vec<NavItem>,
     active: RwSignal<String>,
+    /// More classes after the component's own (layout such as `w-full`, `mt-4`;
+    /// a colour that must win ends with `!`: `bg-slate-800!`).
+    #[prop(optional, into)]
+    class: String,
 ) -> impl IntoView {
     let buttons = items
         .into_iter()
@@ -40,9 +44,9 @@ pub fn Nav(
                         aria-current=move || is_current().then_some("page")
                         class=move || {
                             if current() {
-                                "rounded-lg px-3 py-2 text-sm font-medium bg-blue-600 text-white"
+                                "ak-nav-tab rounded-lg px-3 py-2 text-sm font-medium bg-blue-600 text-white"
                             } else {
-                                "rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                                "ak-nav-tab rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
                             }
                         }
                         on:click=move |_| active.set(id.clone())
@@ -54,7 +58,7 @@ pub fn Nav(
         })
         .collect_view();
     view! {
-        <nav data-ak-id=ak_id.clone()>
+        <nav data-ak-id=ak_id.clone() class=crate::classes("ak-nav", &class)>
             <ul class="flex flex-wrap gap-1">{buttons}</ul>
         </nav>
     }

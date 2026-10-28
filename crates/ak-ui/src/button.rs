@@ -14,6 +14,16 @@ pub enum ButtonVariant {
 }
 
 impl ButtonVariant {
+    /// The marker classes a stylesheet can restyle every such button with.
+    fn marker(self) -> &'static str {
+        match self {
+            ButtonVariant::Primary => "ak-button ak-button-primary",
+            ButtonVariant::Secondary => "ak-button ak-button-secondary",
+            ButtonVariant::Danger => "ak-button ak-button-danger",
+            ButtonVariant::Ghost => "ak-button ak-button-ghost",
+        }
+    }
+
     fn class(self) -> &'static str {
         match self {
             ButtonVariant::Primary => {
@@ -58,9 +68,14 @@ pub fn Button(
     #[prop(optional, into)]
     label: Option<String>,
     #[prop(optional, into)] on_click: Option<Callback<MouseEvent>>,
+    /// More classes after the component's own (layout such as `w-full`, `mt-4`;
+    /// a colour that must win ends with `!`: `bg-slate-800!`).
+    #[prop(optional, into)]
+    class: String,
     children: Children,
 ) -> impl IntoView {
-    let class = button_class(variant, small);
+    let own = format!("{} {}", variant.marker(), button_class(variant, small));
+    let class = crate::classes(&own, &class);
     view! {
         <button
             type=if submit { "submit" } else { "button" }

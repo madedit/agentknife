@@ -40,7 +40,7 @@ confirm-elevated = This step asks for administrator rights: { $detail }
 confirm-unrecognized = AgentKnife cannot tell what this step will do: { $detail }
 confirm-change = You asked to approve every change. Allow this one? { $detail }
 denied-path-escape = Blocked: this is outside your project folder: { $detail }
-denied-protected-path = Blocked: this is AgentKnife's own history and must not be edited by hand: { $detail }
+denied-protected-path = Blocked: AgentKnife manages this (its history, or the ak/ kit it keeps up to date), so it must not be edited by hand: { $detail }
 denied-dangerous = Blocked: this could damage your computer: { $detail }
 
 ## Timeline entries (checkpoints)

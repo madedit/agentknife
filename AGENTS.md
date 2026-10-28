@@ -135,7 +135,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
 - **Permissions:** reads, writes, builds, and runs inside the project folder are automatic. Downloads or installs, access outside the project, and deletions need a plain-language confirmation.
   - Implemented by `ak_agent::policy::ProjectPolicy`, the agent's default gate. Use `AllowAll` only in tests.
   - Reference folders (`ProjectPolicy::with_reference_dirs`, `AgentConfig::reference_dirs`; ak-app passes the toolchain's `cargo/registry`, `cargo/git` and `rustup/toolchains`, never the whole toolchain folder, which may hold cargo credentials): the read tools take absolute paths there (`tools::path::resolve_read`), and commands that only read (`READERS`: type, cat, findstr, rg, Get-Content, …, without `>` redirection) may name them without asking. Writing, deleting and every other folder outside the project still ask; the write tools still use `resolve`.
-  - Path escapes, writes into `.git/`, and destructive commands (format, `rm -rf /`, shutdown…) are refused outright.
+  - Path escapes, writes into `.git/`, AgentKnife's `.agentknife/` state and the `ak/` kit (`PROTECTED`; AgentKnife updates `ak/`, so the AI writes its own components in `src/`), and destructive commands (format, `rm -rf /`, shutdown…) are refused outright. The file tools only: a shell command writing there is not caught.
   - Confirmation reasons are a structured `ConfirmReason { kind, detail }`, rendered by the UI through fluent (`ConfirmKind::message_id`). Never send English sentences to the UI.
   - When adding a tool, teach the policy about it; unknown tools ask.
 - **Plan-before-big-change:** small edits are applied directly. Large features first get a 3–5 bullet plan with a time and cost estimate, and wait for the user to click "Start". This is configurable.
@@ -215,6 +215,7 @@ plan/            STATUS.md and execution-plan.md (format in §8).
   - Every component takes `ak_id` and renders `data-ak-id`. Parts get derived ids via `ak_ui::part_id` (`<id>-<key>` rows, `<id>-close`, numbered toasts).
   - No fixed UI strings: labels such as `close_label` are props, in the app's language.
   - Tailwind classes are complete literals, so Tailwind can find them. Generated apps add `@source` for the ak-ui sources.
+  - Every component takes an optional `class`, appended after its own (`classes` in lib.rs); the caller wins a conflict with Tailwind's `!` suffix.
   - Tests render with `to_html()` (leptos `ssr` as a dev-dependency only).
   - Any new component must be shown in ak-ui-gallery.
 - **Knowledge pack** (`knowledge/<stack>/`): what the agent reads with `read_knowledge(topic)` before writing app code.

@@ -18,8 +18,15 @@ pub fn Dialog(
     /// Runs when the dialog closes itself (Escape, ×, backdrop).
     #[prop(optional, into)]
     on_close: Option<Callback<()>>,
+    /// More classes for the dialog's panel (`max-w-2xl!` for a wider one).
+    #[prop(optional, into)]
+    class: String,
     children: ChildrenFn,
 ) -> impl IntoView {
+    let panel = crate::classes(
+        "ak-dialog relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900",
+        &class,
+    );
     let close = move || {
         open.set(false);
         if let Some(cb) = on_close {
@@ -41,7 +48,7 @@ pub fn Dialog(
         <Show when=move || open.get()>
             <div
                 data-ak-id=backdrop_id.clone()
-                class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+                class="ak-dialog-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
                 on:click=move |_| close()
             >
                 <div
@@ -49,10 +56,10 @@ pub fn Dialog(
                     aria-modal="true"
                     aria-label=move || title.get()
                     data-ak-id=ak_id.clone()
-                    class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900"
+                    class=panel.clone()
                     on:click=|ev| ev.stop_propagation()
                 >
-                    <h2 class="mb-4 pr-8 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    <h2 class="ak-dialog-title mb-4 pr-8 text-lg font-semibold text-gray-900 dark:text-gray-100">
                         {move || title.get()}
                     </h2>
                     {children()}
@@ -60,7 +67,7 @@ pub fn Dialog(
                         type="button"
                         data-ak-id=close_id.clone()
                         aria-label=close_label.clone()
-                        class="absolute right-3 top-3 rounded-lg p-2 leading-none text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        class="ak-dialog-close absolute right-3 top-3 rounded-lg p-2 leading-none text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
                         on:click=move |_| close()
                     >
                         "×"

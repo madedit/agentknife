@@ -7,7 +7,10 @@
 //! language.
 //!
 //! Styling is Tailwind v4 utility classes written out in full here; the app's
-//! stylesheet must include these sources (`@source "…/ak-ui/src";`).
+//! stylesheet must include these sources (`@source "…/ak-ui/src";`). Each part
+//! also carries a fixed `ak-…` marker class (`ak-button`, `ak-button-primary`,
+//! `ak-nav-tab`, …): a plain rule for it in the app's stylesheet restyles every
+//! one, since unlayered CSS wins over Tailwind's utility layer.
 
 #![forbid(unsafe_code)]
 
@@ -31,6 +34,15 @@ pub use nav::{Nav, NavItem};
 pub use toast::{ToastHost, ToastKind, Toaster, use_toaster};
 pub use toggle::Toggle;
 
+/// A component's own classes, then the caller's `class` prop.
+fn classes(own: &str, extra: &str) -> String {
+    if extra.trim().is_empty() {
+        own.to_owned()
+    } else {
+        format!("{own} {}", extra.trim())
+    }
+}
+
 /// `<base>-<part>`: the id of a part inside a component. Spaces and signs in
 /// `part` become single `-` (`"New York"` → `New-York`, `-6` → `minus-6`), so
 /// any key gives a readable id.
@@ -53,7 +65,17 @@ pub fn part_id(base: &str, part: impl std::fmt::Display) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::part_id;
+    use super::{classes, part_id};
+
+    #[test]
+    fn the_callers_classes_come_last() {
+        assert_eq!(classes("rounded p-4", ""), "rounded p-4");
+        assert_eq!(classes("rounded p-4", "  "), "rounded p-4");
+        assert_eq!(
+            classes("rounded p-4", " w-full bg-slate-800! "),
+            "rounded p-4 w-full bg-slate-800!"
+        );
+    }
 
     #[test]
     fn keys_become_readable_ids() {

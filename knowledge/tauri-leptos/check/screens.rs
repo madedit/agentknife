@@ -1671,3 +1671,53 @@ mod element_events {
         closure
     }
 }
+
+// ---- ak-ui: class ----
+#[component]
+fn StyledKit() -> impl IntoView {
+    let open = RwSignal::new(false);
+    let rows = RwSignal::new(vec![1u32, 2]);
+    view! {
+        <Button ak_id="start" class="w-full">"Start"</Button>
+        <Card ak_id="score-card" class="bg-slate-800! border-slate-700! text-white">"Score"</Card>
+        <List
+            ak_id="dark-list"
+            items=rows
+            key=|n: &u32| *n
+            row=move |n: u32| view! { <span>{n}</span> }
+            class="bg-slate-900! border-slate-700! divide-slate-700!"
+        />
+        <Dialog ak_id="wide-dialog" open=open title="Wide" close_label="Close" class="max-w-2xl!">
+            <p>"Wide"</p>
+        </Dialog>
+    }
+}
+
+// ---- tailwind: dark mode switch ----
+mod theme {
+    /// Dark or light for the whole app: the `dark` class on `<html>` (with the
+    /// `@custom-variant` line in style/input.css).
+    fn set_dark(on: bool) {
+        let root = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.document_element());
+        if let Some(root) = root {
+            let _ = root.class_list().toggle_with_force("dark", on);
+        }
+    }
+
+    /// Whether the computer is set to dark: the choice before the user makes one.
+    fn system_is_dark() -> bool {
+        web_sys::window()
+            .and_then(|w| w.match_media("(prefers-color-scheme: dark)").ok().flatten())
+            .is_some_and(|m| m.matches())
+    }
+
+    fn start(saved: Option<String>) {
+        set_dark(match saved.as_deref() {
+            Some("dark") => true,
+            Some("light") => false,
+            _ => system_is_dark(),
+        });
+    }
+}
