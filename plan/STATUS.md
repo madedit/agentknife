@@ -7,6 +7,7 @@
   - `.github/workflows/release.yml`: the tag must match Cargo.toml's version; doctor_install, then `cargo xtask dist` on four runners; `gh release create --draft` with every file.
   - README (en, zh-TW): install for the three systems, opening unsigned apps, the AppImage's changing agentknife-mcp path (MCP: prefer .deb/.rpm).
   - Windows built here (2026-10-28): `-setup.exe` 9.6 MB (agentknife.exe, agentknife-mcp.exe, licenses, notices; 7-Zip listing) and the zip 13.1 MB. Tauri warns that the identifier `com.agentknife.app` ends with `.app` (macOS bundle extension); not changed, the WebView data folder on Windows is named after it.
+  - Commit d6df809. Version 1.0.2 (owner, 2026-10-28; workspace, tauri.conf.json, Cargo.lock; ak-bridge and ak-ui stay 0.1.0): the first release made by the workflow, tag `v1.0.2`.
   Left: a first workflow run (macOS, Linux untried), the owner's install check, then a tagged draft release.
 - P1-APP-001 (follow-up) — coordinator — started 2026-10-27
   Notes: preview screenshots (`screenshot_preview`) for AgentKnife's AI and other AI tools. Owner: the platform web view's capture (option A), with `unsafe` allowed in one crate.
