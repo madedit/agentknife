@@ -1,0 +1,106 @@
+name: Release
+
+# P1-APP-003: AgentKnife's installers for Windows, macOS (Apple silicon and
+# Intel) and Linux, made by `cargo xtask dist`. A tag `v<version>` puts them in
+# a draft release for the owner to check and publish; a manual run only keeps
+# them as the run's artifacts.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dist:
+    name: dist (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+          - name: macos-arm64
+            os: macos-latest
+          # GitHub's last Intel Mac image (until fall 2027).
+          - name: macos-x64
+            os: macos-15-intel
+          # Ubuntu 22.04 (glibc 2.35): the oldest with WebKitGTK 4.1, so the
+          # packages run on it and newer systems.
+          - name: linux-x64
+            os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Tag matches the version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "tag ${GITHUB_REF_NAME} but Cargo.toml says ${version}" >&2
+            exit 1
+          fi
+
+      # rust-toolchain.toml pins the version, components and wasm target.
+      - name: Install pinned toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2.9.2
+
+      - name: System packages (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      # The tools `cargo xtask dist` builds with (cargo-tauri, trunk, Tailwind),
+      # the same AgentKnife installs on first launch.
+      - name: AgentKnife toolchain cache
+        uses: actions/cache@v5.1.0
+        with:
+          path: ${{ runner.temp }}/ak-toolchain
+          key: ak-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('versions.toml') }}
+
+      - name: AgentKnife toolchain
+        run: cargo run -p ak-doctor --example doctor_install
+        env:
+          AK_TOOLCHAIN_ROOT: ${{ runner.temp }}/ak-toolchain
+
+      - name: cargo xtask dist
+        run: cargo xtask dist
+        env:
+          AK_TOOLCHAIN_ROOT: ${{ runner.temp }}/ak-toolchain
+
+      - uses: actions/upload-artifact@v5.0.0
+        with:
+          name: AgentKnife-${{ matrix.name }}
+          path: |
+            target/dist/AgentKnife-*
+          if-no-files-found: error
+
+  release:
+    name: draft release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: dist
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5.0.0
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Draft release with the installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --draft \
+            --title "AgentKnife ${GITHUB_REF_NAME#v}" \
+            --notes "Installers for Windows, macOS and Linux. See the README for how to install and open them."

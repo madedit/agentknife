@@ -61,19 +61,28 @@ A playable 3D game, made by Antigravity through AgentKnife's MCP tools (it check
 
 That first request is only the start. You can ask the AI for changes at any time, as your ideas change: the zoom buttons in the pathfinding demo were added later with "Add zoom-in and zoom-out buttons".
 
-## Install on Windows
+## Install
 
-macOS / Linux versions coming later.
+Download the file for your computer from the [Releases](../../releases/latest) page. AgentKnife is not signed by a developer certificate, so the first start needs one extra step, described below.
 
-1. Download `AgentKnife-<version>-windows-x64.zip` from the [Releases](../../releases/latest) page.
-2. Unzip it to a folder of your choice, and keep `agentknife.exe` and `agentknife-mcp.exe` together.
-3. Run `agentknife.exe`. It is not signed: if Windows shows "Windows protected your PC", choose "More info", then "Run anyway".
+**Windows** (10 or 11, 64-bit)
+- `AgentKnife-<version>-windows-x64-setup.exe`: run it. It installs for you only (no administrator) and adds AgentKnife to the Start menu. If Windows shows "Windows protected your PC", choose "More info", then "Run anyway".
+- Or `AgentKnife-<version>-windows-x64.zip`, without installing: unzip it to a folder of your choice, keep `agentknife.exe` and `agentknife-mcp.exe` together, and run `agentknife.exe`.
 
-On first launch AgentKnife asks you to connect an AI, then sets up the tools it needs. Nothing else has to be installed by hand.
+**macOS** (11 or later)
+- `AgentKnife-<version>-macos-arm64.dmg` for a Mac with Apple silicon (M1 and later), `AgentKnife-<version>-macos-x64.dmg` for an Intel Mac (the Apple menu → About This Mac shows which).
+- Open the `.dmg` and drag AgentKnife to Applications. The first time you open it, macOS says it cannot verify the app: choose "Done", then open System Settings → Privacy & Security, and next to "AgentKnife was blocked" choose "Open Anyway".
+
+**Linux** (64-bit, with glibc 2.35 or later and WebKitGTK 4.1: Ubuntu 22.04, Debian 12, Fedora 36 and later; not RHEL / AlmaLinux / Rocky 9)
+- Ubuntu, Debian: `AgentKnife-<version>-linux-x64.deb`, installed with `sudo apt install ./AgentKnife-<version>-linux-x64.deb`.
+- Fedora, openSUSE: `AgentKnife-<version>-linux-x64.rpm`, installed with `sudo dnf install ./AgentKnife-<version>-linux-x64.rpm` (or `zypper`).
+- Any other: `AgentKnife-<version>-linux-x64.AppImage`. Make it executable (`chmod +x`) and run it. For AI tools through MCP prefer the `.deb` or `.rpm`: an AppImage's `agentknife-mcp` lives in a folder that changes at every start.
+
+On first launch AgentKnife asks you to connect an AI, then sets up the tools it needs, and asks before installing anything for the whole computer. Nothing else has to be installed by hand.
 
 ### What gets downloaded
 
-The download is about 2–2.5 GB in total, mostly the Visual C++ Build Tools. The disk space needed is about 7–8 GB before the first project, then about 10.5–11.5 GB once a first project is built. AgentKnife itself is about 35 MB. Each package and its size: [What gets downloaded](docs/install-size.md).
+On Windows the download is about 2–2.5 GB in total, mostly the Visual C++ Build Tools. The disk space needed is about 7–8 GB before the first project, then about 10.5–11.5 GB once a first project is built. AgentKnife itself is about 35 MB. Each package and its size: [What gets downloaded](docs/install-size.md).
 
 ## Connecting an AI
 
@@ -132,7 +141,7 @@ cargo run -p ak-doctor --example doctor_install
 cargo xtask build
 ```
 
-`doctor_install` sets up the tools AgentKnife builds with, in `%APPDATA%\AgentKnife\toolchain` (the same ones it installs on first launch). `cargo xtask build` writes `agentknife.exe` and `agentknife-mcp.exe` to `target\release`. `cargo xtask dist` also packs them into the release zip in `target\dist`.
+`doctor_install` sets up the tools AgentKnife builds with, in `%APPDATA%\AgentKnife\toolchain` (the same ones it installs on first launch). `cargo xtask build` writes `agentknife.exe` and `agentknife-mcp.exe` to `target\release`. `cargo xtask dist` makes this computer's release files in `target\dist`: the installer and the zip on Windows, the `.dmg` on macOS, the `.deb`, `.rpm` and `.AppImage` on Linux. A tag `v<version>` makes all of them on GitHub Actions (`.github/workflows/release.yml`) and puts them in a draft release.
 
 ## Privacy
 

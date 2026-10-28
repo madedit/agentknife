@@ -1,7 +1,14 @@
-//! `cargo xtask dist`: the release zip of AgentKnife for this computer,
-//! `target/dist/AgentKnife-<version>-<os>-<arch>.zip`. It runs `cargo xtask
-//! build` first, then packs both programs (agentknife-mcp must stay next to
-//! AgentKnife), the licenses, the third-party notices and a short README.
+//! `cargo xtask dist`: AgentKnife's release files for this computer, in
+//! `target/dist`, named `AgentKnife-<version>-<os>-<arch>…`:
+//! - Windows: an installer (`-setup.exe`, NSIS, for the current user only) and
+//!   a zip to unpack anywhere;
+//! - macOS: a `.dmg` (signed ad hoc: not by a developer, see the README);
+//! - Linux: `.deb`, `.rpm` and `.AppImage`.
+//!
+//! Every one holds both programs (agentknife-mcp must stay next to
+//! AgentKnife), the licenses and the third-party notices. Built with `cargo
+//! tauri build`; its bundler downloads NSIS (Windows) or linuxdeploy (Linux)
+//! into its own cache the first time.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::Write as _;
@@ -19,13 +26,122 @@ const NATIVE_ROOTS: &[&str] = &["ak-app", "ak-mcp"];
 const WASM_ROOTS: &[&str] = &["ak-shell"];
 
 pub fn run(root: &Path) -> Result<()> {
-    crate::dev::build(root, &[])?;
     let version = version(root)?;
     let target = ak_doctor::assets::host_target().ok_or("no release target for this computer")?;
     let name = format!("AgentKnife-{version}-{}", platform());
     let exe = std::env::consts::EXE_SUFFIX;
     let release = root.join("target/release");
+    let out_dir = root.join("target/dist");
+    let extra = out_dir.join("extra");
+    std::fs::create_dir_all(&extra)?;
 
+    let mut notices = third_party(root, target, NATIVE_ROOTS)?;
+    notices.extend(third_party(root, "wasm32-unknown-unknown", WASM_ROOTS)?);
+    let notices = notices_text(&notices);
+    std::fs::write(extra.join("THIRD-PARTY-NOTICES.txt"), &notices)?;
+
+    // agentknife-mcp goes in as the bundler's "external binary": it wants the
+    // file named for the target, and puts it next to AgentKnife.
+    crate::dev::mcp_program(root, true)?;
+    std::fs::copy(
+        release.join(format!("agentknife-mcp{exe}")),
+        extra.join(format!("agentknife-mcp-{target}{exe}")),
+    )?;
+    let config = extra.join("release.conf.json");
+    std::fs::write(&config, release_config()?)?;
+    let config = config.to_string_lossy().into_owned();
+    let bundles = match std::env::consts::OS {
+        "windows" => "nsis",
+        "macos" => "app,dmg",
+        _ => "deb,rpm,appimage",
+    };
+    crate::dev::tauri(
+        root,
+        &["build", "--bundles", bundles, "--config", &config],
+        &[],
+    )?;
+
+    let mut written = Vec::new();
+    for (dir, ext, suffix) in [
+        ("nsis", "exe", "-setup.exe"),
+        ("dmg", "dmg", ".dmg"),
+        ("deb", "deb", ".deb"),
+        ("rpm", "rpm", ".rpm"),
+        ("appimage", "AppImage", ".AppImage"),
+    ] {
+        let Some(file) = newest(&release.join("bundle").join(dir), ext) else {
+            continue;
+        };
+        let out = out_dir.join(format!("{name}{suffix}"));
+        std::fs::copy(&file, &out)?;
+        written.push(out);
+    }
+    if written.is_empty() {
+        return Err("cargo tauri build made no installer".into());
+    }
+
+    if std::env::consts::OS == "windows" {
+        written.push(windows_zip(
+            root, &release, &out_dir, &name, &version, &notices,
+        )?);
+    }
+    for out in &written {
+        let size = std::fs::metadata(out)?.len() as f64 / 1_048_576.0;
+        println!("wrote {} ({size:.1} MB)", out.display());
+    }
+    Ok(())
+}
+
+/// What `cargo tauri build` adds to tauri.conf.json for a release: the
+/// program keeps its name (agentknife-mcp starts it by that name), the MCP
+/// program and the licenses go in, and the installers' settings. Paths are
+/// from crates/ak-app, where tauri.conf.json is.
+fn release_config() -> Result<String> {
+    let extra = "../../target/dist/extra";
+    let config = serde_json::json!({
+        "mainBinaryName": "agentknife",
+        "bundle": {
+            "externalBin": [format!("{extra}/agentknife-mcp")],
+            "resources": {
+                "../../LICENSE-MIT": "LICENSE-MIT",
+                "../../LICENSE-APACHE": "LICENSE-APACHE",
+                format!("{extra}/THIRD-PARTY-NOTICES.txt"): "THIRD-PARTY-NOTICES.txt",
+            },
+            "windows": {
+                "nsis": {
+                    // No administrator needed; nothing outside the user's folders.
+                    "installMode": "currentUser",
+                    "languages": ["English", "TradChinese"],
+                    "displayLanguageSelector": false,
+                },
+            },
+            // Signed ad hoc: Apple silicon runs nothing unsigned.
+            "macOS": { "signingIdentity": "-" },
+        },
+    });
+    Ok(serde_json::to_string_pretty(&config)?)
+}
+
+/// The newest `*.ext` file in `dir`.
+fn newest(dir: &Path, ext: &str) -> Option<PathBuf> {
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|e| e == ext))
+        .max_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok())
+}
+
+/// The Windows zip: unpack anywhere, no installing.
+fn windows_zip(
+    root: &Path,
+    release: &Path,
+    out_dir: &Path,
+    name: &str,
+    version: &str,
+    notices: &str,
+) -> Result<PathBuf> {
+    let exe = std::env::consts::EXE_SUFFIX;
     let mut files: Vec<(String, Vec<u8>, bool)> = Vec::new();
     for program in ["agentknife", "agentknife-mcp"] {
         let file = format!("{program}{exe}");
@@ -34,21 +150,17 @@ pub fn run(root: &Path) -> Result<()> {
     for license in ["LICENSE-MIT", "LICENSE-APACHE"] {
         files.push((license.into(), std::fs::read(root.join(license))?, false));
     }
-    let mut notices = third_party(root, target, NATIVE_ROOTS)?;
-    notices.extend(third_party(root, "wasm32-unknown-unknown", WASM_ROOTS)?);
     files.push((
         "THIRD-PARTY-NOTICES.txt".into(),
-        notices_text(&notices).into_bytes(),
+        notices.as_bytes().to_vec(),
         false,
     ));
     files.push((
         "README.txt".into(),
-        readme(&version, exe).into_bytes(),
+        readme(version, exe).into_bytes(),
         false,
     ));
 
-    let out_dir = root.join("target/dist");
-    std::fs::create_dir_all(&out_dir)?;
     let out = out_dir.join(format!("{name}.zip"));
     let mut zip = zip::ZipWriter::new(std::fs::File::create(&out)?);
     for (file, data, program) in &files {
@@ -59,13 +171,7 @@ pub fn run(root: &Path) -> Result<()> {
         zip.write_all(data)?;
     }
     zip.finish()?;
-    let size = std::fs::metadata(&out)?.len() as f64 / 1_048_576.0;
-    println!(
-        "wrote {} ({size:.1} MB, {} packages in the notices)",
-        out.display(),
-        notices.len()
-    );
-    Ok(())
+    Ok(out)
 }
 
 /// `[workspace.package] version`, which AgentKnife reports as its own.
@@ -100,7 +206,7 @@ struct Package {
 /// Every non-workspace package that `roots` use as a normal dependency on `target`.
 fn third_party(root: &Path, target: &str, roots: &[&str]) -> Result<Vec<Package>> {
     let pinned = Pinned::builtin()?;
-    let tc = Toolchain::new(Toolchain::default_root(), &pinned);
+    let tc = Toolchain::new(crate::toolchain_root(), &pinned);
     let output = Command::new(tc.exe(&tc.cargo_bin(), "cargo"))
         .args([
             "metadata",

@@ -122,7 +122,7 @@ pub fn check_build(root: &Path) -> Result<()> {
     )?;
 
     let pinned = Pinned::builtin()?;
-    let tc = Toolchain::new(Toolchain::default_root(), &pinned);
+    let tc = Toolchain::new(crate::toolchain_root(), &pinned);
     let cargo = tc.exe(&tc.cargo_bin(), "cargo");
     if !cargo.exists() {
         return Err(format!(

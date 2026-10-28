@@ -61,19 +61,28 @@ AI agent 從這一段簡短的需求做出這個介面：
 
 第一段需求只是起點。想法有變的時候，隨時都可以請 AI 修改：路徑搜尋範例裡的縮放按鈕，就是後來用「Add zoom-in and zoom-out buttons」加上去的。
 
-## 在 Windows 上安裝
+## 安裝
 
-macOS / Linux 版之後推出。
+從 [Releases](../../releases/latest) 頁面下載適合你電腦的檔案（`<version>` 是版本號）。AgentKnife 沒有用開發者憑證簽章，所以第一次開啟要多一個步驟，下面有說明。
 
-1. 從 [Releases](../../releases/latest) 頁面下載 `AgentKnife-<version>-windows-x64.zip`（`<version>` 是版本號）。
-2. 解壓縮到你想放的資料夾，`agentknife.exe` 和 `agentknife-mcp.exe` 要放在一起。
-3. 執行 `agentknife.exe`。程式沒有簽章，如果 Windows 跳出「Windows 已保護您的電腦」，請按「其他資訊」，再按「仍要執行」。
+**Windows**（10 或 11，64 位元）
+- `AgentKnife-<version>-windows-x64-setup.exe`：直接執行。只裝給你自己用（不需要系統管理員），開始功能表裡會有 AgentKnife。如果 Windows 跳出「Windows 已保護您的電腦」，請按「其他資訊」，再按「仍要執行」。
+- 或下載 `AgentKnife-<version>-windows-x64.zip`，不用安裝：解壓縮到你想放的資料夾，`agentknife.exe` 和 `agentknife-mcp.exe` 要放在一起，然後執行 `agentknife.exe`。
 
-第一次開啟時，AgentKnife 會請你先連結一個 AI，然後自己準備好需要的工具，其他東西都不用自己動手裝。
+**macOS**（11 以上）
+- Apple 晶片（M1 以後）的 Mac 下載 `AgentKnife-<version>-macos-arm64.dmg`，Intel 的 Mac 下載 `AgentKnife-<version>-macos-x64.dmg`（點左上角蘋果選單 →「關於這台 Mac」可以看是哪一種）。
+- 打開 `.dmg`，把 AgentKnife 拖到「應用程式」。第一次開啟時 macOS 會說無法驗證這個 App：按「完成」，然後打開「系統設定」→「隱私權與安全性」，在「已阻擋 AgentKnife」旁邊按「強制打開」。
+
+**Linux**（64 位元，需要 glibc 2.35 以上和 WebKitGTK 4.1：Ubuntu 22.04、Debian 12、Fedora 36 以後；不支援 RHEL / AlmaLinux / Rocky 9）
+- Ubuntu、Debian：`AgentKnife-<version>-linux-x64.deb`，用 `sudo apt install ./AgentKnife-<version>-linux-x64.deb` 安裝。
+- Fedora、openSUSE：`AgentKnife-<version>-linux-x64.rpm`，用 `sudo dnf install ./AgentKnife-<version>-linux-x64.rpm`（或 `zypper`）安裝。
+- 其他：`AgentKnife-<version>-linux-x64.AppImage`，設成可執行（`chmod +x`）後直接執行。要透過 MCP 讓其他 AI 工具使用的話，請用 `.deb` 或 `.rpm`：AppImage 裡的 `agentknife-mcp` 每次啟動位置都會變。
+
+第一次開啟時，AgentKnife 會請你先連結一個 AI，然後自己準備好需要的工具；要裝給整台電腦用的東西會先問你。其他東西都不用自己動手裝。
 
 ### 會下載哪些東西
 
-下載總量約 2–2.5 GB，大部分是 Visual C++ Build Tools。開第一個專案前約需 7–8 GB 硬碟空間，第一個專案建置完約 10.5–11.5 GB。AgentKnife 本身約 35 MB。每個套件和它的大小（英文）：[What gets downloaded](docs/install-size.md)。
+在 Windows 上，下載總量約 2–2.5 GB，大部分是 Visual C++ Build Tools。開第一個專案前約需 7–8 GB 硬碟空間，第一個專案建置完約 10.5–11.5 GB。AgentKnife 本身約 35 MB。每個套件和它的大小（英文）：[What gets downloaded](docs/install-size.md)。
 
 ## 連結 AI
 
@@ -132,7 +141,7 @@ cargo run -p ak-doctor --example doctor_install
 cargo xtask build
 ```
 
-`doctor_install` 會把 AgentKnife 建置時要用的工具裝到 `%APPDATA%\AgentKnife\toolchain`（跟第一次開啟時裝的是同一套）。`cargo xtask build` 會在 `target\release` 產生 `agentknife.exe` 和 `agentknife-mcp.exe`。`cargo xtask dist` 還會把它們打包成 `target\dist` 裡的 release zip。
+`doctor_install` 會把 AgentKnife 建置時要用的工具裝到 `%APPDATA%\AgentKnife\toolchain`（跟第一次開啟時裝的是同一套）。`cargo xtask build` 會在 `target\release` 產生 `agentknife.exe` 和 `agentknife-mcp.exe`。`cargo xtask dist` 會在 `target\dist` 產生這台電腦的發行檔案：Windows 是安裝程式和 zip，macOS 是 `.dmg`，Linux 是 `.deb`、`.rpm` 和 `.AppImage`。推一個 `v<version>` 的 tag，GitHub Actions 會把三個平台的檔案都做好（`.github/workflows/release.yml`），放進一個草稿 release。
 
 ## 隱私
 

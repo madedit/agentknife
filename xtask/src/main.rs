@@ -72,6 +72,14 @@ fn workspace_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
+/// AgentKnife's toolchain folder: `AK_TOOLCHAIN_ROOT` (the release workflow
+/// keeps one in its cache), or where AgentKnife installs it.
+fn toolchain_root() -> PathBuf {
+    std::env::var_os("AK_TOOLCHAIN_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(ak_doctor::Toolchain::default_root)
+}
+
 fn gen_toolchain() -> Result<()> {
     let root = workspace_root();
     let versions = versions::Versions::load(&root)?;

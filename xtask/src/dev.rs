@@ -59,9 +59,9 @@ pub fn e2e(root: &Path, args: &[String]) -> Result<()> {
 }
 
 /// `agentknife-mcp`, which other AI tools start, next to AgentKnife.
-fn mcp_program(root: &Path, release: bool) -> Result<()> {
+pub(crate) fn mcp_program(root: &Path, release: bool) -> Result<()> {
     let pinned = Pinned::builtin()?;
-    let tc = Toolchain::new(Toolchain::default_root(), &pinned);
+    let tc = Toolchain::new(crate::toolchain_root(), &pinned);
     let mut cmd = Command::new(tc.exe(&tc.cargo_bin(), "cargo"));
     cmd.args(["build", "-p", "ak-mcp", "--bin", "agentknife-mcp"])
         .current_dir(root)
@@ -81,9 +81,9 @@ fn mcp_program(root: &Path, release: bool) -> Result<()> {
     }
 }
 
-fn tauri(root: &Path, command: &[&str], args: &[String]) -> Result<()> {
+pub(crate) fn tauri(root: &Path, command: &[&str], args: &[String]) -> Result<()> {
     let pinned = Pinned::builtin()?;
-    let tc = Toolchain::new(Toolchain::default_root(), &pinned);
+    let tc = Toolchain::new(crate::toolchain_root(), &pinned);
     let tauri = tc.exe(&tc.cargo_bin(), "cargo-tauri");
     if !tauri.exists() {
         return Err(format!(

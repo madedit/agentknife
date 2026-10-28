@@ -1,6 +1,13 @@
 # STATUS
 
 ## Doing
+- P1-APP-003 — coordinator — started 2026-10-28
+  Notes: AgentKnife's installers on GitHub Actions. Owner's decisions (2026-10-28): Windows NSIS `-setup.exe` (current user, English/Traditional Chinese) and the zip; macOS `.dmg` for Apple silicon and Intel (`macos-15-intel`, GitHub's last Intel image, until fall 2027); Linux `.deb`, `.rpm` and `.AppImage` built on Ubuntu 22.04 (glibc 2.35; the owner first asked for AlmaLinux 9, which has no WebKitGTK 4.1, so Tauri 2 cannot build or run there); not signed (macOS ad hoc), the README says how to open them; a tag `v<version>` makes a draft release, a manual run keeps the files as artifacts.
+  - xtask `dist`: notices, agentknife-mcp as the bundler's external binary (`agentknife-mcp-<target>` in target/dist/extra), `cargo tauri build --bundles … --config target/dist/extra/release.conf.json` (`mainBinaryName` agentknife: the MCP program starts it by name; licenses and notices as resources), the results copied to `target/dist/AgentKnife-<version>-<os>-<arch>…`; the Windows zip as before. xtask honours `AK_TOOLCHAIN_ROOT` (the workflow caches the toolchain there).
+  - `.github/workflows/release.yml`: the tag must match Cargo.toml's version; doctor_install, then `cargo xtask dist` on four runners; `gh release create --draft` with every file.
+  - README (en, zh-TW): install for the three systems, opening unsigned apps, the AppImage's changing agentknife-mcp path (MCP: prefer .deb/.rpm).
+  - Windows built here (2026-10-28): `-setup.exe` 9.6 MB (agentknife.exe, agentknife-mcp.exe, licenses, notices; 7-Zip listing) and the zip 13.1 MB. Tauri warns that the identifier `com.agentknife.app` ends with `.app` (macOS bundle extension); not changed, the WebView data folder on Windows is named after it.
+  Left: a first workflow run (macOS, Linux untried), the owner's install check, then a tagged draft release.
 - P1-APP-001 (follow-up) — coordinator — started 2026-10-27
   Notes: preview screenshots (`screenshot_preview`) for AgentKnife's AI and other AI tools. Owner: the platform web view's capture (option A), with `unsafe` allowed in one crate.
   - New crate `ak-capture` (`#![deny(unsafe_code)]`, only `webview2` allows it): WebView2 `CapturePreview` into an in-memory stream (PNG), and `crop` (png crate, safe). Dependencies were already in the lockfile through Tauri (webview2-com, windows, png, base64).
@@ -719,7 +726,7 @@
   - sound: a music player remembers each song's path instead of copying it (owner's decision 2026-10-28, option A); `add_song` checks the file and returns its name, `song_url(path)` reads it where the user keeps it (MP3/WAV only); a song moved or deleted shows on its row with Remove / Add it again; copying only when the user asks.
   - check/backend.rs mirrors `add_song`/`song_url`/`song_type`; check-knowledge builds them.
   - Live check (owner, 2026-10-28, MusicPlayer): an outside MP3 plays without a copy; a moved song is reported and can be added again.
-- P1-APP-001 (follow-up) — (hash in next commit) — AgentKnife remembers its window: maximized or not, and the normal size and place (owner's request).
+- P1-APP-001 (follow-up) — 722814e — AgentKnife remembers its window: maximized or not, and the normal size and place (owner's request).
   - maximized or not, and the normal size and place, in `<data>/AgentKnife/window.json` (`ak_app::window`, no plugin). The window opens hidden and shows once in place; a place no longer on a screen (title bar not grabbable) is not used, maximized still is. While maximizing the window moves before it says it is maximized, so the normal place is read 300 ms after the last move. First live try: maximized was not kept (the maximized bounds were saved as the normal place, then refused as off-screen): fixed.
   - Tests: `window` (a place comes back only where its title bar can be grabbed: unplugged screen, off the top or side, invisible borders at the edge; saved and read back, a broken file ignored).
   - Live check (owner, 2026-10-28): a normal window and a maximized one come back as they were; Restore returns to the normal size and place.
