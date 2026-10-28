@@ -172,14 +172,24 @@ pub fn write_index(root: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Not CodeMirror, in the same map (a page has one): three.js for the 3D model
+/// preview, copied from the knowledge pack by a `copy-dir` link in index.html.
+const SHELL_EXTRA_IMPORTS: &[(&str, &str)] = &[
+    ("three", "./three/three.module.js"),
+    ("three/addons/", "./three/addons/"),
+];
+
 /// The `<script type="importmap">` for the page: importmap.json with every file
-/// under [`SERVED_DIR`].
+/// under [`SERVED_DIR`], and [`SHELL_EXTRA_IMPORTS`].
 fn inline_map(importmap_json: &str) -> Result<String> {
     let map: serde_json::Value = serde_json::from_str(importmap_json)?;
     let mut imports = serde_json::Map::new();
     for (k, v) in map["imports"].as_object().into_iter().flatten() {
         let file = v.as_str().unwrap_or_default().trim_start_matches("./");
         imports.insert(k.clone(), format!("{SERVED_DIR}{file}").into());
+    }
+    for (k, v) in SHELL_EXTRA_IMPORTS {
+        imports.insert((*k).to_owned(), (*v).into());
     }
     let json = serde_json::to_string_pretty(&serde_json::json!({ "imports": imports }))?;
     let body = json.replace('\n', "\n      ");

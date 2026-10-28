@@ -28,12 +28,16 @@
           "@lezer/common": "./codemirror/@lezer/common.mjs",
           "@lezer/highlight": "./codemirror/@lezer/highlight.mjs",
           "@lezer/lr": "./codemirror/@lezer/lr.mjs",
-          "codemirror": "./codemirror/codemirror.mjs"
+          "codemirror": "./codemirror/codemirror.mjs",
+          "three": "./three/three.module.js",
+          "three/addons/": "./three/addons/"
         }
       }
     </script>
     <!-- /codemirror importmap -->
     <link data-trunk rel="copy-dir" href="vendor/codemirror" />
+    <!-- three.js for the 3D model preview: the copy generated apps get. -->
+    <link data-trunk rel="copy-dir" href="../../knowledge/tauri-leptos/libraries/three" />
     <link data-trunk rel="rust" data-bin="ak-shell" data-cargo-features="csr" data-wasm-opt="0" />
     <link data-trunk rel="tailwind-css" href="style/input.css" />
   </head>

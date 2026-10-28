@@ -844,7 +844,76 @@ pub fn size_text(bytes: u64) -> String {
     }
 }
 
-/// A picture, sound or font shown as itself (3D models: a note for now).
+/// Model files the preview can show (others are parts of one: `.bin`, `.mtl`).
+const SHOWN_MODELS: &[&str] = &["glb", "gltf", "obj", "fbx"];
+
+/// The extension of a URL's file, lowercase (`…/plane.GLB?v=1` → `glb`).
+pub fn url_extension(url: &str) -> String {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.rsplit_once('.')
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+/// What the model view says: `loading 40`, `ready` or `failed: …` from the JS.
+fn model_state_text(state: &str) -> String {
+    if let Some(p) = state.strip_prefix("loading ") {
+        t_with("files-model-loading", [("percent", p.to_owned())])()
+    } else if let Some(e) = state.strip_prefix("failed: ") {
+        t_with("files-model-failed", [("error", e.to_owned())])()
+    } else {
+        t("files-model-ready")()
+    }
+}
+
+/// A 3D model, turning; drag to turn it, scroll to zoom.
+#[component]
+fn ModelPreview(url: String, size: String) -> impl IntoView {
+    let state = RwSignal::new("loading 0".to_owned());
+    let canvas = NodeRef::<leptos::html::Canvas>::new();
+    #[cfg(target_arch = "wasm32")]
+    {
+        let view = StoredValue::new_local(
+            None::<(
+                crate::interop::ModelView,
+                wasm_bindgen::closure::Closure<dyn FnMut(String)>,
+            )>,
+        );
+        let ext = url_extension(&url);
+        Effect::new(move |_| {
+            let Some(el) = canvas.get() else {
+                return;
+            };
+            if view.with_value(Option::is_some) {
+                return;
+            }
+            let on_state =
+                wasm_bindgen::closure::Closure::<dyn FnMut(String)>::new(move |s: String| {
+                    state.set(s)
+                });
+            let v = crate::interop::ModelView::new(&el, &url, &ext, &on_state);
+            view.set_value(Some((v, on_state)));
+        });
+        on_cleanup(move || {
+            if let Some((v, _)) = view.try_update_value(Option::take).flatten() {
+                v.dispose();
+            }
+        });
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = url;
+    view! {
+        <div data-media="model" class="flex min-h-0 flex-1 flex-col">
+            <canvas node_ref=canvas class="min-h-0 w-full flex-1 cursor-grab touch-none"></canvas>
+            <p data-model-state=move || state.get() class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
+                {move || model_state_text(&state.get())}" · "{size}
+            </p>
+        </div>
+    }
+}
+
+/// A picture, sound, font or 3D model shown as itself.
 #[component]
 fn MediaView(media: Media) -> impl IntoView {
     let size = size_text(media.size);
@@ -906,9 +975,12 @@ fn MediaView(media: Media) -> impl IntoView {
             }
             .into_any()
         }
+        AssetKind::Model if SHOWN_MODELS.contains(&url_extension(&url).as_str()) => {
+            view! { <ModelPreview url size /> }.into_any()
+        }
         AssetKind::Model | AssetKind::Other => view! {
-            <div data-media="model" class="p-6 text-sm text-gray-500 dark:text-gray-400">
-                <p>{t("files-model-later")}</p>
+            <div data-media="model-part" class="p-6 text-sm text-gray-500 dark:text-gray-400">
+                <p>{t("files-model-part")}</p>
                 <p class="mt-2 text-xs">{size}</p>
             </div>
         }

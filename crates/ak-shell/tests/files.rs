@@ -196,7 +196,21 @@ fn the_code_pane_shows_the_file_and_its_state() {
         "{font}"
     );
     let model = media(AssetKind::Model, "assets/models/plane.glb");
-    assert!(model.contains(r#"data-media="model""#) && model.contains("3D model"));
+    assert!(
+        model.contains(r#"data-media="model""#) && model.contains("<canvas"),
+        "{model}"
+    );
+    assert!(model.contains("Loading the model… 0%"), "{model}");
+    let part = media(AssetKind::Model, "assets/models/plane.bin");
+    assert!(part.contains(r#"data-media="model-part""#) && !part.contains("<canvas"));
+    assert_eq!(
+        ak_shell::files::url_extension("http://x/a/Plane.GLB?v=1"),
+        "glb"
+    );
+    assert_eq!(
+        ak_shell::files::url_extension("akfile://localhost/t/a/README"),
+        ""
+    );
 }
 
 #[test]

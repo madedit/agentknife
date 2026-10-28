@@ -9,11 +9,12 @@ work here. The Rust side is ordinary Leptos: read topics `leptos-components` and
 ## 1. Add the library
 Call `add_library` with `"three"`. It copies into `vendor/three/`:
 `three.module.js`, `three.core.js` (three.js itself),
-`addons/controls/OrbitControls.js` (drag to turn the view) and `LICENSE` (keep it).
-Other three.js addons are not available: **no model loaders** (`GLTFLoader`,
-`OBJLoader`, `FBXLoader`), so `.glb`/`.gltf`/`.obj`/`.fbx` files cannot be used,
-and no effects. Build every vehicle, building and prop from three.js geometries
-grouped with `THREE.Group` ("Shapes and looks" below).
+`addons/controls/OrbitControls.js` (drag to turn the view), the model loaders in
+`addons/loaders/` (with what they need in `addons/utils/`, `addons/libs/`,
+`addons/curves/`) and `LICENSE` (keep it). Other three.js addons (effects,
+post-processing) are not available. Build vehicles, buildings and props from
+three.js geometries grouped with `THREE.Group` ("Shapes and looks" below), or use
+a model the user added ("Models from files" below).
 
 ## 2. index.html
 Add the import map and the `copy-dir` link right after `<title>`, before the
@@ -177,7 +178,9 @@ export class Game {
     this.scene.traverse((obj) => {
       obj.geometry?.dispose();
       for (const m of [obj.material].flat()) {
-        m?.map?.dispose();
+        for (const value of Object.values(m ?? {})) {
+          if (value?.isTexture) value.dispose();
+        }
         m?.dispose();
       }
     });
@@ -452,6 +455,95 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
 - **Tuning**: put the numbers that set the difficulty at the top of `game.js` as
   constants (`MAX_ENEMIES`, `BITE_DAMAGE`, `BITE_COOLDOWN_S`, `ENEMY_SPEED`), so
   they are easy to find and change after a test.
+
+## Models from files (glTF, OBJ, FBX)
+`add_library("three")` also copies three.js's model loaders: `GLTFLoader` for
+`.glb`/`.gltf` (the best choice: shapes, materials and animations in one file),
+`OBJLoader` with `MTLLoader` for `.obj` + `.mtl`, and `FBXLoader` for `.fbx`.
+- **Models come from the user**, never from the internet. They add them with "Add
+  files…", into `assets/models/`. A `.gltf` with its `.bin` and pictures, or an
+  `.obj` with its `.mtl` and pictures, needs all of them, side by side as they
+  were exported; ask for the missing ones by name. Ask where a model comes from:
+  someone else's model usually needs its author and license kept with the app;
+  save the text the user gives you next to it as `assets/models/CREDITS.txt`.
+- **Not supported**: models compressed with Draco or meshopt, and KTX2 textures.
+  Loading then fails with an error naming `KHR_draco_mesh_compression`,
+  `EXT_meshopt_compression` or `KHR_texture_basisu`. Ask the user for an export
+  without compression (Blender: File → Export → glTF 2.0, Compression off).
+- **Keep models small** (a few MB): the preview loads everything again after each
+  change. A model of 50 MB makes every change slow; ask for a lighter one.
+- **Load it in the background, and keep a stand-in.** The game runs at once with
+  a simple shape in the model's place; the model replaces it when it arrives.
+  Report the state in `state_json()` and on screen (a callback, like `onScore`):
+  "Loading the model… 40%", or why it failed (the game goes on with the stand-in).
+  Write the file name as the files pane shows it, through `encodeURI` (spaces and
+  non-English names).
+
+```js
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+// In the constructor. onModel is a callback from Rust, like onScore.
+this.modelState = "loading";
+this.mixer = null;
+new GLTFLoader().load(
+  encodeURI("./assets/models/plane.glb"),
+  (gltf) => {
+    if (this.disposed) return; // the screen went away while loading
+    const model = gltf.scene;
+    fitTo(model, 3); // 3 units across, centered where the stand-in was
+    model.name = "plane"; // its parts keep their own names (pick shows them)
+    this.plane.remove(this.standIn); // the Group the game moves
+    this.plane.add(model);
+    if (gltf.animations.length > 0) {
+      this.mixer = new THREE.AnimationMixer(model);
+      this.mixer.clipAction(gltf.animations[0]).play();
+    }
+    this.modelState = "ready";
+    this.onModel("ready");
+  },
+  (e) => {
+    if (e.total) this.onModel(`loading ${Math.round((100 * e.loaded) / e.total)}`);
+  },
+  (err) => {
+    this.modelState = "failed";
+    this.onModel(`failed: ${err?.message ?? err}`);
+  },
+);
+// In frame(dt): this.mixer?.update(dt);
+// In state_json(): model: this.modelState,
+
+// Scales `object` so its longest side is `size`, centered on its parent's origin.
+function fitTo(object, size) {
+  const box = new THREE.Box3().setFromObject(object);
+  const longest = Math.max(...box.getSize(new THREE.Vector3()).toArray()) || 1;
+  object.scale.multiplyScalar(size / longest);
+  box.setFromObject(object);
+  object.position.sub(box.getCenter(new THREE.Vector3()));
+}
+```
+- **Which way it faces**: models are exported facing anywhere. Look at the
+  screenshot (or `pick` its nose), then turn the model inside its group once
+  (`model.rotation.y = Math.PI`), so the group still moves along -Z.
+- **OBJ with MTL**: load the materials first; the result is a `Group` (not
+  `.scene`):
+  ```js
+  import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
+  import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+
+  const dir = encodeURI("./assets/models/");
+  new MTLLoader().setPath(dir).load("chair.mtl", (materials) => {
+    materials.preload();
+    new OBJLoader().setMaterials(materials).setPath(dir).load("chair.obj", onLoad, onProgress, onError);
+  }, undefined, onError);
+  ```
+- **FBX**: `new FBXLoader().load(url, (group) => …)`; its animations are in
+  `group.animations`. FBX files are often in centimeters: `fitTo` takes care of it.
+- **Animations**: `gltf.animations` lists the clips by `name` (walk, run, idle).
+  Play one with `mixer.clipAction(clip).play()`; to switch, `fadeOut` the old
+  action and `reset().fadeIn(0.3).play()` the new one.
+- **Freeing it**: `dispose()` sets `this.disposed = true`, calls
+  `this.mixer?.stopAllAction()` and frees every texture of every material (models
+  bring normal and roughness maps, not only `map`), as in the `dispose()` above.
 
 ## Shooters and enemies
 - **Crosshair**: a Leptos element over the canvas, not a 3D object: wrap the canvas

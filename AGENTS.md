@@ -68,7 +68,7 @@ To upgrade, edit `versions.toml` and update everything that follows from it **in
 
 ### JS libraries for generated apps
 
-- Apps get JS only through the knowledge pack's `[[library]]` entries (id, version, summary, `dir` under the pack, `target` in the project). Today: three.js (`three`) for 3D, with `addons/controls/OrbitControls.js`.
+- Apps get JS only through the knowledge pack's `[[library]]` entries (id, version, summary, `dir` under the pack, `target` in the project). Today: three.js (`three`) for 3D, with `addons/controls/OrbitControls.js` and the model loaders (`addons/loaders/` GLTF, OBJ, MTL, FBX, and the modules they import; `cargo xtask ci` checks every import is vendored). The shell's own 3D model preview uses the same copy (index.html `copy-dir`, `three` in its import map).
 - `cargo xtask vendor-libs` takes each library's files from its npm tarball (checked against the registry's sha512 `integrity`) into `knowledge/<stack>/libraries/<id>/` and writes `SHA256SUMS`. Versions live in `versions.toml` `[vendor.libraries]`; the file list in `xtask/src/libs.rs`.
 - CI (step `libs`) checks the hashes, a version mark inside the files, and that `pack.toml` agrees with `versions.toml`. It downloads nothing. `.gitattributes` keeps the files byte-for-byte.
 - ak-preview build.rs embeds the files (`KnowledgePack::libraries`, without `SHA256SUMS`). The agent's `add_library` tool copies them into `<target>/` (unchanged files untouched, changed ones restored); the policy treats it like any file change. It is registered only when the pack has libraries.

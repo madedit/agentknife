@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.22"
+version = "0.2.23"
 
 [versions]
 tauri = "2.12.4"
@@ -15,7 +15,7 @@ tailwind-cli = "4.3.3"
 [[topic]]
 id = "overview"
 title = "Project layout and workflow"
-summary = "Where the screens, the backend and the styles live; the user's own files in assets/ (never downloaded; no 3D model loading yet); how the preview runs; rules for every change; crates that are not here and what to use instead."
+summary = "Where the screens, the backend and the styles live; the user's own files in assets/ (never downloaded); how the preview runs; rules for every change; crates that are not here and what to use instead."
 file = "overview.md"
 
 [[topic]]
@@ -153,7 +153,7 @@ file = "example-todo.md"
 [[topic]]
 id = "three-d"
 title = "3D games and scenes (three.js)"
-summary = "3D graphics with three.js on a <canvas>: add_library, index.html, a game.js module called from Rust (matching names), state for dom_summary, planning game states, input (preventDefault for every game key), the view (OrbitControls zoom, buttons that turn the view), board games (busy state, playable boards, a hint to test with), the canvas height, cleanup, shooters (aiming, fast bullets, enemies), testing a running game."
+summary = "3D graphics with three.js on a <canvas>: add_library, index.html, a game.js module called from Rust (matching names), state for dom_summary, planning game states, input (preventDefault for every game key), the view (OrbitControls zoom, buttons that turn the view), board games (busy state, playable boards, a hint to test with), the canvas height, cleanup, models from the user's files (glTF, OBJ, FBX: loading with a stand-in, size, animations), shooters (aiming, fast bullets, enemies), testing a running game."
 file = "three-d.md"
 
 [[topic]]
@@ -167,7 +167,7 @@ file = "troubleshooting.md"
 [[library]]
 id = "three"
 version = "0.186.1"
-summary = "three.js 3D graphics (WebGL) for games and 3D scenes. Read topic `three-d` for the setup."
+summary = "three.js 3D graphics (WebGL) for games and 3D scenes, with loaders for the user's glTF, OBJ and FBX models. Read topic `three-d` for the setup."
 setup = """
 1. index.html: right after <title>, before the other trunk links (keep those as they are):
     <script type="importmap">
@@ -184,7 +184,7 @@ setup = """
     serde_json = "1.0.154"
     web-sys = { version = "0.3.106", features = ["HtmlCanvasElement"] }
    (if web-sys is there already, add "HtmlCanvasElement" to its features)
-3. Read topic three-d before writing src/game.js.
+3. Read topic three-d before writing src/game.js ("Models from files" for a model the user added).
 """
 dir = "libraries/three"
 target = "vendor/three"

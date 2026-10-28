@@ -396,6 +396,15 @@ mod tests {
             [
                 "LICENSE",
                 "addons/controls/OrbitControls.js",
+                "addons/curves/NURBSCurve.js",
+                "addons/curves/NURBSUtils.js",
+                "addons/libs/fflate.module.js",
+                "addons/loaders/FBXLoader.js",
+                "addons/loaders/GLTFLoader.js",
+                "addons/loaders/MTLLoader.js",
+                "addons/loaders/OBJLoader.js",
+                "addons/utils/BufferGeometryUtils.js",
+                "addons/utils/SkeletonUtils.js",
                 "three.core.js",
                 "three.module.js"
             ]
@@ -406,6 +415,23 @@ mod tests {
             assert!(topic.contains(&format!("./{}/{p}", three.target)), "{p}");
         }
         assert!(three.summary.contains("`three-d`"));
+        // What add_library says to paste is the topic's import map, line for line.
+        let import_map = |text: &str| -> Vec<String> {
+            text.lines()
+                .map(str::trim)
+                .skip_while(|l| !l.starts_with("<script type=\"importmap\">"))
+                .take_while(|l| !l.starts_with("<link data-trunk rel=\"copy-dir\" href=\"vendor\""))
+                .map(str::to_owned)
+                .collect()
+        };
+        let map = import_map(topic);
+        assert!(map.len() > 5, "{map:?}");
+        assert_eq!(import_map(three.setup), map);
+        // The loaders the topic names are shipped.
+        for loader in ["GLTFLoader", "OBJLoader", "MTLLoader", "FBXLoader"] {
+            assert!(topic.contains(loader), "{loader}");
+            assert!(paths.contains(&format!("addons/loaders/{loader}.js").as_str()));
+        }
     }
 
     #[test]

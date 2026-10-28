@@ -175,3 +175,20 @@ fn doc_text(state: &JsValue) -> Result<String, JsValue> {
     let doc = get(state, "doc")?;
     Ok(call(&doc, "toString", &[])?.as_string().unwrap_or_default())
 }
+
+// The 3D model preview (js/model-view.js, three.js through the import map).
+#[wasm_bindgen(module = "/js/model-view.js")]
+extern "C" {
+    pub type ModelView;
+
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        canvas: &web_sys::HtmlCanvasElement,
+        url: &str,
+        ext: &str,
+        on_state: &Closure<dyn FnMut(String)>,
+    ) -> ModelView;
+
+    #[wasm_bindgen(method)]
+    pub fn dispose(this: &ModelView);
+}

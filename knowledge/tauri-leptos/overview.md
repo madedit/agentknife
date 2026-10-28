@@ -28,11 +28,8 @@ assets/               the user's own files, once they add some: images/, models/
   `<link data-trunk rel="copy-dir" href="assets" />` into `index.html`, so the app
   loads them as `./assets/images/cat.png`, in the preview and once installed. You
   hear of each added file with the user's next message.
-- 3D models (`.glb`, `.gltf`, `.obj`, `.fbx`) in `assets/models/` cannot be loaded
-  yet: three.js's model loaders are not part of AgentKnife (topic `three-d`). Leave
-  the file there, build a stand-in from three.js shapes, and tell the user the
-  model itself cannot be shown yet. Pictures (also as textures), sounds and fonts
-  work.
+- 3D models (`.glb`, `.gltf`, `.obj`, `.fbx`) in `assets/models/` are loaded with
+  three.js's loaders: topic `three-d`, "Models from files".
 - Never download pictures, sounds, fonts or 3D models from the internet, and do not
   rename or move the user's files. When the app needs one that is not there, ask
   the user to add it with "Add files…"; until then draw it (a colored box, an
