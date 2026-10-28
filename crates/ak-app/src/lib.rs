@@ -19,6 +19,7 @@ pub mod settings;
 pub mod state;
 pub mod tools;
 pub mod turn;
+pub mod window;
 pub mod workspace;
 
 use ak_types::i18n::Locale;
@@ -155,6 +156,7 @@ pub fn with_commands<R: Runtime>(builder: Builder<R>, state: state::AppState) ->
             home::open_in_files,
         ])
         .setup(|app| {
+            window::restore(app.handle());
             // Listens for other AI tools when the setting is on.
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move { mcp::apply(&handle).await });

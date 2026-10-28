@@ -706,7 +706,7 @@
     - ak-ui: every part has a fixed marker class (`ak-button`, `ak-button-primary`…, `ak-card`, `ak-list-row`, `ak-toggle-switch`, `ak-nav-tab`, `ak-dialog`, `ak-toast-error`…); a plain rule in style/input.css (unlayered, so it wins over Tailwind's utility layer) restyles every one. Knowledge ak-ui "Restyling every one at once" (marker table, `@apply` examples, never ak/ not even by command), tailwind and overview point there.
     - The theme-test project's `ak/ak-ui/src/button.rs` was restored from the template (the 0.2.26 kit it had).
   - Live check (owner, 2026-10-28): restyling every button through the marker classes, and refusals for ak/ (file tools and commands), work.
-- P1-APP-001 (follow-up) — (hash in next commit) — kit updates: a project's `ak/` is offered for replacement when it differs from this AgentKnife's (was Blocked: no template-update mechanism).
+- P1-APP-001 (follow-up) — 24dc822 — kit updates: a project's `ak/` is offered for replacement when it differs from this AgentKnife's (was Blocked: no template-update mechanism).
   - Owner's decisions (2026-10-28): only `ak/`, replaced whole; offered when a project opens, updated when the user presses the button; a kit edited before the AI's tools refused it is replaced too, and the AI is told.
   - ak-types: `Template::kit` (`Some("ak")` for tauri-leptos) and `Template::kit_files`; `cmd::UPDATE_KIT` → `KitChanges { files }`; `OpenedProject::kit_update`.
   - ak-project: `Project::kit_changes` (kit files that differ, are missing or extra; nothing when the project has no `ak/` or another stack) and `Project::update_kit` (writes AgentKnife's files, removes the others, then emptied folders).
@@ -715,7 +715,11 @@
   - Not done: the other template files (Trunk.toml, index.html, config) are not updated; a kit whose crates need versions the project's Cargo.lock lacks would need the network (not the case so far).
   - The tooltip test caught the done card's OK button without a title (`kit-updated-ok-tip`).
   - Live check (owner, 2026-10-28): the card shows on an older project, Not now asks again next time, Update replaces `ak/` with versions before and after, and the AI hears of it.
-- P1-KNOW-003 (follow-up) — (hash in next commit) — music player songs remembered by path, not copied; knowledge pack 0.2.28.
+- P1-KNOW-003 (follow-up) — 24dc822 — music player songs remembered by path, not copied; knowledge pack 0.2.28.
   - sound: a music player remembers each song's path instead of copying it (owner's decision 2026-10-28, option A); `add_song` checks the file and returns its name, `song_url(path)` reads it where the user keeps it (MP3/WAV only); a song moved or deleted shows on its row with Remove / Add it again; copying only when the user asks.
   - check/backend.rs mirrors `add_song`/`song_url`/`song_type`; check-knowledge builds them.
   - Live check (owner, 2026-10-28, MusicPlayer): an outside MP3 plays without a copy; a moved song is reported and can be added again.
+- P1-APP-001 (follow-up) — (hash in next commit) — AgentKnife remembers its window: maximized or not, and the normal size and place (owner's request).
+  - maximized or not, and the normal size and place, in `<data>/AgentKnife/window.json` (`ak_app::window`, no plugin). The window opens hidden and shows once in place; a place no longer on a screen (title bar not grabbable) is not used, maximized still is. While maximizing the window moves before it says it is maximized, so the normal place is read 300 ms after the last move. First live try: maximized was not kept (the maximized bounds were saved as the normal place, then refused as off-screen): fixed.
+  - Tests: `window` (a place comes back only where its title bar can be grabbed: unplugged screen, off the top or side, invisible borders at the edge; saved and read back, a broken file ignored).
+  - Live check (owner, 2026-10-28): a normal window and a maximized one come back as they were; Restore returns to the normal size and place.
