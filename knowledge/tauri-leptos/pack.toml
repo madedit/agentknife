@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.21"
+version = "0.2.22"
 
 [versions]
 tauri = "2.12.4"
@@ -15,7 +15,7 @@ tailwind-cli = "4.3.3"
 [[topic]]
 id = "overview"
 title = "Project layout and workflow"
-summary = "Where the screens, the backend and the styles live; the user's own files in assets/ (never downloaded); how the preview runs; rules for every change."
+summary = "Where the screens, the backend and the styles live; the user's own files in assets/ (never downloaded; no 3D model loading yet); how the preview runs; rules for every change; crates that are not here and what to use instead."
 file = "overview.md"
 
 [[topic]]
@@ -168,5 +168,23 @@ file = "troubleshooting.md"
 id = "three"
 version = "0.186.1"
 summary = "three.js 3D graphics (WebGL) for games and 3D scenes. Read topic `three-d` for the setup."
+setup = """
+1. index.html: right after <title>, before the other trunk links (keep those as they are):
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./vendor/three/three.module.js",
+          "three/addons/": "./vendor/three/addons/"
+        }
+      }
+    </script>
+    <link data-trunk rel="copy-dir" href="vendor" />
+   Keep the "/" at the end of both "three/addons/" paths: without it the page stays blank while the build says ok.
+2. Cargo.toml (screens), [dependencies]:
+    serde_json = "1.0.154"
+    web-sys = { version = "0.3.106", features = ["HtmlCanvasElement"] }
+   (if web-sys is there already, add "HtmlCanvasElement" to its features)
+3. Read topic three-d before writing src/game.js.
+"""
 dir = "libraries/three"
 target = "vendor/three"

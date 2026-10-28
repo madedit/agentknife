@@ -28,6 +28,11 @@ assets/               the user's own files, once they add some: images/, models/
   `<link data-trunk rel="copy-dir" href="assets" />` into `index.html`, so the app
   loads them as `./assets/images/cat.png`, in the preview and once installed. You
   hear of each added file with the user's next message.
+- 3D models (`.glb`, `.gltf`, `.obj`, `.fbx`) in `assets/models/` cannot be loaded
+  yet: three.js's model loaders are not part of AgentKnife (topic `three-d`). Leave
+  the file there, build a stand-in from three.js shapes, and tell the user the
+  model itself cannot be shown yet. Pictures (also as textures), sounds and fonts
+  work.
 - Never download pictures, sounds, fonts or 3D models from the internet, and do not
   rename or move the user's files. When the app needs one that is not there, ask
   the user to add it with "Add files…"; until then draw it (a colored box, an
@@ -72,9 +77,11 @@ assets/               the user's own files, once they add some: images/, models/
   the first start is saved too, so the file matches what the user sees.
 - Splitting code: put screens in `src/` modules (`mod todos;` in `src/main.rs` and
   `src/todos.rs`) and backend code in `src-tauri/src/` modules.
-- Do not change `[features]`, the `ak/` folder, `index.html`'s trunk links (adding
-  what topic `three-d` says is fine; keep the `assets` link) or
+- Do not change `[features]`, the `ak/` folder, `index.html`'s trunk links or
   `tauri.conf.json`'s `build` section: the preview and the installer depend on them.
+  Two additions to `index.html` are expected, never removed: the import map and
+  the `vendor` copy-dir link for three.js (topic `three-d`, `add_library` says
+  them), and the `assets` copy-dir link AgentKnife adds with the user's files.
 - New crates: only when really needed, with a fixed version. Prefer the versions the
   project already has in `Cargo.lock` (already downloaded, known to fit):
   `serde_json = "1.0.154"`, `js-sys = "0.3.106"`, `web-sys = "0.3.106"` (add the
@@ -85,6 +92,12 @@ assets/               the user's own files, once they add some: images/, models/
   folder, or `search_files` for `^name = "rfd"` in it. A folder such as
   `rfd-0.16.1` means that version is downloaded and builds without internet.
   Crates must work in WebAssembly if the screens use them.
+- Crates people often reach for that are not here, and what to use instead:
+  - `gloo-timers`, or `tokio` in the screens: `set_timeout` and
+    `set_interval_with_handle` from `leptos::prelude` (topic `leptos-reactivity`).
+  - `serde_wasm_bindgen`: send one JSON string and parse it with `serde_json`
+    (topic `three-d`).
+  - `rand` in the screens: `js_sys::Math::random()` (a number from 0 to 1).
 
 ## The window
 `tauri.conf.json` → `app.windows[0]`: `title`, `width`, `height`, `minWidth`,

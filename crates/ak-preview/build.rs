@@ -130,10 +130,13 @@ fn knowledge(dir: &Path, out_dir: &Path) {
         files.sort();
         let _ = writeln!(
             code,
-            "    ak_types::stack::Library {{ id: {:?}, version: {:?}, summary: {:?}, target: {:?}, files: &[",
+            "    ak_types::stack::Library {{ id: {:?}, version: {:?}, summary: {:?}, setup: {:?}, target: {:?}, files: &[",
             field(lib, "id"),
             field(lib, "version"),
             field(lib, "summary"),
+            lib.get("setup")
+                .and_then(|s| s.as_str())
+                .unwrap_or_default(),
             field(lib, "target"),
         );
         for file in files {

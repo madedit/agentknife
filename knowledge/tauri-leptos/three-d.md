@@ -301,7 +301,10 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
   (positions, direction, state, score, lives) and keep it current: it is the only
   way to check the game, since `dom_summary` cannot see inside the canvas. Add
   what a test needs to aim: what the player aims at now (`aim_on`) and the nearest
-  target's distance and angle (`nearest`).
+  target's distance and angle (`nearest`). For a game where the player flies or
+  drives, something like:
+  `{"state": "playing", "frame": 1840, "score": 3, "player": {"x": 0, "y": 20, "z": -100}, "speed": 36, "nearest": {"name": "ring-4", "dist": 45}, "last_event": "ring", "stunt": null}`
+  (`frame` shows that it moves, `last_event` what just happened).
 - **More data to Rust**: one callback per kind of news (`onScore`, `onGameOver`).
   Each is a `Closure` passed to the constructor and kept in the `StoredValue`.
   `Closure` cannot be copied and needs no `Rc`: create them all, pass references

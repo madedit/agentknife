@@ -20,6 +20,12 @@
     - Several values from JS to Rust: an example of one JSON string parsed with `serde_json` (`Closure<dyn FnMut(String)>`), and that `serde_wasm_bindgen` is not in the project (the report said it cannot be had; it only was not added).
     - No model loaders, said plainly at the top; a plane built from geometries in a `Group` (nose toward -Z, the propeller turning, `lookAt` + `rotateY(PI)`); which way Torus/Ring/Plane face and `setFromUnitVectors` to turn a ring onto a path; a HUD overlay with `pointer-events-none` and `-auto` on its clickable parts; sound with the Web Audio API, started on the first input.
     - MCP INSTRUCTIONS: AgentKnife's tool paths and `run_command` are the project's, while a client's own shell may start in the projects folder (the report blamed `run_command`, which runs in the project).
+  - Fourth report (owner, Antigravity, the same 3D flight game written up), knowledge pack 0.2.22:
+    - overview: 3D models in `assets/models/` cannot be loaded yet (no loaders until P1-KNOW-002): keep the file, build a stand-in, tell the user; the index.html rule names the two expected additions (three.js's import map and `vendor` link, the `assets` link); crates that are not here and what to use instead (`gloo-timers` → `set_timeout`/`set_interval_with_handle`, `serde_wasm_bindgen` → a JSON string, `rand` in the screens → `js_sys::Math::random()`).
+    - `add_library` ends with the library's `setup` (pack.toml, new `Library::setup`): for three the exact import map and copy-dir link (with the trailing `/` that, missing, leaves the page blank while the build says ok) and the Cargo.toml lines.
+    - three-d: an example `state_json()` for a game where the player flies or drives.
+    - MCP INSTRUCTIONS: in the client's own shell use the absolute folder `status` names.
+    - Not changed: injecting the import map into index.html automatically (the setup text is exact instead); MCP tools lost after the client's own server restart (the client's side: it re-lists tools on reconnect).
   - Left: the live check on Windows; macOS (WKWebView `takeSnapshot`) and Linux (WebKitGTK snapshot) are not written, so the tool is not offered there. The selection outline AgentKnife draws over the page shows in screenshots.
 ## Blocked
 - P1-MCP-001 (follow-up) — needs: P1-APP-003 — installers must ship `agentknife-mcp` next to AgentKnife (Tauri `externalBin`); `cargo xtask build` already puts it in target/release.

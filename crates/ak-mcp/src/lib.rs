@@ -31,7 +31,7 @@ and restarts the app's background part when its code changes. `list_files` and \
 `search_files` skip build output (`target/`) and `.git`; a shell listing of the \
 project does not, and is huge. Paths in these tools (and `run_command`'s folder) \
 are the open project's; your own shell may start in the projects folder, one \
-level up (`status` names the project's folder).
+level up: there, use the absolute folder `status` names, never a relative path.
 - Start with `status`. If no project is open, use `list_projects` and `open_project`, \
 or `new_project`. `check_tools` checks (and, once the user agrees, installs) what \
 building needs.

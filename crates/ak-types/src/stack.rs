@@ -184,6 +184,8 @@ pub struct Library {
     pub version: &'static str,
     /// One line: what it is for and which topic explains its use.
     pub summary: &'static str,
+    /// What to do next, said after adding it (exact snippets); may be empty.
+    pub setup: &'static str,
     /// Project-relative folder the files go to.
     pub target: &'static str,
     /// Paths relative to `target`.

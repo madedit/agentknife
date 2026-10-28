@@ -95,12 +95,17 @@ impl Tool for AddLibrary {
                 Ok(ToolOutput {
                     touched,
                     ..ToolOutput::text(format!(
-                        "{} {} is in {}/ ({}). {}",
+                        "{} {} is in {}/ ({}). {}{}",
                         lib.id,
                         lib.version,
                         lib.target,
                         files.join(", "),
-                        lib.summary
+                        lib.summary,
+                        if lib.setup.is_empty() {
+                            String::new()
+                        } else {
+                            format!("\n\nNext:\n{}", lib.setup.trim_end())
+                        }
                     ))
                 })
             };
@@ -119,6 +124,7 @@ mod tests {
         id: "three",
         version: "0.1.0",
         summary: "3D. Read topic `three-d`.",
+        setup: "Add the import map.",
         target: "vendor/three",
         files: &[
             TemplateFile {
@@ -157,6 +163,13 @@ mod tests {
         assert_eq!(
             out.touched,
             ["vendor/three/three.module.js", "vendor/three/addons/x.js"]
+        );
+        assert!(
+            matches!(
+                &out.content[0],
+                ak_types::chat::ContentPart::Text { text } if text.ends_with("\n\nNext:\nAdd the import map.")
+            ),
+            "{out:?}"
         );
         let added = dir.path().join("vendor/three/addons/x.js");
         assert_eq!(std::fs::read(&added).unwrap(), b"import 'three'");
