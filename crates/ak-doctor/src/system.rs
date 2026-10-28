@@ -217,26 +217,27 @@ pub fn parse_os_release(text: &str) -> Option<Distro> {
 }
 
 /// Everything Tauri needs, in one command (from the Tauri prerequisites page,
-/// plus pkg-config and the `-dev` packages AgentKnife's check looks for).
+/// plus pkg-config, the `-dev` packages AgentKnife's check looks for, and
+/// GStreamer's plugins for sound).
 pub fn linux_command(distro: Distro) -> &'static str {
     match distro {
         Distro::Debian => {
-            "sudo apt update && sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev pkg-config"
+            "sudo apt update && sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev pkg-config gstreamer1.0-plugins-base gstreamer1.0-plugins-good"
         }
         Distro::Fedora => {
-            "sudo dnf install -y webkit2gtk4.1-devel openssl-devel curl wget file libappindicator-gtk3-devel librsvg2-devel libxdo-devel pkgconf-pkg-config && sudo dnf group install -y c-development"
+            "sudo dnf install -y webkit2gtk4.1-devel openssl-devel curl wget file libappindicator-gtk3-devel librsvg2-devel libxdo-devel pkgconf-pkg-config gstreamer1-plugins-base gstreamer1-plugins-good && sudo dnf group install -y c-development"
         }
         Distro::Arch => {
-            "sudo pacman -Syu --needed webkit2gtk-4.1 base-devel curl wget file openssl appmenu-gtk-module libappindicator-gtk3 librsvg xdotool"
+            "sudo pacman -Syu --needed webkit2gtk-4.1 base-devel curl wget file openssl appmenu-gtk-module libappindicator-gtk3 librsvg xdotool gst-plugins-base gst-plugins-good"
         }
         Distro::OpenSuse => {
-            "sudo zypper in -y webkit2gtk3-devel libopenssl-devel curl wget file libappindicator3-devel librsvg-devel && sudo zypper in -y -t pattern devel_basis"
+            "sudo zypper in -y webkit2gtk3-devel libopenssl-devel curl wget file libappindicator3-devel librsvg-devel gstreamer-plugins-base gstreamer-plugins-good && sudo zypper in -y -t pattern devel_basis"
         }
         Distro::Alpine => {
-            "sudo apk add build-base webkit2gtk-4.1-dev curl wget file openssl libayatana-appindicator-dev librsvg-dev pkgconf"
+            "sudo apk add build-base webkit2gtk-4.1-dev curl wget file openssl libayatana-appindicator-dev librsvg-dev pkgconf gst-plugins-base gst-plugins-good"
         }
         Distro::Gentoo => {
-            "sudo emerge --ask net-libs/webkit-gtk:4.1 dev-libs/libayatana-appindicator gnome-base/librsvg net-misc/curl net-misc/wget sys-apps/file"
+            "sudo emerge --ask net-libs/webkit-gtk:4.1 dev-libs/libayatana-appindicator gnome-base/librsvg net-misc/curl net-misc/wget sys-apps/file media-libs/gst-plugins-good media-plugins/gst-plugins-mpg123"
         }
     }
 }

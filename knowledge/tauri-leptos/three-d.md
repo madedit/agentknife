@@ -430,8 +430,9 @@ In `src/main.rs`: `mod game;` and show `<game::GameScreen />` (or mount it:
     </div>
   </main>
   ```
-- **Sound**: no sound files are needed: make sounds with the Web Audio API in
-  `game.js`. Browsers keep sound off until the user presses a key or clicks, so
+- **Sound**: for music and effects from the user's files (`assets/sounds/`) read
+  topic `sound`, "In a three.js game". Without files, make sounds with the Web
+  Audio API in `game.js`. Browsers keep sound off until the user presses a key or clicks, so
   create the `AudioContext` on the first input, not in the constructor:
   ```js
   // In the keydown / pointerdown handler: this.audio ??= new AudioContext();

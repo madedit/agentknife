@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.23"
+version = "0.2.24"
 
 [versions]
 tauri = "2.12.4"
@@ -155,6 +155,12 @@ id = "three-d"
 title = "3D games and scenes (three.js)"
 summary = "3D graphics with three.js on a <canvas>: add_library, index.html, a game.js module called from Rust (matching names), state for dom_summary, planning game states, input (preventDefault for every game key), the view (OrbitControls zoom, buttons that turn the view), board games (busy state, playable boards, a hint to test with), the canvas height, cleanup, models from the user's files (glTF, OBJ, FBX: loading with a stand-in, size, animations), shooters (aiming, fast bullets, enemies), testing a running game."
 file = "three-d.md"
+
+[[topic]]
+id = "sound"
+title = "Music and sound effects"
+summary = "Sounds from the user's files in assets/sounds/ (MP3 plays everywhere): music that loops and fades, effects played many times at once (Web Audio), starting on the first click or key, volume and mute kept in the settings, stopping when the screen goes away, the state to check (no sound is heard in tests), the same in a three.js game.js, GStreamer on Linux."
+file = "sound.md"
 
 [[topic]]
 id = "troubleshooting"

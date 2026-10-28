@@ -43,6 +43,19 @@ const LINUX_PACKAGES: &[(&str, &[&str])] = &[
     ("linux-librsvg", &["librsvg-2.0"]),
 ];
 
+/// GStreamer plugins WebKitGTK plays sound with: the player (`playback`, from
+/// -base), the sound output (`autodetect`) and MP3 (`audioparsers`, `mpg123`),
+/// from -good. Plugins have no pkg-config file: their files are looked for.
+const GSTREAMER_PLUGINS: &[&str] = &["playback", "autodetect", "audioparsers", "mpg123"];
+
+/// Where distributions keep GStreamer's plugins, when pkg-config does not say.
+const GSTREAMER_DIRS: &[&str] = &[
+    "/usr/lib/x86_64-linux-gnu/gstreamer-1.0",
+    "/usr/lib/aarch64-linux-gnu/gstreamer-1.0",
+    "/usr/lib64/gstreamer-1.0",
+    "/usr/lib/gstreamer-1.0",
+];
+
 /// Checks the isolated toolchain and the system dependencies for `platform`.
 pub async fn check(
     toolchain: &Toolchain,
@@ -379,6 +392,7 @@ async fn linux(probe: &dyn Probe) -> Vec<CheckItem> {
         }
         items.push(it);
     }
+    items.push(gstreamer(probe, has_pkg_config).await);
     let mut cc = item("linux-c-compiler", CheckScope::System, CheckStatus::Missing);
     if let Some(out) = probe.run("cc", &["--version"], &[]).await
         && out.success
@@ -388,6 +402,44 @@ async fn linux(probe: &dyn Probe) -> Vec<CheckItem> {
     }
     items.push(cc);
     items
+}
+
+/// The sound plugins ([`GSTREAMER_PLUGINS`]), each in one of GStreamer's plugin
+/// folders.
+async fn gstreamer(probe: &dyn Probe, has_pkg_config: bool) -> CheckItem {
+    let mut it = item("linux-gstreamer", CheckScope::System, CheckStatus::Missing);
+    let mut dirs = Vec::new();
+    if has_pkg_config
+        && let Some(out) = probe
+            .run(
+                "pkg-config",
+                &["--variable=pluginsdir", "gstreamer-1.0"],
+                &[],
+            )
+            .await
+        && out.success
+        && !out.stdout.trim().is_empty()
+    {
+        dirs.push(PathBuf::from(out.stdout.trim()));
+    }
+    dirs.extend(GSTREAMER_DIRS.iter().map(PathBuf::from));
+    let missing: Vec<&str> = GSTREAMER_PLUGINS
+        .iter()
+        .copied()
+        .filter(|p| {
+            let file = format!("libgst{p}.so");
+            !dirs.iter().any(|d| probe.exists(&d.join(&file)))
+        })
+        .collect();
+    if missing.is_empty() {
+        it.status = CheckStatus::Ok;
+    } else {
+        it.detail = Some(format!(
+            "GStreamer plugins not found: {}",
+            missing.join(", ")
+        ));
+    }
+    it
 }
 
 /// Numeric ordering for dotted versions (`10.0.22621.0` > `10.0.19041.0`).

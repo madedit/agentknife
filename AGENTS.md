@@ -72,7 +72,7 @@ To upgrade, edit `versions.toml` and update everything that follows from it **in
 - `cargo xtask vendor-libs` takes each library's files from its npm tarball (checked against the registry's sha512 `integrity`) into `knowledge/<stack>/libraries/<id>/` and writes `SHA256SUMS`. Versions live in `versions.toml` `[vendor.libraries]`; the file list in `xtask/src/libs.rs`.
 - CI (step `libs`) checks the hashes, a version mark inside the files, and that `pack.toml` agrees with `versions.toml`. It downloads nothing. `.gitattributes` keeps the files byte-for-byte.
 - ak-preview build.rs embeds the files (`KnowledgePack::libraries`, without `SHA256SUMS`). The agent's `add_library` tool copies them into `<target>/` (unchanged files untouched, changed ones restored); the policy treats it like any file change. It is registered only when the pack has libraries.
-- The topic (`three-d`) has the app add an import map and `copy-dir` to `index.html`, put its 3D code in `src/game.js` and call it from Rust with `#[wasm_bindgen(module = "/src/game.js")]`. check-knowledge compiles its `js` and `rust` blocks as `src/game.js` and `src/game.rs`.
+- The topic (`three-d`) has the app add an import map and `copy-dir` to `index.html`, put its 3D code in `src/game.js` and call it from Rust with `#[wasm_bindgen(module = "/src/game.js")]`. check-knowledge compiles its first `js` block (later ones are fragments) and its `rust` block as `src/game.js` and `src/game.rs`, and the `sound` topic's two `rust` blocks as `src/sound.rs`.
 
 Out of scope until Phase 3: wasmtime plugins and an egui profile. Keep the abstractions open, but do not implement them.
 
@@ -395,7 +395,7 @@ Prerequisites for developing AgentKnife:
 - `tauri-cli` (`cargo install tauri-cli`)
 - Windows: MSVC Build Tools and WebView2
 - macOS: Xcode CLT
-- Linux: `webkit2gtk-4.1` and the other packages from the Tauri prerequisites
+- Linux: `webkit2gtk-4.1` and the other packages from the Tauri prerequisites, and GStreamer's plugins for sound (-base, -good)
 
 | Task | Command |
 |---|---|

@@ -435,6 +435,30 @@ mod tests {
     }
 
     #[test]
+    fn sound_comes_from_the_users_files() {
+        let pack = TauriLeptos.knowledge_pack();
+        let topic = pack.topic("sound").unwrap().body;
+        // Where AgentKnife puts the user's sounds, and the format that plays everywhere.
+        assert!(topic.contains("./assets/sounds/"));
+        assert!(topic.contains("MP3"));
+        // Started by the first input, checked through the state, Linux named.
+        for s in [
+            "pointerdown",
+            "set_state_reader",
+            "on_cleanup",
+            "gstreamer1.0-plugins-good",
+        ] {
+            assert!(topic.contains(s), "{s}");
+        }
+        for id in ["overview", "three-d"] {
+            assert!(
+                pack.topic(id).unwrap().body.contains("topic `sound`"),
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
     fn bridge_settings_match_ak_bridge() {
         use ak_bridge::protocol as p;
         assert_eq!(BRIDGE_READY_PREFIX, p::READY_PREFIX);

@@ -358,6 +358,35 @@ async fn linux_packages() {
     let r = report(Platform::Linux, &f).await;
     assert_eq!(status(&r, "linux-appindicator"), CheckStatus::Ok);
 
+    // Sound: GStreamer's plugins, in the folder pkg-config names or a usual one.
+    let sound = r.item("linux-gstreamer").unwrap();
+    assert_eq!(sound.status, CheckStatus::Missing);
+    assert_eq!(
+        sound.detail.as_deref(),
+        Some("GStreamer plugins not found: playback, autodetect, audioparsers, mpg123")
+    );
+    let plugin = |dir: &str, name: &str| Path::new(dir).join(format!("libgst{name}.so"));
+    let debian = "/usr/lib/x86_64-linux-gnu/gstreamer-1.0";
+    let f = f
+        .path(plugin(debian, "playback"))
+        .path(plugin(debian, "autodetect"))
+        .path(plugin(debian, "audioparsers"));
+    let r = report(Platform::Linux, &f).await;
+    assert_eq!(
+        r.item("linux-gstreamer").unwrap().detail.as_deref(),
+        Some("GStreamer plugins not found: mpg123")
+    );
+    let own = "/opt/gst/lib/gstreamer-1.0";
+    let f = f
+        .out(
+            "pkg-config --variable=pluginsdir gstreamer-1.0",
+            &format!("{own}\n"),
+        )
+        .path(plugin(own, "mpg123"));
+    let r = report(Platform::Linux, &f).await;
+    assert_eq!(status(&r, "linux-gstreamer"), CheckStatus::Ok);
+    assert!(r.ready(), "{r:#?}");
+
     let r = report(Platform::Linux, &with_toolchain(Fake::default())).await;
     let webkit = r.item("linux-webkit2gtk").unwrap();
     assert_eq!(webkit.status, CheckStatus::Missing);
@@ -385,6 +414,7 @@ fn every_item_has_a_localized_name() {
         "linux-libsoup",
         "linux-appindicator",
         "linux-librsvg",
+        "linux-gstreamer",
         "linux-c-compiler",
     ];
     for locale in ak_types::i18n::Locale::ALL {

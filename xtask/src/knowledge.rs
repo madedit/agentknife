@@ -2,7 +2,8 @@
 //! agent would use it — a project from the template with the complete example
 //! (`example-todo.md`) as its code and the other topics' snippets
 //! (`knowledge/<stack>/check/`) beside it, plus the 3D topic's `game.js` and
-//! `game.rs` as a module — using AgentKnife's own toolchain.
+//! `game.rs` as a module, and the sound topic's code as `sound.rs` — using
+//! AgentKnife's own toolchain.
 //! Slow (a full build); run it after changing the docs or a pinned version.
 
 use std::path::Path;
@@ -72,13 +73,23 @@ pub fn check_build(root: &Path) -> Result<()> {
     std::fs::write(
         out.join("src/main.rs"),
         format!(
-            "{screens}\n#[allow(dead_code, unused)]\nmod snippets;\n#[allow(dead_code)]\nmod game;\n"
+            "{screens}\n#[allow(dead_code, unused)]\nmod snippets;\n#[allow(dead_code)]\nmod game;\n#[allow(dead_code)]\nmod sound;\n"
         ),
     )?;
+    // The sound topic: its module and the screen that uses it, as one file.
+    let sound = std::fs::read_to_string(pack.join("sound.md"))?;
+    let sound_rs = rust_blocks(&sound);
+    if sound_rs.len() != 2 {
+        return Err(format!("sound.md: expected 2 rust blocks, found {}", sound_rs.len()).into());
+    }
+    std::fs::write(out.join("src/sound.rs"), sound_rs.concat())?;
     // The 3D topic: its JS module (wasm-bindgen reads it while compiling) and screen.
     let three = std::fs::read_to_string(pack.join("three-d.md"))?;
-    let [game_js] = <[String; 1]>::try_from(blocks(&three, "js"))
-        .map_err(|b| format!("three-d.md: expected 1 js block, found {}", b.len()))?;
+    // The first js block is the whole game.js; later ones are fragments of it.
+    let game_js = blocks(&three, "js")
+        .into_iter()
+        .next()
+        .ok_or("three-d.md: no js block (src/game.js)")?;
     let [game_rs] = <[String; 1]>::try_from(rust_blocks(&three))
         .map_err(|b| format!("three-d.md: expected 1 rust block, found {}", b.len()))?;
     std::fs::write(out.join("src/game.js"), game_js)?;
@@ -107,7 +118,7 @@ pub fn check_build(root: &Path) -> Result<()> {
     std::fs::write(&backend, tray)?;
     add_deps(
         &out.join("Cargo.toml"),
-        "serde_json = \"1.0.154\"\njs-sys = \"0.3.106\"\nwasm-bindgen-futures = \"0.4.79\"\nweb-sys = { version = \"0.3.106\", features = [\"HtmlCanvasElement\", \"Storage\", \"Window\", \"Navigator\", \"Clipboard\", \"Document\", \"Element\", \"HtmlInputElement\", \"EventTarget\", \"Request\", \"RequestInit\", \"Response\", \"AbortController\", \"AbortSignal\", \"HtmlDocument\", \"Node\", \"Text\", \"CharacterData\", \"DragEvent\", \"DataTransfer\", \"DomRect\", \"AddEventListenerOptions\", \"WheelEvent\", \"PointerEvent\", \"HtmlElement\", \"ClipboardEvent\", \"CanvasRenderingContext2d\"] }\n",
+        "serde_json = \"1.0.154\"\njs-sys = \"0.3.106\"\nwasm-bindgen-futures = \"0.4.79\"\nweb-sys = { version = \"0.3.106\", features = [\"HtmlCanvasElement\", \"Storage\", \"Window\", \"Navigator\", \"Clipboard\", \"Document\", \"Element\", \"HtmlInputElement\", \"EventTarget\", \"Request\", \"RequestInit\", \"Response\", \"AbortController\", \"AbortSignal\", \"HtmlDocument\", \"Node\", \"Text\", \"CharacterData\", \"DragEvent\", \"DataTransfer\", \"DomRect\", \"AddEventListenerOptions\", \"WheelEvent\", \"PointerEvent\", \"HtmlElement\", \"ClipboardEvent\", \"CanvasRenderingContext2d\", \"AudioBuffer\", \"AudioBufferSourceNode\", \"AudioContext\", \"AudioDestinationNode\", \"AudioNode\", \"AudioParam\", \"AudioScheduledSourceNode\", \"GainNode\", \"HtmlAudioElement\", \"HtmlMediaElement\", \"MediaElementAudioSourceNode\"] }\n",
     )?;
 
     let pinned = Pinned::builtin()?;

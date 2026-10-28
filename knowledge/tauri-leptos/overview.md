@@ -30,6 +30,7 @@ assets/               the user's own files, once they add some: images/, models/
   hear of each added file with the user's next message.
 - 3D models (`.glb`, `.gltf`, `.obj`, `.fbx`) in `assets/models/` are loaded with
   three.js's loaders: topic `three-d`, "Models from files".
+- Music and sound effects in `assets/sounds/` (ask for MP3): topic `sound`.
 - Never download pictures, sounds, fonts or 3D models from the internet, and do not
   rename or move the user's files. When the app needs one that is not there, ask
   the user to add it with "Add files…"; until then draw it (a colored box, an
@@ -61,6 +62,7 @@ assets/               the user's own files, once they add some: images/, models/
   from Excel, backups (`import-backup`); thousands of rows (`long-lists`);
   Ctrl+Z and saving by itself (`undo-autosave`: plan it before writing the
   editor); notifications, tray icon, starting with Windows, a log (`desktop`);
+  music and sound effects (`sound`);
   keyboard use and readable colours (`tailwind`).
 - Data from the internet: try the service with `curl` in `run_command` first,
   then fetch it (topic `network`).

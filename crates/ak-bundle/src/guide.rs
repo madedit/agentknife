@@ -50,7 +50,7 @@ pub fn install_guide(os: HostOs, output: BundleOutput) -> Vec<GuideStep> {
             step("bundle-guide-linux-extract"),
             command(
                 "bundle-guide-linux-libraries",
-                "sudo apt install libwebkit2gtk-4.1-0",
+                "sudo apt install libwebkit2gtk-4.1-0 gstreamer1.0-plugins-good",
             ),
             step("bundle-guide-linux-run"),
         ],
@@ -153,9 +153,9 @@ mod tests {
 
         let linux = install_guide(HostOs::Linux, BundleOutput::Archive(ArchiveFormat::TarGz));
         assert!(linux.iter().any(|s| {
-            s.command
-                .as_deref()
-                .is_some_and(|c| c.contains("libwebkit2gtk-4.1"))
+            s.command.as_deref().is_some_and(|c| {
+                c.contains("libwebkit2gtk-4.1") && c.contains("gstreamer1.0-plugins-good")
+            })
         }));
 
         // Something new: still a usable answer.
