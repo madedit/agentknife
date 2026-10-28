@@ -332,6 +332,8 @@ async fn open<R: Runtime>(
             log,
             added_files: Vec::new(),
             unannounced: Vec::new(),
+            renamed_files: Vec::new(),
+            unannounced_renames: Vec::new(),
         });
     }
     // The project notes for the AI, and a greeting in a brand-new chat (after

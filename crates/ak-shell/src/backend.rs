@@ -214,6 +214,13 @@ impl Backend {
         self.call(cmd::ADD_FILES, Some(request)).await
     }
 
+    pub async fn rename_file(
+        &self,
+        request: &ak_types::ipc::RenameFile,
+    ) -> Result<ak_types::ipc::Renamed, CallError> {
+        self.call(cmd::RENAME_FILE, Some(request)).await
+    }
+
     pub async fn set_preview_frame(
         &self,
         frame: Option<ak_types::preview::PreviewFrame>,

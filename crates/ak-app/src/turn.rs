@@ -579,10 +579,15 @@ pub async fn send_message<R: Runtime>(
             .ok_or_else(|| fail("no project is open"))?;
         open.preview.set_selection(request.selection.clone());
         let added = crate::assets::note(&std::mem::take(&mut open.unannounced));
-        let notes: Vec<String> = [request.selection.as_ref().map(selection_note), added]
-            .into_iter()
-            .flatten()
-            .collect();
+        let renamed = crate::assets::rename_note(&std::mem::take(&mut open.unannounced_renames));
+        let notes: Vec<String> = [
+            request.selection.as_ref().map(selection_note),
+            added,
+            renamed,
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
         (!notes.is_empty()).then(|| notes.join("\n\n"))
     };
     spawn(

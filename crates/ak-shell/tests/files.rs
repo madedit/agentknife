@@ -13,7 +13,7 @@ use ak_shell::files::{CodePane, Files, FilesPane, OpenFile, TimelinePane};
 use ak_shell::i18n;
 use ak_shell::layout::Layout;
 use ak_types::i18n::Locale;
-use ak_types::ipc::{FileEntry, TimelineRow};
+use ak_types::ipc::{AssetKind, FileEntry, Media, TimelineRow};
 use leptos::prelude::*;
 
 fn with(locale: Locale, setup: impl FnOnce(Files), view: impl FnOnce() -> String) -> String {
@@ -48,6 +48,7 @@ fn open(path: &str) -> OpenFile {
         path: path.into(),
         saved: "fn main() {}".into(),
         binary: false,
+        media: None,
         version: 0,
     }
 }
@@ -157,5 +158,76 @@ fn the_code_pane_shows_the_file_and_its_state() {
         },
         || view! { <CodePane /> }.into_view().to_html(),
     );
-    assert!(picture.contains("cannot be edited here"));
+    assert!(picture.contains("cannot be shown or edited here"));
+
+    // Pictures, sounds and fonts show as themselves; models get a note.
+    let media = |kind: AssetKind, path: &str| {
+        with(
+            Locale::En,
+            |f| {
+                f.open.set(Some(OpenFile {
+                    binary: true,
+                    media: Some(Media {
+                        kind,
+                        url: format!("http://akfile.localhost/t/{path}?v=1"),
+                        size: 1536,
+                    }),
+                    ..open(path)
+                }))
+            },
+            || view! { <CodePane /> }.into_view().to_html(),
+        )
+    };
+    let image = media(AssetKind::Image, "assets/images/cat.png");
+    assert!(
+        image.contains(r#"data-media="image""#)
+            && image.contains(r#"src="http://akfile.localhost/t/assets/images/cat.png?v=1""#),
+        "{image}"
+    );
+    assert!(image.contains("2 KB") && !image.contains("cannot be shown"));
+    let sound = media(AssetKind::Sound, "assets/sounds/jump.wav");
+    assert!(
+        sound.contains("<audio") && sound.contains("controls"),
+        "{sound}"
+    );
+    let font = media(AssetKind::Font, "assets/fonts/round.ttf");
+    assert!(
+        font.contains("@font-face") && font.contains("quick brown fox"),
+        "{font}"
+    );
+    let model = media(AssetKind::Model, "assets/models/plane.glb");
+    assert!(model.contains(r#"data-media="model""#) && model.contains("3D model"));
+}
+
+#[test]
+fn files_in_assets_can_be_renamed() {
+    let code = |path: &str| {
+        with(
+            Locale::ZhTw,
+            |f| f.open.set(Some(open(path))),
+            || view! { <CodePane /> }.into_view().to_html(),
+        )
+    };
+    let asset = code("assets/files/notes.txt");
+    assert!(
+        asset.contains(r#"data-action="rename-file""#) && asset.contains("改名…"),
+        "{asset}"
+    );
+    assert!(
+        !asset.contains(r#"data-rename="""#),
+        "the form only after a click"
+    );
+    let source = code("src/main.rs");
+    assert!(
+        !source.contains(r#"data-action="rename-file""#),
+        "only the user's files"
+    );
+    assert_eq!(
+        ak_shell::files::stem_and_extension("assets/images/my.cat.png"),
+        ("my.cat".to_owned(), ".png".to_owned())
+    );
+    assert_eq!(
+        ak_shell::files::stem_and_extension("assets/files/README"),
+        ("README".to_owned(), String::new())
+    );
 }

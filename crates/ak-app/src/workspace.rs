@@ -81,17 +81,27 @@ pub async fn list_files(state: State<'_, AppState>) -> Res<Vec<FileEntry>> {
 pub async fn read_file(state: State<'_, AppState>, request: String) -> Res<FileText> {
     let root = root(&state).await?;
     let path = resolve(&root, &request).map_err(fail)?;
+    if let Some(media) = crate::media::describe(&state.files_token, &request, &path) {
+        return Ok(FileText {
+            path: request,
+            text: String::new(),
+            binary: true,
+            media: Some(media),
+        });
+    }
     let bytes = tokio::fs::read(&path).await.map_err(fail)?;
     Ok(match as_text(bytes) {
         Some(text) => FileText {
             path: request,
             text,
             binary: false,
+            media: None,
         },
         None => FileText {
             path: request,
             text: String::new(),
             binary: true,
+            media: None,
         },
     })
 }

@@ -13,6 +13,7 @@ pub mod connect;
 pub mod crash;
 pub mod home;
 pub mod mcp;
+pub mod media;
 pub mod settings;
 pub mod state;
 pub mod tools;
@@ -90,6 +91,7 @@ const COMMANDS: &[&str] = &[
     "set_preview_frame",
     "pick_files",
     "add_files",
+    "rename_file",
     "clear_preview_data",
     "open_terminal",
     "open_in_files",
@@ -99,6 +101,7 @@ const COMMANDS: &[&str] = &[
 pub fn with_commands<R: Runtime>(builder: Builder<R>, state: state::AppState) -> Builder<R> {
     builder
         .manage(state)
+        .register_asynchronous_uri_scheme_protocol(media::SCHEME, media::handle)
         .invoke_handler(tauri::generate_handler![
             home::home_state,
             home::create_project,
@@ -143,6 +146,7 @@ pub fn with_commands<R: Runtime>(builder: Builder<R>, state: state::AppState) ->
             workspace::set_preview_frame,
             assets::pick_files,
             assets::add_files,
+            assets::rename_file,
             workspace::clear_preview_data,
             mcp::open_terminal,
             home::open_in_files,

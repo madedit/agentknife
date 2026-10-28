@@ -1,16 +1,17 @@
 //! The user's own files in the project (P1-SHELL-007): pictures, 3D models,
 //! sounds and fonts copied into `assets/<kind>/`, served by trunk at
 //! `./assets/…`. The AI never downloads such files; the user adds them here
-//! and the AI hears of them with their next message (and over MCP in
-//! `status`).
+//! (and may rename them) and the AI hears of them with their next message
+//! (and over MCP in `status`).
 
 use std::path::{Path, PathBuf};
 
+use ak_agent::tools::path::resolve;
 use ak_project::{CheckpointKind, Timeline};
 use ak_types::i18n::{I18n, args};
 use ak_types::ipc::{
     AddFiles, AddedFile, AddedFiles, AssetKind, FailedFile, HeldFile, HoldReason, NewFile,
-    PROJECT_CHANGED_EVENT,
+    PROJECT_CHANGED_EVENT, RenameFile, Renamed, name_problem,
 };
 use base64::Engine;
 use tauri::{AppHandle, Emitter, Runtime, State};
@@ -25,6 +26,17 @@ pub const ASSETS: &str = "assets";
 pub const LARGE: u64 = 50 * 1024 * 1024;
 /// How many added files the AI is told about at most (newest).
 const NOTED: usize = 30;
+/// Larger files are not searched for the old name when renaming.
+const SEARCHED: u64 = 2 * 1024 * 1024;
+
+/// A file the user renamed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rename {
+    pub from: String,
+    pub to: String,
+    /// Project files whose text now names `to` instead of `from`.
+    pub updated: Vec<String>,
+}
 
 /// What a file is, from its name.
 pub fn kind_of(name: &str) -> AssetKind {
@@ -290,6 +302,193 @@ fn version_label(files: &[AddedFile]) -> String {
         .unwrap_or(shown)
 }
 
+/// Renames `rel` (a file under `assets/`) to `stem` plus its extension, in
+/// its folder, and rewrites the project's text files that name its path
+/// (outside `assets/`, at most [`SEARCHED`] bytes, text only).
+pub fn rename(root: &Path, rel: &str, stem: &str) -> Result<(Renamed, Option<Rename>), String> {
+    let rel = rel.trim().replace('\\', "/");
+    // `assets/../src/app.rs` starts like an asset too.
+    let plain = rel
+        .split('/')
+        .all(|part| !part.is_empty() && part != "." && part != "..");
+    if !rel.starts_with("assets/") || !plain {
+        return Err(format!("only files in assets/ are renamed here, not {rel}"));
+    }
+    let stem = stem.trim();
+    if let Some(problem) = name_problem(stem) {
+        return Ok((Renamed::Bad { problem }, None));
+    }
+    let from = resolve(root, &rel)?;
+    if !from.is_file() {
+        return Err(format!("{rel} is not a file"));
+    }
+    let (dir, old_name) = rel.rsplit_once('/').unwrap_or(("", rel.as_str()));
+    let ext = Path::new(old_name)
+        .extension()
+        .map(|e| format!(".{}", e.to_string_lossy()))
+        .unwrap_or_default();
+    let new_name = format!("{stem}{ext}");
+    let new_rel = format!("{dir}/{new_name}");
+    if new_rel == rel {
+        let done = Renamed::Done {
+            path: rel,
+            updated: Vec::new(),
+        };
+        return Ok((done, None));
+    }
+    let to = resolve(root, &new_rel)?;
+    // Only the case changes on Windows or macOS: the same file, not a taken name.
+    let same = to.exists() && to.canonicalize().ok() == from.canonicalize().ok();
+    if to.exists() && !same {
+        return Ok((Renamed::Taken, None));
+    }
+    std::fs::rename(&from, &to).map_err(|e| e.to_string())?;
+
+    let mut updated = Vec::new();
+    for entry in crate::workspace::list(root) {
+        if entry.dir || entry.path.starts_with("assets/") {
+            continue;
+        }
+        let path = root.join(&entry.path);
+        if std::fs::metadata(&path).map_or(true, |m| m.len() > SEARCHED) {
+            continue;
+        }
+        let Some(text) = std::fs::read(&path)
+            .ok()
+            .and_then(crate::workspace::as_text)
+        else {
+            continue;
+        };
+        if text.contains(&rel) && std::fs::write(&path, text.replace(&rel, &new_rel)).is_ok() {
+            updated.push(entry.path);
+        }
+    }
+    let done = Renamed::Done {
+        path: new_rel.clone(),
+        updated: updated.clone(),
+    };
+    Ok((
+        done,
+        Some(Rename {
+            from: rel,
+            to: new_rel,
+            updated,
+        }),
+    ))
+}
+
+/// One line per rename for the AI.
+pub fn describe_renames(renames: &[Rename]) -> String {
+    renames
+        .iter()
+        .rev()
+        .take(NOTED)
+        .rev()
+        .map(|r| {
+            let updated = if r.updated.is_empty() {
+                String::new()
+            } else {
+                format!(" (updated: {})", r.updated.join(", "))
+            };
+            format!("- {} → {}{updated}", r.from, r.to)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// What the AI hears with the next message about files the user renamed.
+pub fn rename_note(renames: &[Rename]) -> Option<String> {
+    (!renames.is_empty()).then(|| {
+        format!(
+            "The user renamed these files in `assets/`. Where the project's text named the \
+             old path, AgentKnife replaced it (listed). Use the new names, and fix code \
+             that builds these paths from parts:\n{}",
+            describe_renames(renames)
+        )
+    })
+}
+
+/// The version's name in the user's language: "Renamed cat.png to dog.png".
+fn rename_label(r: &Rename) -> String {
+    let name = |p: &str| p.rsplit('/').next().unwrap_or(p).to_owned();
+    let (old, new) = (name(&r.from), name(&r.to));
+    I18n::new(ui_locale())
+        .map(|i| {
+            i.t_args(
+                "files-renamed-version",
+                &args([("old", old.clone()), ("new", new.clone())]),
+            )
+        })
+        .unwrap_or_else(|_| format!("{old} → {new}"))
+}
+
+#[tauri::command]
+pub async fn rename_file<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    request: RenameFile,
+) -> Res<Renamed> {
+    let (root, preview, working) = {
+        let inner = state.inner.lock().await;
+        let open = inner
+            .open
+            .as_ref()
+            .ok_or_else(|| fail("no project is open"))?;
+        (
+            open.root.clone(),
+            open.preview.clone(),
+            open.cancel.is_some(),
+        )
+    };
+    if working || crate::mcp::busy(&state) {
+        return Err(fail(
+            "the AI is changing the project; rename after it finishes",
+        ));
+    }
+    let (result, rename) = {
+        let root = root.clone();
+        tokio::task::spawn_blocking(move || rename(&root, &request.path, &request.stem))
+            .await
+            .map_err(fail)?
+            .map_err(fail)?
+    };
+    let Some(r) = rename else {
+        return Ok(result);
+    };
+    {
+        let mut inner = state.inner.lock().await;
+        if let Some(open) = inner.open.as_mut().filter(|o| o.root == root) {
+            for f in &mut open.added_files {
+                if f.path == r.from {
+                    f.path.clone_from(&r.to);
+                }
+            }
+            // Not announced yet: the AI hears of it by its new name only.
+            let mut quiet = false;
+            for f in &mut open.unannounced {
+                if f.path == r.from {
+                    f.path.clone_from(&r.to);
+                    quiet = true;
+                }
+            }
+            open.renamed_files.push(r.clone());
+            if !quiet {
+                open.unannounced_renames.push(r.clone());
+            }
+        }
+    }
+    let mut touched = vec![r.from.clone(), r.to.clone()];
+    touched.extend(r.updated.iter().cloned());
+    let _ = preview.files_changed(&touched).await;
+    let label = rename_label(&r);
+    let _ = tokio::task::spawn_blocking(move || {
+        Timeline::open(&root).and_then(|mut t| t.checkpoint(CheckpointKind::Turn, &label, None))
+    })
+    .await;
+    let _ = app.emit(PROJECT_CHANGED_EVENT, ());
+    Ok(result)
+}
+
 #[tauri::command]
 pub async fn pick_files<R: Runtime>(app: AppHandle<R>) -> Res<Option<Vec<String>>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -364,6 +563,71 @@ mod tests {
             name: name.into(),
             data_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
         }
+    }
+
+    #[test]
+    fn renaming_keeps_folder_and_extension_and_updates_the_paths_in_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("assets/images")).unwrap();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("assets/images/cat.png"), b"png").unwrap();
+        std::fs::write(root.join("assets/images/dog.png"), b"png").unwrap();
+        std::fs::write(
+            root.join("src/app.rs"),
+            r#"view! { <img src="./assets/images/cat.png" /> <img src="assets/images/bigcat.png" /> }"#,
+        )
+        .unwrap();
+        std::fs::write(root.join("src/other.rs"), "fn main() {}").unwrap();
+
+        let (out, r) = rename(root, "assets/images/cat.png", " 小貓 ").unwrap();
+        assert_eq!(
+            out,
+            Renamed::Done {
+                path: "assets/images/小貓.png".into(),
+                updated: vec!["src/app.rs".into()],
+            }
+        );
+        assert!(root.join("assets/images/小貓.png").is_file());
+        assert!(!root.join("assets/images/cat.png").exists());
+        let app = std::fs::read_to_string(root.join("src/app.rs")).unwrap();
+        assert!(app.contains("./assets/images/小貓.png") && app.contains("bigcat.png"));
+        let note = rename_note(&[r.unwrap()]).unwrap();
+        assert!(
+            note.contains("- assets/images/cat.png → assets/images/小貓.png (updated: src/app.rs)")
+        );
+
+        // Taken, a bad name, the same name, only the case.
+        let taken = rename(root, "assets/images/小貓.png", "dog").unwrap();
+        assert_eq!(taken, (Renamed::Taken, None));
+        let (bad, _) = rename(root, "assets/images/dog.png", "a/b").unwrap();
+        assert!(matches!(bad, Renamed::Bad { .. }));
+        let (same, none) = rename(root, "assets/images/dog.png", "dog").unwrap();
+        assert!(matches!(same, Renamed::Done { .. }) && none.is_none());
+        let (case, _) = rename(root, "assets/images/dog.png", "Dog").unwrap();
+        assert!(matches!(case, Renamed::Done { ref path, .. } if path == "assets/images/Dog.png"));
+        assert!(root.join("assets/images/Dog.png").is_file());
+
+        // Only assets, and nothing outside the project.
+        assert!(rename(root, "src/app.rs", "x").is_err());
+        assert!(rename(root, "assets/../src/app.rs", "x").is_err());
+        assert!(rename(root, "assets/images/gone.png", "x").is_err());
+    }
+
+    #[test]
+    fn names_that_cannot_be_files() {
+        use ak_types::ipc::NameProblem;
+        assert_eq!(name_problem("  "), Some(NameProblem::Empty));
+        assert!(matches!(
+            name_problem("a:b"),
+            Some(NameProblem::Character { found }) if found == ":"
+        ));
+        assert_eq!(name_problem("cat."), Some(NameProblem::Ending));
+        assert_eq!(name_problem("con"), Some(NameProblem::Reserved));
+        assert_eq!(name_problem("COM1"), Some(NameProblem::Reserved));
+        assert_eq!(name_problem(&"x".repeat(200)), Some(NameProblem::TooLong));
+        assert_eq!(name_problem("小貓 (2)"), None);
+        assert_eq!(name_problem("console"), None);
     }
 
     #[test]

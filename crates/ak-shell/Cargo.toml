@@ -25,6 +25,7 @@ web-sys = { workspace = true, features = [
     "File",
     "FileList",
     "HtmlIFrameElement",
+    "HtmlImageElement",
     "KeyboardEvent",
     "Location",
     "MediaQueryList",

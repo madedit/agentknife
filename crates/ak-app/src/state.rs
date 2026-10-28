@@ -70,6 +70,10 @@ pub struct OpenProject {
     pub added_files: Vec<ak_types::ipc::AddedFile>,
     /// Added files the built-in AI has not heard of yet (next message).
     pub unannounced: Vec<ak_types::ipc::AddedFile>,
+    /// Files the user renamed since the project was opened (MCP `status`).
+    pub renamed_files: Vec<crate::assets::Rename>,
+    /// Renames the built-in AI has not heard of yet (next message).
+    pub unannounced_renames: Vec<crate::assets::Rename>,
 }
 
 pub struct Inner {
@@ -99,6 +103,8 @@ pub struct AppState {
     pub mcp: crate::mcp::McpState,
     /// Where the preview page shows in the window (screenshots).
     pub frame: Arc<std::sync::Mutex<Option<PreviewFrame>>>,
+    /// Starts the window's URLs for project files (`media`).
+    pub files_token: String,
 }
 
 impl AppState {
@@ -134,6 +140,7 @@ impl AppState {
             provider: None,
             mcp: crate::mcp::McpState::default(),
             frame: Arc::default(),
+            files_token: ak_preview::process::random_token()?,
         })
     }
 }

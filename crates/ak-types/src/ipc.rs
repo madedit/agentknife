@@ -120,6 +120,10 @@ pub mod cmd {
     /// copies the user's own files (pictures, 3D models, sounds, fonts) into
     /// the open project's `assets/`.
     pub const ADD_FILES: &str = "add_files";
+    /// [`RenameFile`](super::RenameFile) → [`Renamed`](super::Renamed):
+    /// renames a file in the open project's `assets/` (same folder and
+    /// extension) and the project's text that names it by its path.
+    pub const RENAME_FILE: &str = "rename_file";
     /// `()` → `()`: "Clear data and start over": deletes what the app saved in
     /// the preview and starts it again (refused while the AI works).
     pub const CLEAR_PREVIEW_DATA: &str = "clear_preview_data";
@@ -181,6 +185,7 @@ pub mod cmd {
         SET_PREVIEW_FRAME,
         PICK_FILES,
         ADD_FILES,
+        RENAME_FILE,
         CLEAR_PREVIEW_DATA,
         OPEN_TERMINAL,
         OPEN_IN_FILES,
@@ -294,6 +299,80 @@ pub struct AddedFiles {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RenameFile {
+    /// Project-relative, with `/`, under `assets/`.
+    pub path: String,
+    /// The new name without the extension (which stays).
+    pub stem: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum Renamed {
+    Done {
+        /// The file's new project-relative path.
+        path: String,
+        /// Project files whose text named the old path and now names the new.
+        updated: Vec<String>,
+    },
+    /// Another file has that name.
+    Taken,
+    Bad {
+        problem: NameProblem,
+    },
+}
+
+/// Why a name cannot be a file name (on any system the app may run on).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "problem", rename_all = "snake_case")]
+pub enum NameProblem {
+    Empty,
+    /// One of `\ / : * ? " < > |` or a control character.
+    Character {
+        found: String,
+    },
+    /// Ends with a dot or a space (Windows drops them).
+    Ending,
+    /// A name Windows keeps for devices (`CON`, `NUL`, `COM1`, …).
+    Reserved,
+    TooLong,
+}
+
+/// The longest name, in characters (well under the systems' limits, leaving
+/// room for the folders).
+pub const NAME_MAX: usize = 120;
+
+/// What is wrong with `stem` as a file name, if anything.
+pub fn name_problem(stem: &str) -> Option<NameProblem> {
+    if stem.trim().is_empty() {
+        return Some(NameProblem::Empty);
+    }
+    if let Some(c) = stem
+        .chars()
+        .find(|c| c.is_control() || "\\/:*?\"<>|".contains(*c))
+    {
+        return Some(NameProblem::Character {
+            found: c.to_string(),
+        });
+    }
+    if stem.ends_with('.') || stem.ends_with(' ') {
+        return Some(NameProblem::Ending);
+    }
+    let upper = stem.to_ascii_uppercase();
+    let device = matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ((upper.starts_with("COM") || upper.starts_with("LPT"))
+            && upper.len() == 4
+            && upper.ends_with(|c: char| c.is_ascii_digit()));
+    if device {
+        return Some(NameProblem::Reserved);
+    }
+    if stem.chars().count() > NAME_MAX {
+        return Some(NameProblem::TooLong);
+    }
+    None
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BundleResult {
     /// Full path of the packed file.
     pub path: String,
@@ -369,6 +448,19 @@ pub struct FileText {
     /// Not text (an image, …): shown, not edited.
     #[serde(default)]
     pub binary: bool,
+    /// A picture, sound, font or 3D model (then `binary`, without text).
+    #[serde(default)]
+    pub media: Option<Media>,
+}
+
+/// A file the window shows instead of its text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Media {
+    pub kind: AssetKind,
+    /// For AgentKnife's own page only (it carries a token); changes when the
+    /// file does.
+    pub url: String,
+    pub size: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

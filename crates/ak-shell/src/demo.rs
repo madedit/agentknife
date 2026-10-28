@@ -333,6 +333,23 @@ impl Demo {
             }
             cmd::OPEN_FOLDER | cmd::PICK_FOLDER | cmd::PICK_FILES => Ok(Value::Null),
             cmd::ADD_FILES => Ok(json!(ak_types::ipc::AddedFiles::default())),
+            cmd::RENAME_FILE => {
+                let r: ak_types::ipc::RenameFile =
+                    serde_json::from_value(req).map_err(|e| text(e.to_string()))?;
+                let (dir, name) = r.path.rsplit_once('/').unwrap_or(("", r.path.as_str()));
+                let ext = name.rsplit_once('.').map(|(_, e)| format!(".{e}"));
+                let path = format!("{dir}/{}{}", r.stem.trim(), ext.unwrap_or_default());
+                if d.files.contains_key(&path) {
+                    return Ok(json!(ak_types::ipc::Renamed::Taken));
+                }
+                if let Some(text) = d.files.remove(&r.path) {
+                    d.files.insert(path.clone(), text);
+                }
+                Ok(json!(ak_types::ipc::Renamed::Done {
+                    path,
+                    updated: Vec::new(),
+                }))
+            }
             cmd::PREVIEW_STATUS => Ok(json!(d.preview)),
             cmd::RUN_APP
             | cmd::REVEAL
@@ -422,6 +439,7 @@ impl Demo {
                     path: path.to_owned(),
                     text: text.clone(),
                     binary: path.ends_with(".png"),
+                    media: None,
                 }))
             }
             cmd::WRITE_FILE => {

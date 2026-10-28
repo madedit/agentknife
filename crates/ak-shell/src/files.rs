@@ -3,11 +3,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ak_types::ipc::{FileEntry, FileText, TimelineRow};
+use ak_types::ipc::{
+    AssetKind, FileEntry, FileText, Media, NameProblem, RenameFile, Renamed, TimelineRow,
+    name_problem,
+};
 use leptos::prelude::*;
 
 use crate::backend::{Backend, CallError, now};
-use crate::i18n::{t, t_count, tr};
+use crate::i18n::{t, t_count, t_with, tr};
 use crate::layout::{CenterTab, Layout};
 use crate::shell::change;
 
@@ -139,6 +142,8 @@ pub struct OpenFile {
     /// As last read or saved.
     pub saved: String,
     pub binary: bool,
+    /// Shown instead of text (a picture, sound, font or 3D model).
+    pub media: Option<Media>,
     /// Bumped when the editor must show new text (the file was reloaded).
     pub version: u32,
 }
@@ -210,7 +215,7 @@ impl Files {
             let Ok(disk) = backend.read_file(&open.path).await else {
                 return;
             };
-            if disk.text == open.saved {
+            if disk.text == open.saved && disk.media == open.media {
                 return;
             }
             let has_draft = self.drafts.with_untracked(|d| d.contains_key(&open.path));
@@ -228,6 +233,7 @@ impl Files {
             path: file.path,
             saved: file.text,
             binary: file.binary,
+            media: file.media,
             version,
         }));
     }
@@ -242,6 +248,15 @@ impl Files {
                     self.show(file, v);
                 }
                 Err(e) => self.error.set(Some(message(e))),
+            }
+        });
+    }
+
+    /// A file was renamed: its unsaved edits go with it.
+    pub fn renamed(&self, from: &str, to: &str) {
+        self.drafts.update(|d| {
+            if let Some(text) = d.remove(from) {
+                d.insert(to.to_owned(), text);
             }
         });
     }
@@ -593,7 +608,7 @@ pub fn CodePane() -> impl IntoView {
                 }
             >
                 <div class="flex shrink-0 items-center gap-2 border-b border-gray-200 px-3 py-1.5 text-sm dark:border-gray-800">
-                    <span data-open-file="" class="truncate font-mono text-xs">{path}</span>
+                    <RenameFile />
                     <Show when=dirty>
                         <span data-dirty="" class="text-xs text-blue-700 dark:text-blue-300">{t("files-unsaved")}</span>
                     </Show>
@@ -627,11 +642,277 @@ pub fn CodePane() -> impl IntoView {
                     </div>
                 </Show>
                 <Show when=binary>
-                    <p class="p-6 text-sm text-gray-500 dark:text-gray-400">{t("files-binary")}</p>
+                    {move || match files.open.with(|o| o.as_ref().and_then(|o| o.media.clone())) {
+                        Some(media) => view! { <MediaView media /> }.into_any(),
+                        None => view! {
+                            <p class="p-6 text-sm text-gray-500 dark:text-gray-400">{t("files-binary")}</p>
+                        }.into_any(),
+                    }}
                 </Show>
             </Show>
             <div node_ref=host data-editor="" class=move || if path().is_some() && !binary() { "min-h-0 flex-1 overflow-auto" } else { "hidden" }></div>
         </div>
+    }
+}
+
+/// Why a rename did not happen (translated when drawn).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RenameTrouble {
+    Name(NameProblem),
+    Taken,
+    Failed(String),
+}
+
+fn trouble_text(trouble: &RenameTrouble) -> String {
+    match trouble {
+        RenameTrouble::Name(NameProblem::Empty) => t("files-rename-empty")(),
+        RenameTrouble::Name(NameProblem::Character { found }) => {
+            t_with("files-rename-character", [("found", found.clone())])()
+        }
+        RenameTrouble::Name(NameProblem::Ending) => t("files-rename-ending")(),
+        RenameTrouble::Name(NameProblem::Reserved) => t("files-rename-reserved")(),
+        RenameTrouble::Name(NameProblem::TooLong) => t("files-rename-too-long")(),
+        RenameTrouble::Taken => t("files-rename-taken")(),
+        RenameTrouble::Failed(e) => t_with("files-rename-failed", [("error", e.clone())])(),
+    }
+}
+
+/// `assets/images/cat.png` → (`cat`, `.png`).
+pub fn stem_and_extension(path: &str) -> (String, String) {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    match name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() => (stem.to_owned(), format!(".{ext}")),
+        _ => (name.to_owned(), String::new()),
+    }
+}
+
+/// The open file's name, and for the user's files in `assets/` a way to
+/// rename them (same folder and extension; the project's text that names the
+/// file follows).
+#[component]
+fn RenameFile() -> impl IntoView {
+    let files = expect_context::<Files>();
+    let backend = StoredValue::new(expect_context::<Backend>());
+    let path = move || {
+        files
+            .open
+            .with(|o| o.as_ref().map(|o| o.path.clone()))
+            .unwrap_or_default()
+    };
+    // The new name being typed (without the extension).
+    let editing = RwSignal::new(None::<String>);
+    let trouble = RwSignal::new(None::<RenameTrouble>);
+    // After a rename: the new path and how many files named it.
+    let updated = RwSignal::new(None::<(String, usize)>);
+    let input = NodeRef::<leptos::html::Input>::new();
+
+    #[cfg(target_arch = "wasm32")]
+    Effect::new(move |_| {
+        if let Some(el) = input.get() {
+            let _ = el.focus();
+            el.select();
+        }
+    });
+
+    let start = move || {
+        trouble.set(None);
+        updated.set(None);
+        editing.set(Some(stem_and_extension(&path()).0));
+    };
+    let cancel = move || {
+        editing.set(None);
+        trouble.set(None);
+    };
+    let submit = move || {
+        let Some(stem) = editing.get_untracked() else {
+            return;
+        };
+        let stem = stem.trim().to_owned();
+        if let Some(problem) = name_problem(&stem) {
+            trouble.set(Some(RenameTrouble::Name(problem)));
+            return;
+        }
+        let from = files
+            .open
+            .with_untracked(|o| o.as_ref().map(|o| o.path.clone()))
+            .unwrap_or_default();
+        let backend = backend.get_value();
+        leptos::task::spawn_local(async move {
+            let request = RenameFile {
+                path: from.clone(),
+                stem,
+            };
+            match backend.rename_file(&request).await {
+                Ok(Renamed::Done { path, updated: u }) => {
+                    editing.set(None);
+                    trouble.set(None);
+                    files.renamed(&from, &path);
+                    if !u.is_empty() {
+                        updated.set(Some((path.clone(), u.len())));
+                    }
+                    files.open_file(backend.clone(), path);
+                    files.refresh(backend);
+                }
+                Ok(Renamed::Taken) => trouble.set(Some(RenameTrouble::Taken)),
+                Ok(Renamed::Bad { problem }) => trouble.set(Some(RenameTrouble::Name(problem))),
+                Err(e) => trouble.set(Some(RenameTrouble::Failed(message(e)))),
+            }
+        });
+    };
+    let can_rename = move || path().starts_with("assets/");
+
+    view! {
+        <Show
+            when=move || editing.with(Option::is_some)
+            fallback=move || view! {
+                <span data-open-file="" class="truncate font-mono text-xs">{path}</span>
+                <Show when=can_rename>
+                    <button
+                        title=t("files-rename-tip")
+                        type="button"
+                        data-action="rename-file"
+                        class="shrink-0 rounded px-2 py-0.5 text-xs whitespace-nowrap text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950"
+                        on:click=move |_| start()
+                    >
+                        {t("files-rename")}
+                    </button>
+                </Show>
+                {move || updated.get().filter(|(p, _)| *p == path()).map(|(_, n)| view! {
+                    <span data-renamed="" class="truncate text-xs text-green-700 dark:text-green-300">
+                        {t_count("files-renamed-updated", "count", n as u64)}
+                    </span>
+                })}
+            }
+        >
+            <div data-rename="" class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                <span class="truncate font-mono text-xs text-gray-500 dark:text-gray-400">
+                    {move || path().rsplit_once('/').map(|(dir, _)| format!("{dir}/")).unwrap_or_default()}
+                </span>
+                <input
+                    node_ref=input
+                    type="text"
+                    aria-label=t("files-rename-label")
+                    maxlength="120"
+                    class="w-40 min-w-0 rounded border border-gray-300 bg-white px-2 py-0.5 font-mono text-xs dark:border-gray-700 dark:bg-gray-950"
+                    prop:value=move || editing.get().unwrap_or_default()
+                    on:input=move |e| {
+                        trouble.set(None);
+                        editing.set(Some(event_target_value(&e)));
+                    }
+                    on:keydown=move |e| match e.key().as_str() {
+                        "Enter" => submit(),
+                        "Escape" => cancel(),
+                        _ => {}
+                    }
+                />
+                <span class="font-mono text-xs text-gray-500 dark:text-gray-400">{move || stem_and_extension(&path()).1}</span>
+                <button
+                    title=t("files-rename-save-tip")
+                    type="button"
+                    data-action="save-rename"
+                    class="rounded bg-blue-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-blue-700"
+                    on:click=move |_| submit()
+                >
+                    {t("files-rename-save")}
+                </button>
+                <button
+                    title=t("common-cancel-tip")
+                    type="button"
+                    class="rounded px-2 py-0.5 text-xs hover:bg-gray-100 dark:hover:bg-gray-800"
+                    on:click=move |_| cancel()
+                >
+                    {t("common-cancel")}
+                </button>
+                {move || trouble.get().map(|tr| view! {
+                    <span role="alert" data-rename-trouble="" class="w-full text-xs text-red-700 dark:text-red-300">{trouble_text(&tr)}</span>
+                })}
+            </div>
+        </Show>
+    }
+}
+
+/// `1.5 MB`, `320 KB`, `12 B`.
+pub fn size_text(bytes: u64) -> String {
+    const K: f64 = 1024.0;
+    let b = bytes as f64;
+    if b < K {
+        format!("{bytes} B")
+    } else if b < K * K {
+        format!("{:.0} KB", b / K)
+    } else {
+        format!("{:.1} MB", b / (K * K))
+    }
+}
+
+/// A picture, sound or font shown as itself (3D models: a note for now).
+#[component]
+fn MediaView(media: Media) -> impl IntoView {
+    let size = size_text(media.size);
+    let url = media.url;
+    match media.kind {
+        AssetKind::Image => {
+            let dims = RwSignal::new(None::<(u32, u32)>);
+            #[cfg(target_arch = "wasm32")]
+            let on_load = move |ev: leptos::ev::Event| {
+                use wasm_bindgen::JsCast;
+                if let Some(img) = ev
+                    .target()
+                    .and_then(|t| t.dyn_into::<web_sys::HtmlImageElement>().ok())
+                {
+                    dims.set(Some((img.natural_width(), img.natural_height())));
+                }
+            };
+            #[cfg(not(target_arch = "wasm32"))]
+            let on_load = move |_: leptos::ev::Event| {};
+            view! {
+                <div data-media="image" class="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-auto p-4">
+                    <img
+                        src=url
+                        alt=""
+                        on:load=on_load
+                        class="max-w-full rounded border border-gray-200 bg-[repeating-conic-gradient(#e5e7eb_0_25%,#fff_0_50%)] bg-[length:16px_16px] dark:border-gray-700"
+                    />
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                        {move || match dims.get() {
+                            Some((w, h)) => format!("{w} × {h} · {size}"),
+                            None => size.clone(),
+                        }}
+                    </p>
+                </div>
+            }
+            .into_any()
+        }
+        AssetKind::Sound => view! {
+            <div data-media="sound" class="flex flex-col items-center gap-3 p-6">
+                <audio controls src=url class="w-full max-w-md"></audio>
+                <p class="text-xs text-gray-500 dark:text-gray-400">{size}</p>
+            </div>
+        }
+        .into_any(),
+        AssetKind::Font => {
+            // One family per file version, so a changed font shows anew.
+            let family: String = url.chars().filter(char::is_ascii_alphanumeric).collect();
+            let face = format!(r#"@font-face{{font-family:"{family}";src:url("{url}")}}"#);
+            let style = format!(r#"font-family:"{family}",sans-serif"#);
+            view! {
+                <div data-media="font" class="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-6 text-gray-900 dark:text-gray-100">
+                    <style>{face}</style>
+                    <p style=style.clone() class="text-4xl">{t("files-font-sample")}</p>
+                    <p style=style.clone() class="text-2xl">{t("files-font-upper")}</p>
+                    <p style=style.clone() class="text-2xl">{t("files-font-lower")}</p>
+                    <p style=style class="text-base">{t("files-font-sample")}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{size}</p>
+                </div>
+            }
+            .into_any()
+        }
+        AssetKind::Model | AssetKind::Other => view! {
+            <div data-media="model" class="p-6 text-sm text-gray-500 dark:text-gray-400">
+                <p>{t("files-model-later")}</p>
+                <p class="mt-2 text-xs">{size}</p>
+            </div>
+        }
+        .into_any(),
     }
 }
 

@@ -648,11 +648,12 @@ impl<R: Runtime> Host<R> {
                     o.cancel.is_some(),
                     crate::home::profile_of_root(o),
                     o.added_files.clone(),
+                    o.renamed_files.clone(),
                 )
             });
             (open, inner.settings.clone())
         };
-        let Some((name, root, preview, working, profile, added)) = open else {
+        let Some((name, root, preview, working, profile, added, renamed)) = open else {
             return ToolOutput::text(
                 "No project is open in AgentKnife. Call list_projects, then open_project.",
             );
@@ -669,8 +670,18 @@ impl<R: Runtime> Host<R> {
                 crate::assets::describe(&added)
             )
         };
+        let renamed = if renamed.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\nFiles the user renamed (AgentKnife replaced the old path where the \
+                 project's text named it, listed; fix code that builds these paths from \
+                 parts):\n{}",
+                crate::assets::describe_renames(&renamed)
+            )
+        };
         ToolOutput::text(format!(
-            "Project: {name} ({})\n{build}\nAgentKnife's own AI: {}{added}{}",
+            "Project: {name} ({})\n{build}\nAgentKnife's own AI: {}{added}{renamed}{}",
             root.display(),
             if working {
                 "working (changes are refused until it finishes)"
