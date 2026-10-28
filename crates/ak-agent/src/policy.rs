@@ -600,9 +600,13 @@ mod tests {
             root.join("ak").join("ak-ui").join("x.rs").display()
         );
         assert_eq!(check(&absolute), "deny:ProtectedPath");
-        // Reading them, and names that only look alike, are fine.
+        // Reading them, and names that only look alike, are fine. (findstr's
+        // `/c:` is an absolute path elsewhere: outside the project.)
+        if cfg!(windows) {
+            let c = r#"findstr /n /c:"rounded-" ak\ak-ui\src\button.rs"#;
+            assert_eq!(check(c), "allow", "{c}");
+        }
         for c in [
-            r#"findstr /n /c:"rounded-" ak\ak-ui\src\button.rs"#,
             "type ak\\ak-ui\\src\\list.rs > notes.txt",
             "echo target/ >> .gitignore",
             "copy notes.md akira\\notes.md",

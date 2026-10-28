@@ -714,6 +714,7 @@
     - ak-ui: every part has a fixed marker class (`ak-button`, `ak-button-primary`…, `ak-card`, `ak-list-row`, `ak-toggle-switch`, `ak-nav-tab`, `ak-dialog`, `ak-toast-error`…); a plain rule in style/input.css (unlayered, so it wins over Tailwind's utility layer) restyles every one. Knowledge ak-ui "Restyling every one at once" (marker table, `@apply` examples, never ak/ not even by command), tailwind and overview point there.
     - The theme-test project's `ak/ak-ui/src/button.rs` was restored from the template (the 0.2.26 kit it had).
   - Live check (owner, 2026-10-28): restyling every button through the marker classes, and refusals for ak/ (file tools and commands), work.
+  - GitHub CI (2026-10-28, Linux and macOS): `commands_cannot_write_protected_paths` expected `findstr /n /c:"rounded-" …` to be allowed, but outside Windows `/c:` is an absolute path (outside the project, so asked). That case is now checked on Windows only (hash in next commit).
 - P1-APP-001 (follow-up) — 24dc822 — kit updates: a project's `ak/` is offered for replacement when it differs from this AgentKnife's (was Blocked: no template-update mechanism).
   - Owner's decisions (2026-10-28): only `ak/`, replaced whole; offered when a project opens, updated when the user presses the button; a kit edited before the AI's tools refused it is replaced too, and the AI is told.
   - ak-types: `Template::kit` (`Some("ak")` for tauri-leptos) and `Template::kit_files`; `cmd::UPDATE_KIT` → `KitChanges { files }`; `OpenedProject::kit_update`.
