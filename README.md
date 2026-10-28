@@ -25,7 +25,7 @@ After each change AgentKnife builds the app again, which takes a little while. T
 
 ## Examples
 
-All three were made with a local model (qwen3.8-flash) running on the same PC, with no cloud AI.
+The first three were made with a local model (qwen3.8-flash) running on the same PC, with no cloud AI. The fourth was made by Antigravity, operating AgentKnife through MCP.
 
 ### Photo Editor UI
 
@@ -51,13 +51,21 @@ A 3D scene with animation. The AI agent made it from one short request:
 
 > Create a 3D voxel castle scene: a small Japanese-style castle built from colorful voxel blocks on a hill, surrounded by cherry blossom trees, with pink petals gently falling and drifting in the wind. I can rotate and zoom the camera with the mouse, and there is a slider for the wind strength and a button to switch between day and night.
 
+### 3D Flight Game
+
+![A 3D flight game made in AgentKnife: a small red airplane over green hills, guide rings in the air, a score bar and stunt buttons](images/3d-flight.jpg)
+
+A playable 3D game, made by Antigravity through AgentKnife's MCP tools (it checked its work with preview screenshots). It started from one short request:
+
+> Build a 3D flight game: The user controls a small airplane on an open map. Flying through airborne guide rings adds 1 point each. The airplane should be able to perform stunts.
+
 That first request is only the start. You can ask the AI for changes at any time, as your ideas change: the zoom buttons in the pathfinding demo were added later with "Add zoom-in and zoom-out buttons".
 
 ## Install on Windows
 
 macOS / Linux versions coming later.
 
-1. Download `AgentKnife-1.0.1-windows-x64.zip` from the [Releases](../../releases/latest) page.
+1. Download `AgentKnife-<version>-windows-x64.zip` from the [Releases](../../releases/latest) page.
 2. Unzip it to a folder of your choice, and keep `agentknife.exe` and `agentknife-mcp.exe` together.
 3. Run `agentknife.exe`. It is not signed: if Windows shows "Windows protected your PC", choose "More info", then "Run anyway".
 

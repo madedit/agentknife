@@ -656,7 +656,7 @@
   - Knowledge pack 0.2.21, topic overview: `assets/` in the layout, never download pictures/sounds/fonts/models, ask the user to add one and draw a stand-in meanwhile; keep the `assets` link.
   - Tests: ak-app `assets` (kinds, copying, numbering, holding, the link once, the note); ak-shell base64 and notices; render: the button in simple mode (chat bar) and full mode (also the Files pane), zh-TW text.
   - Live check (owner, 2026-10-28): adding and dropping files work.
-- P1-SHELL-007 (follow-up) — (hash in next commit) — the user's files shown in the window (pictures, sounds, fonts) and renamed there; the Code tab is now "File contents".
+- P1-SHELL-007 (follow-up) — 80d1b18 — the user's files shown in the window (pictures, sounds, fonts) and renamed there; the Code tab is now "File contents".
   - ak-app `media`: the `akfile` URL scheme serves the open project's files to AgentKnife's page (`http://akfile.localhost/<token>/<path>?v=<modified>` on Windows, `akfile://localhost/...` elsewhere). The token is made at start (`AppState::files_token`) and only reaches the shell through `read_file`, so the preview's page cannot read the project's files this way; paths go through `resolve` (no way out of the project). Single byte ranges (at most 4 MB at a time) so sounds can be seeked; CORS open for fonts.
   - `FileText::media` (`Media { kind, url, size }`) for pictures, sounds, fonts and 3D models (by extension, as when adding files); then no text is read. An SVG now shows as a picture.
   - Code tab: the picture on a checkerboard with its size in pixels, an audio player, the font in sample lines, and for 3D models a note (they need three.js's loaders: P1-KNOW-002). The open file reloads when its URL changes (the file changed).

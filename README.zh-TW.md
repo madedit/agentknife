@@ -25,7 +25,7 @@ What You See Is What You Get：預覽視窗裡跑的就是你的 App 本身，�
 
 ## 範例
 
-三個範例都是用在同一台電腦上執行的本機模型（qwen3.8-flash）做的，沒有用到雲端 AI。
+前三個範例是用在同一台電腦上執行的本機模型（qwen3.8-flash）做的，沒有用到雲端 AI。第四個是 Antigravity 透過 MCP 操作 AgentKnife 做的。
 
 ### 照片編輯器介面
 
@@ -51,13 +51,21 @@ AI agent 從這一段簡短的需求做出這個介面：
 
 > Create a 3D voxel castle scene: a small Japanese-style castle built from colorful voxel blocks on a hill, surrounded by cherry blossom trees, with pink petals gently falling and drifting in the wind. I can rotate and zoom the camera with the mouse, and there is a slider for the wind strength and a button to switch between day and night.
 
+### 3D 飛行遊戲
+
+![用 AgentKnife 做的 3D 飛行遊戲：紅色小飛機飛過綠色山丘，空中有導引環，上方是分數列，下方是特技按鈕](images/3d-flight.jpg)
+
+一個可以玩的 3D 遊戲，由 Antigravity 透過 AgentKnife 的 MCP 工具做出來（過程中它會用預覽截圖檢查成果）。起點是這一段簡短的需求：
+
+> Build a 3D flight game: The user controls a small airplane on an open map. Flying through airborne guide rings adds 1 point each. The airplane should be able to perform stunts.
+
 第一段需求只是起點。想法有變的時候，隨時都可以請 AI 修改：路徑搜尋範例裡的縮放按鈕，就是後來用「Add zoom-in and zoom-out buttons」加上去的。
 
 ## 在 Windows 上安裝
 
 macOS / Linux 版之後推出。
 
-1. 從 [Releases](../../releases/latest) 頁面下載 `AgentKnife-1.0.1-windows-x64.zip`。
+1. 從 [Releases](../../releases/latest) 頁面下載 `AgentKnife-<version>-windows-x64.zip`（`<version>` 是版本號）。
 2. 解壓縮到你想放的資料夾，`agentknife.exe` 和 `agentknife-mcp.exe` 要放在一起。
 3. 執行 `agentknife.exe`。程式沒有簽章，如果 Windows 跳出「Windows 已保護您的電腦」，請按「其他資訊」，再按「仍要執行」。
 
