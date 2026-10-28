@@ -25,6 +25,15 @@ static FILES: &[TemplateFile] = &[
         path: "gitignore",
         contents: b"/target/\n",
     },
+    // The kit AgentKnife owns and keeps up to date.
+    TemplateFile {
+        path: "ak/ui/Cargo.toml",
+        contents: b"[package]\nname = \"ui\"\n",
+    },
+    TemplateFile {
+        path: "ak/ui/src/lib.rs",
+        contents: b"pub fn button() {}\n",
+    },
 ];
 
 fn cmd() -> CommandSpec {
@@ -49,6 +58,7 @@ impl StackProfile for Fake {
                 (TemplateValue::Identifier, "com.agentknife.myapp"),
             ],
             renames: &[("gitignore", ".gitignore")],
+            kit: Some("ak"),
         }
     }
     fn knowledge_pack(&self) -> KnowledgePack {
@@ -113,7 +123,15 @@ fn scaffold_fills_names_keeps_user_files_and_records_the_stack() {
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .collect();
     written.sort();
-    assert_eq!(written, [".gitignore", "app.json"]);
+    assert_eq!(
+        written,
+        [
+            ".gitignore",
+            "ak/ui/Cargo.toml",
+            "ak/ui/src/lib.rs",
+            "app.json"
+        ]
+    );
     assert_eq!(
         std::fs::read_to_string(dir.path().join("app.json")).unwrap(),
         r#"{"name": "Shopping List", "id": "com.agentknife.shoppinglist"}"#
@@ -134,4 +152,63 @@ fn scaffold_fills_names_keeps_user_files_and_records_the_stack() {
         reopened.scaffold(&Fake("other-stack")),
         Err(ProjectError::OtherStack { .. })
     ));
+}
+
+#[test]
+fn the_kit_folder_is_replaced_whole() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let mut project = Project::init(root, "Shop", Locale::En).unwrap();
+    let fake = Fake("fake-stack");
+    project.scaffold(&fake).unwrap();
+    assert!(project.kit_changes(&fake).unwrap().is_empty());
+    assert!(project.update_kit(&fake).unwrap().is_empty());
+
+    // An older kit, an edit, a file of its own; the app's files are not the kit's.
+    std::fs::write(
+        root.join("ak/ui/src/lib.rs"),
+        "pub fn button() { /* edited */ }\n",
+    )
+    .unwrap();
+    std::fs::remove_file(root.join("ak/ui/Cargo.toml")).unwrap();
+    std::fs::create_dir_all(root.join("ak/ui/src/extra")).unwrap();
+    std::fs::write(
+        root.join("ak/ui/src/extra/old.rs"),
+        "// gone in this version\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("src/main.rs"), "// the app, changed\n").unwrap();
+    let changes = [
+        "ak/ui/Cargo.toml",
+        "ak/ui/src/extra/old.rs",
+        "ak/ui/src/lib.rs",
+    ];
+    assert_eq!(project.kit_changes(&fake).unwrap(), changes);
+    assert_eq!(project.update_kit(&fake).unwrap(), changes);
+
+    assert_eq!(
+        std::fs::read_to_string(root.join("ak/ui/src/lib.rs")).unwrap(),
+        "pub fn button() {}\n"
+    );
+    assert!(root.join("ak/ui/Cargo.toml").exists());
+    assert!(
+        !root.join("ak/ui/src/extra").exists(),
+        "emptied folders go too"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("src/main.rs")).unwrap(),
+        "// the app, changed\n"
+    );
+    assert!(project.kit_changes(&fake).unwrap().is_empty());
+
+    // No kit folder (an app AgentKnife did not make), or another stack: nothing.
+    std::fs::remove_dir_all(root.join("ak")).unwrap();
+    assert!(project.kit_changes(&fake).unwrap().is_empty());
+    std::fs::create_dir_all(root.join("ak")).unwrap();
+    assert!(
+        project
+            .kit_changes(&Fake("other-stack"))
+            .unwrap()
+            .is_empty()
+    );
 }

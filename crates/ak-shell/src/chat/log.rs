@@ -118,6 +118,9 @@ pub struct ChatLog {
     pub budget_warning: Option<(f64, f64)>,
     /// The request of an interrupted turn, until the user decides.
     pub interrupted: Option<String>,
+    /// The project's kit (`ak/`) is older: how many files an update changes,
+    /// and whether it was done (until the user closes the card).
+    pub kit_update: Option<(usize, bool)>,
     /// A turn just started: its words go in a new bubble, even right after the
     /// previous turn's (continuing, resuming).
     pub new_bubble: bool,

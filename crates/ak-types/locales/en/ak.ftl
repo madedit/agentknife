@@ -326,6 +326,16 @@ chat-failed = Something went wrong with the AI service.
 chat-interrupted = Last time I stopped halfway (doing: “{ $request }”). Shall I continue, or go back to the last checkpoint?
 chat-interrupted-continue = Continue
 chat-interrupted-go-back = Go back to the last checkpoint
+kit-update = AgentKnife has a newer version of the components this app is built from (buttons, lists, dialogs…), with fixes and new options. Updating replaces the folder ak/ ({ $count } files). A version is saved first, so you can go back.
+kit-update-now = Update
+kit-update-now-tip = Replace ak/ with AgentKnife's version; the AI hears of it with your next message
+kit-update-later = Not now
+kit-update-later-tip = Ask again the next time this project opens
+kit-updated = Components updated ({ $count } files). The AI hears of it with your next message, and fixes the app if something no longer fits.
+kit-updated-ok = OK
+kit-updated-ok-tip = Close this note
+kit-updated-version = Updated AgentKnife's components
+kit-before-update-version = Before updating AgentKnife's components
 # $session, $today: US dollars
 chat-usage = This session US${ $session } · today US${ $today }
 chat-usage-at-least = This session at least US${ $session } · today at least US${ $today }

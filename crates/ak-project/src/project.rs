@@ -181,6 +181,67 @@ impl Project {
         Ok(written)
     }
 
+    /// Files of the kit folder (`ak/`) that differ from this AgentKnife's
+    /// version: changed, missing or extra (project-relative, `/`, sorted).
+    /// Empty when the project has no kit folder (an app AgentKnife did not
+    /// make) or uses another stack.
+    pub fn kit_changes(&self, profile: &dyn StackProfile) -> Result<Vec<String>, ProjectError> {
+        let Some(kit) = self.kit_dir(profile) else {
+            return Ok(Vec::new());
+        };
+        let wanted = self.wanted_kit(profile);
+        let mut changed: Vec<String> = Vec::new();
+        for (rel, bytes) in &wanted {
+            let path = self.root.join(rel);
+            match std::fs::read(&path) {
+                Ok(have) if have == *bytes => {}
+                Ok(_) => changed.push(rel.clone()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => changed.push(rel.clone()),
+                Err(e) => return Err(e).at(&path),
+            }
+        }
+        for rel in files_under(&self.root, &kit)? {
+            if !wanted.iter().any(|(w, _)| *w == rel) {
+                changed.push(rel);
+            }
+        }
+        changed.sort();
+        Ok(changed)
+    }
+
+    /// Replaces the kit folder with this AgentKnife's version: writes its files
+    /// and removes others there. Returns what [`Project::kit_changes`] listed.
+    pub fn update_kit(&self, profile: &dyn StackProfile) -> Result<Vec<String>, ProjectError> {
+        let changed = self.kit_changes(profile)?;
+        if changed.is_empty() {
+            return Ok(changed);
+        }
+        let wanted = self.wanted_kit(profile);
+        for rel in &changed {
+            let path = self.root.join(rel);
+            match wanted.iter().find(|(w, _)| w == rel) {
+                Some((_, bytes)) => write_atomic(&path, bytes)?,
+                None => std::fs::remove_file(&path).at(&path)?,
+            }
+        }
+        if let Some(kit) = self.kit_dir(profile) {
+            remove_empty_dirs(&self.root.join(&kit));
+        }
+        Ok(changed)
+    }
+
+    /// The kit folder's name, when this project has one from `profile`.
+    fn kit_dir(&self, profile: &dyn StackProfile) -> Option<String> {
+        let kit = profile.template().kit?;
+        let ours = self.meta.stack.as_deref().is_none_or(|s| s == profile.id());
+        (ours && self.root.join(kit).is_dir()).then(|| kit.to_owned())
+    }
+
+    fn wanted_kit(&self, profile: &dyn StackProfile) -> Vec<(String, Vec<u8>)> {
+        let values = ProjectValues::for_name(&self.meta.name, &self.meta.id);
+        profile.template().kit_files(&values)
+    }
+
     fn save_meta(&self) -> Result<(), ProjectError> {
         let json = serde_json::to_string_pretty(&self.meta).map_err(|e| ProjectError::Corrupt {
             path: self.agentknife_dir().join(META_FILE),
@@ -228,6 +289,35 @@ impl Project {
             detail: e.to_string(),
         })?;
         write_atomic(&path, json.as_bytes())
+    }
+}
+
+/// Every file under `root/dir`, project-relative with `/`.
+fn files_under(root: &Path, dir: &str) -> Result<Vec<String>, ProjectError> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.join(dir)];
+    while let Some(d) = stack.pop() {
+        for entry in std::fs::read_dir(&d).at(&d)? {
+            let path = entry.at(&d)?.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if let Ok(rel) = path.strip_prefix(root) {
+                out.push(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Removes the folders under `dir` (not `dir`) that are now empty.
+fn remove_empty_dirs(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for path in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+        remove_empty_dirs(&path);
+        // Fails (and stays) when something is left in it.
+        let _ = std::fs::remove_dir(&path);
     }
 }
 

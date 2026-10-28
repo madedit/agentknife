@@ -74,6 +74,12 @@ pub struct OpenProject {
     pub renamed_files: Vec<crate::assets::Rename>,
     /// Renames the built-in AI has not heard of yet (next message).
     pub unannounced_renames: Vec<crate::assets::Rename>,
+    /// Kit files (`ak/`) that differ from this AgentKnife's (MCP `status`).
+    pub kit_outdated: Vec<String>,
+    /// The kit was updated since the project was opened (MCP `status`).
+    pub kit_note: Option<String>,
+    /// The kit update the built-in AI has not heard of yet (next message).
+    pub unannounced_kit: Option<String>,
 }
 
 pub struct Inner {

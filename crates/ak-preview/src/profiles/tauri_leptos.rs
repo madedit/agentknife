@@ -105,6 +105,7 @@ impl StackProfile for TauriLeptos {
             files: FILES,
             replace: REPLACE,
             renames: &[("gitignore", ".gitignore")],
+            kit: Some("ak"),
         }
     }
 

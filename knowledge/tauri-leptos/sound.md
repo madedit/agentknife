@@ -463,51 +463,56 @@ from their computer while the app runs.
 - **Picking**: a backend command opens the system's file dialog (topic
   `images-dialogs`). The preview has no dialogs: next to the button, a field
   where a path can be pasted, calling the same command.
-- **Keep a copy**: the backend copies each song into the app's data folder, so it
-  still plays when the original is moved or deleted. The list of songs (name,
-  file name) is saved like any data (topic `storage`).
-- **Playing**: the screens cannot read files, so the backend returns one song as
-  a data URL for `<audio src>`. Keep only the current song's URL (a long song is
-  a few MB of text); fetch the next one when the song changes.
+- **Remember where the song is**: the list of songs keeps each song's name and
+  its path on the computer, saved like any data (topic `storage`). Do not copy
+  the files: the songs stay where the user keeps them, and take no space twice.
+- **Playing**: the screens cannot read files, so the backend reads the song and
+  returns it as a data URL for `<audio src>`. Keep only the current song's URL
+  (a long song is a few MB of text); fetch the next one when the song changes.
+- **A song that is gone** (the user moved, renamed or deleted it): `song_url`
+  fails. Show the message on that song in the list (not only in the player),
+  skip to the next song, and offer "Remove" and "Add it again" (a new path).
+  Never remove it from the list by yourself.
+- **Copy only when the user asks** for songs that keep playing after the
+  originals are gone: then `add_song` copies the file into
+  `app.path().app_data_dir()?.join("songs")` (`use tauri::Manager;`, a new
+  name for each copy) and returns the copy's path, which the list remembers.
+  Tell the user the songs then take space twice.
 - Backend (`src-tauri/src/main.rs`; `base64 = "0.22.1"` in its
-  `[dependencies]`, `use tauri::Manager;`, both commands in `generate_handler!`):
+  `[dependencies]`, both commands in `generate_handler!`):
   ```rust
-  /// Copies a song the user picked into the app's folder; returns its file name.
+  /// Checks a song the user picked; returns its name for the list.
   #[tauri::command]
-  fn add_song(app: tauri::AppHandle, path: String) -> Result<String, String> {
-      let from = std::path::Path::new(&path);
-      let ext = from
-          .extension()
-          .and_then(|e| e.to_str())
-          .unwrap_or("")
-          .to_ascii_lowercase();
-      if ext != "mp3" && ext != "wav" {
-          return Err("Choose an MP3 file.".into());
+  fn add_song(path: String) -> Result<String, String> {
+      let path = std::path::Path::new(&path);
+      song_type(path)?;
+      if !path.is_file() {
+          return Err("There is no song at this path.".into());
       }
-      let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("songs");
-      std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-      let stamp = std::time::SystemTime::now()
-          .duration_since(std::time::UNIX_EPOCH)
-          .map(|d| d.as_millis())
-          .unwrap_or(0);
-      let file = format!("{stamp}.{ext}");
-      std::fs::copy(from, dir.join(&file)).map_err(|e| format!("Could not copy the song: {e}"))?;
-      Ok(file)
+      let name = path.file_stem().and_then(|n| n.to_str()).unwrap_or("Song");
+      Ok(name.to_owned())
   }
 
-  /// One song as a data URL for `<audio src>`.
+  /// One song as a data URL for `<audio src>`, read from where the user keeps it.
   #[tauri::command]
-  fn song_url(app: tauri::AppHandle, file: String) -> Result<String, String> {
+  fn song_url(path: String) -> Result<String, String> {
       use base64::Engine;
-      // Only names add_song made: no folders, no "..".
-      if file.contains(['/', '\\']) || file.starts_with('.') {
-          return Err("Unknown song.".into());
-      }
-      let path = app.path().app_data_dir().map_err(|e| e.to_string())?.join("songs").join(&file);
-      let bytes = std::fs::read(&path).map_err(|_| "The song file is missing.".to_owned())?;
-      let mime = if file.ends_with(".wav") { "audio/wav" } else { "audio/mpeg" };
+      let path = std::path::Path::new(&path);
+      let mime = song_type(path)?;
+      let bytes = std::fs::read(path)
+          .map_err(|_| "The song is no longer there (moved or deleted). Add it again.".to_owned())?;
       let data = base64::engine::general_purpose::STANDARD.encode(bytes);
       Ok(format!("data:{mime};base64,{data}"))
+  }
+
+  /// Only sound files: the screens cannot ask for any other file.
+  fn song_type(path: &std::path::Path) -> Result<&'static str, String> {
+      let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+      match ext.to_ascii_lowercase().as_str() {
+          "mp3" => Ok("audio/mpeg"),
+          "wav" => Ok("audio/wav"),
+          _ => Err("Choose an MP3 or WAV file.".into()),
+      }
   }
   ```
 - **The `<audio>` element goes in the `view!`**: `on:timeupdate`,

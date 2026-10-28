@@ -236,6 +236,28 @@ fn an_interrupted_turn_asks_to_continue_or_go_back() {
 }
 
 #[test]
+fn an_older_kit_is_offered_and_then_reported() {
+    let mut log = ChatLog::from_history(&[], None);
+    log.kit_update = Some((3, false));
+    let html = render(Locale::ZhTw, log.clone(), None);
+    assert!(html.contains(r#"data-card="kit-update""#), "{html}");
+    assert!(html.contains("ak/ 資料夾（3 個檔案）"), "{html}");
+    assert!(
+        html.contains(r#"data-action="kit-update""#) && html.contains(r#"data-action="kit-later""#)
+    );
+    assert!(!html.contains(">kit-"), "raw fluent id in {html}");
+
+    log.kit_update = Some((3, true));
+    let html = render(Locale::En, log, None);
+    assert!(
+        html.contains(r#"data-card="kit-updated""#)
+            && html.contains("Components updated (3 files)"),
+        "{html}"
+    );
+    assert!(!html.contains(r#"data-action="kit-update""#));
+}
+
+#[test]
 fn the_chip_names_the_element_briefly() {
     let mut p = picked();
     assert_eq!(selection_label(&p), "<button> “Greet”");

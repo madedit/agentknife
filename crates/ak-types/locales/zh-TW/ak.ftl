@@ -326,6 +326,16 @@ chat-failed = AI 服務出了問題。
 chat-interrupted = 上次做到一半中斷了（正在：「{ $request }」）。要接著做，還是回到上一個檢查點？
 chat-interrupted-continue = 接著做
 chat-interrupted-go-back = 回到上一個檢查點
+kit-update = AgentKnife 有新版的元件庫（這個 App 用來組成畫面的按鈕、清單、對話框等），修了一些問題，也多了新功能。更新會換掉專案裡的 ak/ 資料夾（{ $count } 個檔案），更新前會先存一個版本，隨時可以回去。
+kit-update-now = 更新
+kit-update-now-tip = 把 ak/ 換成 AgentKnife 的版本；AI 會在你下一則訊息時得知
+kit-update-later = 稍後
+kit-update-later-tip = 下次打開這個專案時再問
+kit-updated = 元件庫已更新（{ $count } 個檔案）。AI 會在你下一則訊息時得知，有地方不相容的話會幫你修好。
+kit-updated-ok = 好
+kit-updated-ok-tip = 關閉這則通知
+kit-updated-version = 更新了 AgentKnife 的元件庫
+kit-before-update-version = 更新元件庫之前
 # $session、$today：美元
 chat-usage = 這次 US${ $session } · 今天 US${ $today }
 chat-usage-at-least = 這次至少 US${ $session } · 今天至少 US${ $today }

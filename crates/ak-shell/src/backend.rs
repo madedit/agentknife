@@ -214,6 +214,10 @@ impl Backend {
         self.call(cmd::ADD_FILES, Some(request)).await
     }
 
+    pub async fn update_kit(&self) -> Result<ak_types::ipc::KitChanges, CallError> {
+        self.call(cmd::UPDATE_KIT, None::<()>).await
+    }
+
     pub async fn rename_file(
         &self,
         request: &ak_types::ipc::RenameFile,

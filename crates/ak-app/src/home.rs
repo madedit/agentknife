@@ -9,7 +9,8 @@ use ak_preview::log::LogBook;
 use ak_preview::{Preview, PreviewSession, profiles};
 use ak_project::{Project, RecentProject, Timeline};
 use ak_types::ipc::{
-    DeleteProject, HomeState, LOG_EVENT, NewProject, OpenedProject, PREVIEW_EVENT, ProjectRow,
+    DeleteProject, HomeState, KitChanges, LOG_EVENT, NewProject, OpenedProject, PREVIEW_EVENT,
+    ProjectRow,
 };
 use ak_types::log::LogSource;
 use ak_types::stack::StackProfile;
@@ -308,6 +309,8 @@ async fn open<R: Runtime>(
         .map(|t| t.request);
     let entries = history.entries().to_vec();
     let empty = history.messages().is_empty();
+    // An older kit (or one edited before the AI's tools refused it): offered.
+    let kit_outdated = project.kit_changes(profile).unwrap_or_default();
 
     let row = {
         let inner = state.inner.lock().await;
@@ -334,6 +337,9 @@ async fn open<R: Runtime>(
             unannounced: Vec::new(),
             renamed_files: Vec::new(),
             unannounced_renames: Vec::new(),
+            kit_outdated: kit_outdated.clone(),
+            kit_note: None,
+            unannounced_kit: None,
         });
     }
     // The project notes for the AI, and a greeting in a brand-new chat (after
@@ -347,6 +353,9 @@ async fn open<R: Runtime>(
         project: row,
         interrupted,
         history: entries,
+        kit_update: (!kit_outdated.is_empty()).then_some(KitChanges {
+            files: kit_outdated,
+        }),
     })
 }
 

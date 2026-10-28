@@ -2,7 +2,7 @@
 # versions below; `cargo xtask ci` checks them against versions.toml.
 [pack]
 id = "tauri-leptos"
-version = "0.2.27"
+version = "0.2.28"
 
 [versions]
 tauri = "2.12.4"
@@ -159,7 +159,7 @@ file = "three-d.md"
 [[topic]]
 id = "sound"
 title = "Music and sound effects"
-summary = "Music, audio and sound effects: the app's sounds in assets/sounds/ (MP3 plays everywhere), music that loops and fades, effects played many times at once (Web Audio), starting on the first click or key, volume and mute kept in the settings, stopping when the screen goes away; a music player with the user's own songs (copied by the backend, played as a data URL), <audio> events, a seek bar and a spectrum on a canvas (AnalyserNode); the state to check (no sound is heard in tests), the same in a three.js game.js, GStreamer on Linux."
+summary = "Music, audio and sound effects: the app's sounds in assets/sounds/ (MP3 plays everywhere), music that loops and fades, effects played many times at once (Web Audio), starting on the first click or key, volume and mute kept in the settings, stopping when the screen goes away; a music player with the user's own songs (remembered by path, not copied; played as a data URL; a song that was moved or deleted), <audio> events, a seek bar and a spectrum on a canvas (AnalyserNode); the state to check (no sound is heard in tests), the same in a three.js game.js, GStreamer on Linux."
 file = "sound.md"
 
 [[topic]]

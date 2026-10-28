@@ -12,6 +12,7 @@ pub mod capture;
 pub mod connect;
 pub mod crash;
 pub mod home;
+pub mod kit;
 pub mod mcp;
 pub mod media;
 pub mod settings;
@@ -92,6 +93,7 @@ const COMMANDS: &[&str] = &[
     "pick_files",
     "add_files",
     "rename_file",
+    "update_kit",
     "clear_preview_data",
     "open_terminal",
     "open_in_files",
@@ -147,6 +149,7 @@ pub fn with_commands<R: Runtime>(builder: Builder<R>, state: state::AppState) ->
             assets::pick_files,
             assets::add_files,
             assets::rename_file,
+            kit::update_kit,
             workspace::clear_preview_data,
             mcp::open_terminal,
             home::open_in_files,

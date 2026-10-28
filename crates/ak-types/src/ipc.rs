@@ -124,6 +124,10 @@ pub mod cmd {
     /// renames a file in the open project's `assets/` (same folder and
     /// extension) and the project's text that names it by its path.
     pub const RENAME_FILE: &str = "rename_file";
+    /// `()` → [`KitChanges`](super::KitChanges): replaces the open project's
+    /// kit folder (`ak/`) with this AgentKnife's version, saving a version
+    /// before and after (refused while an AI works).
+    pub const UPDATE_KIT: &str = "update_kit";
     /// `()` → `()`: "Clear data and start over": deletes what the app saved in
     /// the preview and starts it again (refused while the AI works).
     pub const CLEAR_PREVIEW_DATA: &str = "clear_preview_data";
@@ -186,6 +190,7 @@ pub mod cmd {
         PICK_FILES,
         ADD_FILES,
         RENAME_FILE,
+        UPDATE_KIT,
         CLEAR_PREVIEW_DATA,
         OPEN_TERMINAL,
         OPEN_IN_FILES,
@@ -507,6 +512,17 @@ pub struct OpenedProject {
     /// shows messages only).
     #[serde(default)]
     pub history: Vec<Entry>,
+    /// The project's kit (`ak/`) differs from this AgentKnife's: the window
+    /// offers to update it ([`cmd::UPDATE_KIT`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kit_update: Option<KitChanges>,
+}
+
+/// Files of the project's kit folder (`ak/`) that differ from this
+/// AgentKnife's version, or that an update replaced.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KitChanges {
+    pub files: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

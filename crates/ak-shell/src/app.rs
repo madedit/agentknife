@@ -200,8 +200,9 @@ pub fn AppView(
     let open = {
         let backend = backend.clone();
         Callback::new(move |o: OpenedProject| {
-            chat.log
-                .set(ChatLog::from_history(&o.history, o.interrupted));
+            let mut log = ChatLog::from_history(&o.history, o.interrupted.clone());
+            log.kit_update = o.kit_update.as_ref().map(|k| (k.files.len(), false));
+            chat.log.set(log);
             chat.selection.set(None);
             preview.picking.set(false);
             files.reset();

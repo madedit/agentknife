@@ -580,10 +580,12 @@ pub async fn send_message<R: Runtime>(
         open.preview.set_selection(request.selection.clone());
         let added = crate::assets::note(&std::mem::take(&mut open.unannounced));
         let renamed = crate::assets::rename_note(&std::mem::take(&mut open.unannounced_renames));
+        let kit = open.unannounced_kit.take();
         let notes: Vec<String> = [
             request.selection.as_ref().map(selection_note),
             added,
             renamed,
+            kit,
         ]
         .into_iter()
         .flatten()

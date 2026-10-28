@@ -227,6 +227,7 @@ pub fn ChatPane() -> impl IntoView {
                 <ItemView index />
             </For>
             {move || chat.log.with(|l| l.interrupted.clone()).map(|request| view! { <Interrupted request /> })}
+            {move || chat.log.with(|l| l.kit_update).map(|(count, done)| view! { <KitUpdate count done /> })}
         </div>
             <Show when=move || !chat.follow.get()>
                 <button
@@ -668,6 +669,64 @@ fn Interrupted(request: String) -> impl IntoView {
             </div>
         </div>
     }
+}
+
+/// The project's kit (`ak/`) is older than this AgentKnife's: update it, or
+/// not now (asked again next time).
+#[component]
+fn KitUpdate(count: usize, done: bool) -> impl IntoView {
+    let chat = expect_context::<Chat>();
+    let busy = RwSignal::new(false);
+    let close = move |_| chat.log.update(|l| l.kit_update = None);
+    let update = move |_| {
+        busy.set(true);
+        let files = use_context::<crate::files::Files>();
+        call(chat.log, move |b| async move {
+            let result = b.update_kit().await;
+            busy.set(false);
+            let changes = result?;
+            chat.log
+                .update(|l| l.kit_update = Some((changes.files.len(), true)));
+            if let Some(f) = files {
+                f.refresh(b);
+            }
+            Ok(())
+        });
+    };
+    if done {
+        return view! {
+            <div data-card="kit-updated" role="status" class=CARD>
+                <p>{t_with("kit-updated", [("count", count.to_string())])}</p>
+                <div class="mt-3">
+                    <button type="button" data-action="kit-updated-ok" title=t("kit-updated-ok-tip") class=SECONDARY on:click=close>
+                        {t("kit-updated-ok")}
+                    </button>
+                </div>
+            </div>
+        }
+        .into_any();
+    }
+    view! {
+        <div data-card="kit-update" class=format!("{CARD} border-sky-300 dark:border-sky-700")>
+            <p>{t_with("kit-update", [("count", count.to_string())])}</p>
+            <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                    title=t("kit-update-now-tip")
+                    type="button"
+                    data-action="kit-update"
+                    class=PRIMARY
+                    disabled=move || busy.get() || chat.log.with(|l| l.running)
+                    on:click=update
+                >
+                    {t("kit-update-now")}
+                </button>
+                <button title=t("kit-update-later-tip") type="button" data-action="kit-later" class=SECONDARY on:click=close>
+                    {t("kit-update-later")}
+                </button>
+            </div>
+        </div>
+    }
+    .into_any()
 }
 
 #[component]

@@ -62,6 +62,10 @@ pub struct Template {
     /// Files stored under another name (`gitignore` -> `.gitignore`: a dotfile in
     /// AgentKnife's own repo would apply to the repo itself).
     pub renames: &'static [(&'static str, &'static str)],
+    /// The folder AgentKnife owns in every project (`ak`: the kit the app uses).
+    /// Neither the AI nor the user changes it; AgentKnife may replace it whole
+    /// with its own version ([`Template::kit_files`]).
+    pub kit: Option<&'static str>,
 }
 
 /// A project's values for [`TemplateValue`]s.
@@ -121,6 +125,18 @@ fn escape_for(path: &str, value: &str) -> String {
 }
 
 impl Template {
+    /// The kit folder's files (project-relative, `/`), as this AgentKnife has them.
+    pub fn kit_files(&self, values: &ProjectValues) -> Vec<(String, Vec<u8>)> {
+        let Some(kit) = self.kit else {
+            return Vec::new();
+        };
+        let prefix = format!("{kit}/");
+        self.instantiate(values)
+            .into_iter()
+            .filter(|(rel, _)| rel.starts_with(&prefix))
+            .collect()
+    }
+
     /// The project's files: renamed, with the project's values filled in.
     pub fn instantiate(&self, values: &ProjectValues) -> Vec<(String, Vec<u8>)> {
         self.files
@@ -434,6 +450,7 @@ mod tests {
                 (TemplateValue::Identifier, "com.agentknife.myapp"),
             ],
             renames: &[("gitignore", ".gitignore")],
+            kit: None,
         };
         let out = t.instantiate(&ProjectValues {
             product_name: "Tom's \"Best\" <List>".into(),

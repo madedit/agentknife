@@ -222,10 +222,18 @@ impl Demo {
         } else {
             (None, Vec::new())
         };
+        // The second one pretends its kit is older.
+        let kit_update = (row.id == "demo-2").then(|| ak_types::ipc::KitChanges {
+            files: vec![
+                "ak/ak-ui/src/button.rs".into(),
+                "ak/ak-ui/src/lib.rs".into(),
+            ],
+        });
         OpenedProject {
             project: row,
             interrupted,
             history,
+            kit_update,
         }
     }
 
@@ -350,6 +358,12 @@ impl Demo {
                     updated: Vec::new(),
                 }))
             }
+            cmd::UPDATE_KIT => Ok(json!(ak_types::ipc::KitChanges {
+                files: vec![
+                    "ak/ak-ui/src/button.rs".into(),
+                    "ak/ak-ui/src/lib.rs".into()
+                ],
+            })),
             cmd::PREVIEW_STATUS => Ok(json!(d.preview)),
             cmd::RUN_APP
             | cmd::REVEAL
