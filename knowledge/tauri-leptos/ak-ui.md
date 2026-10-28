@@ -99,7 +99,10 @@ put them all in one `<div class="grid w-full gap-3 sm:grid-cols-2">` inside it.
     empty="Nothing to do yet"
 />
 ```
-Rows are flex rows: put buttons at the end of `row`.
+Rows are flex rows: put buttons at the end of `row`. `List` looks like a light
+card (white, rounded, a border) and has no `class` prop: on a dark or styled
+panel, draw the list yourself (`<ul>` with `<For>` and a row component, topic
+`leptos-components`).
 
 The `key` must be unique and stable, and printable (`Display`: numbers, `String`).
 It becomes part of each row's `data-ak-id`: spaces and signs turn into `-`

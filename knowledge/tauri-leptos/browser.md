@@ -70,3 +70,28 @@ fn input_of(ev: &web_sys::Event) -> Option<web_sys::HtmlInputElement> {
   (`String::from(…)`), not a `Result`.
 - Files dragged in from the computer and the system's dialogs belong to the real
   window, not the screens (topic `overview`).
+
+## Events of one element
+- An element in the `view!` takes any of its events with `on:`, like `on:click`:
+  `<audio on:timeupdate=… on:ended=…>`, `<video on:loadedmetadata=…>`,
+  `<img on:load=…>`. Nothing to keep or remove. Take the element itself with a
+  `NodeRef` (topic `leptos-components`).
+- The whole window (keys for a game): `window_event_listener` (topic
+  `leptos-components`).
+- An element made in code (`HtmlAudioElement::new_with_src`): a `Closure` that
+  must be kept. A helper for that is a `fn` (closures cannot take
+  `impl Fn()` arguments):
+```rust
+use wasm_bindgen::JsCast;
+use wasm_bindgen::closure::Closure;
+
+/// Listens to `name` on an element made in code. The listener works as long
+/// as the returned `Closure` is kept: store it (a `StoredValue::new_local` of a
+/// `Vec<Closure<dyn Fn()>>`); dropped, the listener silently stops.
+fn listen(el: &web_sys::EventTarget, name: &str, f: impl Fn() + 'static) -> Closure<dyn Fn()> {
+    let closure = Closure::<dyn Fn()>::new(f);
+    let _ = el.add_event_listener_with_callback(name, closure.as_ref().unchecked_ref());
+    closure
+}
+```
+

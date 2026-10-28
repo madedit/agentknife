@@ -44,6 +44,14 @@ now). Make the layout work there:
   grows `min-h-0 flex-1 overflow-auto`. Then the page itself never scrolls.
 - A list or a form may instead be one page that scrolls as a whole
   (`min-h-screen`, as in the starter app).
+- Check the layout at the preview's small size (about 800×530; `dom_summary`
+  and `screenshot_preview` give the size): everything must be reachable. With
+  `overflow-hidden` outside, the part that grows must itself scroll
+  (`min-h-0 flex-1 overflow-y-auto`), or nothing below the fold can be seen. Two
+  large panels (now playing and the list, a form and its preview) go side by
+  side when there is room (`grid gap-3 md:grid-cols-2`). Pictures and
+  animations that only decorate take a height that shrinks with the window
+  (`h-[clamp(48px,10vh,120px)]`), not a fixed `h-48`.
 - Short labels must not wrap into a second line when space is tight: titles
   and buttons in a toolbar `shrink-0 whitespace-nowrap`; in table cells, numbers,
   sizes, dates and types `whitespace-nowrap`, and long names `truncate` (with

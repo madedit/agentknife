@@ -1656,3 +1656,18 @@ fn draw_rows(
         let _ = ctx.fill_text(&cell(first + i), 6.0, y + 17.0);
     }
 }
+
+// ---- browser: events of one element ----
+mod element_events {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen::closure::Closure;
+
+    /// Listens to `name` on an element made in code. The listener works as long
+    /// as the returned `Closure` is kept: store it (a `StoredValue::new_local` of a
+    /// `Vec<Closure<dyn Fn()>>`); dropped, the listener silently stops.
+    fn listen(el: &web_sys::EventTarget, name: &str, f: impl Fn() + 'static) -> Closure<dyn Fn()> {
+        let closure = Closure::<dyn Fn()>::new(f);
+        let _ = el.add_event_listener_with_callback(name, closure.as_ref().unchecked_ref());
+        closure
+    }
+}

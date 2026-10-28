@@ -25,6 +25,12 @@ builds again.
   drop the `.into()`: `name="marquee"` (the prop has `#[prop(into)]`).
 - **`the trait bound …: Eq` / `Hash is not satisfied`** on `<For key=…>` — key by a
   number or a `String`, not by a struct.
+- **`invalid format string: expected '}', found '('`** — `format!("{count()} songs")`:
+  only a plain variable name fits inside the braces. Write
+  `format!("{} songs", count())`.
+- **`` `impl Trait` is not allowed in closure parameters ``** — a closure cannot
+  take `f: impl Fn()`: make the helper a `fn` (or a method), or take
+  `&dyn Fn()`.
 - **`closure invoked recursively or after being dropped`** in the page's errors —
   a part was removed while one of its handlers ran (a menu in `Show` that its own
   item closes): keep it on the page and hide it with `class:hidden`.
@@ -102,9 +108,11 @@ builds again.
   `PointerEvent` derefs to it: `&*e`).
 - **`expected i32, found f64`** on `set_scroll_left` / `set_scroll_top` — they
   take whole pixels: `x as i32`.
-- **`no method named clipboard_data` / `key` / … found** — a web-sys feature is
-  missing; the message does not say which: it is named after the type that has
-  the method (`ClipboardEvent`, `DataTransfer`, …; topic `browser`).
+- **`no method named clipboard_data` / `key` / `create_media_element_source` / …
+  found** — a web-sys feature is missing; the message does not say which: it is
+  named after the type the method returns or lives on (`ClipboardEvent`,
+  `DataTransfer`, `MediaElementAudioSourceNode`, …; topic `browser`). Copy the
+  feature list from the topic you follow rather than writing it from memory.
 - **Many errors at once** — `build_status` shows the first ones in full and lists
   the rest by file: fix them file by file in one pass, then call `build_status`
   again, rather than one error per build.

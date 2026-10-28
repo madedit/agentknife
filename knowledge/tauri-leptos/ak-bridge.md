@@ -59,7 +59,8 @@ ak_bridge::set_state_reader(move || serde_json::json!({ "todos": todos.get_untra
 ```
 (Needs `serde_json` in the screens' `[dependencies]`.) For apps that run by
 themselves (games, timers), include a value that changes every step (a tick
-count, the falling piece's row): two readings then show whether it is running.
+count, the falling piece's row, a song's position): two readings then show
+whether it is running (`interact` `read_state` with `samples`).
 For apps that draw on a `<canvas>`, `ak_bridge::set_hit_test(|p| …)` tells
 AgentKnife what is at a point (`p.x`, `p.y` in canvas pixels). Both do nothing in
 the installed app.

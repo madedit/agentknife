@@ -432,3 +432,46 @@ fn log_crashes(app: &tauri::App) {
         before(info); // keeps the preview's crash report
     }));
 }
+
+// ---- sound: the user's songs ----
+mod songs {
+    use tauri::Manager;
+
+    /// Copies a song the user picked into the app's folder; returns its file name.
+    #[tauri::command]
+    fn add_song(app: tauri::AppHandle, path: String) -> Result<String, String> {
+        let from = std::path::Path::new(&path);
+        let ext = from
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if ext != "mp3" && ext != "wav" {
+            return Err("Choose an MP3 file.".into());
+        }
+        let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("songs");
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let file = format!("{stamp}.{ext}");
+        std::fs::copy(from, dir.join(&file)).map_err(|e| format!("Could not copy the song: {e}"))?;
+        Ok(file)
+    }
+
+    /// One song as a data URL for `<audio src>`.
+    #[tauri::command]
+    fn song_url(app: tauri::AppHandle, file: String) -> Result<String, String> {
+        use base64::Engine;
+        // Only names add_song made: no folders, no "..".
+        if file.contains(['/', '\\']) || file.starts_with('.') {
+            return Err("Unknown song.".into());
+        }
+        let path = app.path().app_data_dir().map_err(|e| e.to_string())?.join("songs").join(&file);
+        let bytes = std::fs::read(&path).map_err(|_| "The song file is missing.".to_owned())?;
+        let mime = if file.ends_with(".wav") { "audio/wav" } else { "audio/mpeg" };
+        let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+        Ok(format!("data:{mime};base64,{data}"))
+    }
+}

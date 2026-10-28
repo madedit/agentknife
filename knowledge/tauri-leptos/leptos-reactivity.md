@@ -84,8 +84,9 @@ view! {
 
 ## Timers (things that move by themselves)
 `set_interval_with_handle` (in `leptos::prelude`) runs a closure every N
-milliseconds. Keep its handle to stop it, and stop it before starting a new one
-when the speed changes:
+milliseconds and returns `Result<IntervalHandle, JsValue>` (not an `Option`).
+Keep its handle to stop it, and stop it before starting a new one when the
+speed changes:
 ```rust
 use std::time::Duration;
 
@@ -136,6 +137,11 @@ Or pass signals as props (`todos: RwSignal<Vec<Todo>>`) — they are Copy.
 
 ## Common mistakes
 - `{count.get()}` in `view!` does not update: write `{move || count.get()}`.
+- A derived value written as a closure (`let has_song = move || !song.get().is_empty();`)
+  is called: `has_song()`. It has no `.get()` or `.get_untracked()` ("the method
+  `get_untracked` exists for closure … but its trait bounds were not
+  satisfied"): those are for signals, `Memo` and `Signal::derive`. In a handler,
+  read the signal itself untracked: `!song.get_untracked().is_empty()`.
 - "use of moved value" in closures: signals are Copy, but `String`s/`Vec`s are not —
   clone them before the closure (`let name2 = name.clone();`) or keep them in a signal.
 - "cannot be sent between threads": values captured by reactive closures must be

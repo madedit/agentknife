@@ -1,6 +1,7 @@
 # Music and sound effects
 
-For any app that plays sound: a game, a timer that rings, a button that clicks.
+For any app that plays sound: a game, a timer that rings, a button that clicks,
+a music player with the user's own songs and a spectrum ("A music player").
 The sounds come from the user's files in `assets/sounds/`. For sounds made
 without files (beeps, an engine), see topic `three-d`, "Growing the game", Sound.
 
@@ -42,9 +43,11 @@ without files (beeps, an engine), see topic `three-d`, "Growing the game", Sound
 serde_json = "1.0.154"
 js-sys = "0.3.106"
 wasm-bindgen-futures = "0.4.79"
-web-sys = { version = "0.3.106", features = ["AudioBuffer", "AudioBufferSourceNode", "AudioContext", "AudioDestinationNode", "AudioNode", "AudioParam", "AudioScheduledSourceNode", "GainNode", "HtmlAudioElement", "HtmlMediaElement", "MediaElementAudioSourceNode", "Response", "Storage", "Window"] }
+web-sys = { version = "0.3.106", features = ["AnalyserNode", "AudioBuffer", "AudioBufferSourceNode", "AudioContext", "AudioDestinationNode", "AudioNode", "AudioParam", "AudioScheduledSourceNode", "CanvasRenderingContext2d", "Element", "GainNode", "HtmlAudioElement", "HtmlCanvasElement", "HtmlElement", "HtmlMediaElement", "MediaElementAudioSourceNode", "Response", "Storage", "Window"] }
 ```
-(if web-sys is there already, add these features to its list). Then
+(if web-sys is there already, add these features to its list). Copy the list
+rather than writing it from memory: a missing one gives `no method named
+create_media_element_source` (or another method) with no hint of which. Then
 `mod sound;` in `src/main.rs`, and this file; change the file names in `MUSIC`
 and `EFFECTS` to the user's files:
 ```rust
@@ -453,6 +456,262 @@ In the game: `this.sound = new GameSound()` in the constructor,
 where a point is scored, `sound: this.sound.state` in `state_json()`, and
 `this.sound.dispose()` in `dispose()`. A volume setting kept by the Rust side
 goes in with a method (`setVolume(v)`: `this.effects.gain.value = v`).
+
+## A music player (the user's own songs)
+When the app *is* the player, the songs are not in `assets/`: the user picks them
+from their computer while the app runs.
+- **Picking**: a backend command opens the system's file dialog (topic
+  `images-dialogs`). The preview has no dialogs: next to the button, a field
+  where a path can be pasted, calling the same command.
+- **Keep a copy**: the backend copies each song into the app's data folder, so it
+  still plays when the original is moved or deleted. The list of songs (name,
+  file name) is saved like any data (topic `storage`).
+- **Playing**: the screens cannot read files, so the backend returns one song as
+  a data URL for `<audio src>`. Keep only the current song's URL (a long song is
+  a few MB of text); fetch the next one when the song changes.
+- Backend (`src-tauri/src/main.rs`; `base64 = "0.22.1"` in its
+  `[dependencies]`, `use tauri::Manager;`, both commands in `generate_handler!`):
+  ```rust
+  /// Copies a song the user picked into the app's folder; returns its file name.
+  #[tauri::command]
+  fn add_song(app: tauri::AppHandle, path: String) -> Result<String, String> {
+      let from = std::path::Path::new(&path);
+      let ext = from
+          .extension()
+          .and_then(|e| e.to_str())
+          .unwrap_or("")
+          .to_ascii_lowercase();
+      if ext != "mp3" && ext != "wav" {
+          return Err("Choose an MP3 file.".into());
+      }
+      let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("songs");
+      std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+      let stamp = std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .map(|d| d.as_millis())
+          .unwrap_or(0);
+      let file = format!("{stamp}.{ext}");
+      std::fs::copy(from, dir.join(&file)).map_err(|e| format!("Could not copy the song: {e}"))?;
+      Ok(file)
+  }
+
+  /// One song as a data URL for `<audio src>`.
+  #[tauri::command]
+  fn song_url(app: tauri::AppHandle, file: String) -> Result<String, String> {
+      use base64::Engine;
+      // Only names add_song made: no folders, no "..".
+      if file.contains(['/', '\\']) || file.starts_with('.') {
+          return Err("Unknown song.".into());
+      }
+      let path = app.path().app_data_dir().map_err(|e| e.to_string())?.join("songs").join(&file);
+      let bytes = std::fs::read(&path).map_err(|_| "The song file is missing.".to_owned())?;
+      let mime = if file.ends_with(".wav") { "audio/wav" } else { "audio/mpeg" };
+      let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+      Ok(format!("data:{mime};base64,{data}"))
+  }
+  ```
+- **The `<audio>` element goes in the `view!`**: `on:timeupdate`,
+  `on:loadedmetadata`, `on:playing`, `on:pause`, `on:ended` and `on:error` work
+  on it like `on:click` (no `Closure` to keep), and a `NodeRef` gives the
+  element for `play()`, `pause()` and `set_current_time`.
+- **Events can arrive late**: a `pause` event from an earlier `pause()` can come
+  after the next `play()`. Do not set "paused" because a `pause` event came: in
+  each of these events read the element itself (`paused()`, `ended()`).
+- **A spectrum** (bars that move with the music): an `AnalyserNode` between the
+  song and the speakers. `get_byte_frequency_data` takes a `&mut [u8]` (a `Vec`),
+  not a `Uint8Array`. Draw it on a `<canvas>` every 50 ms (20 pictures a
+  second is enough) and stop the timer in `on_cleanup`. Draw something when
+  nothing plays (short bars), so the screen does not look broken.
+- The player below goes in `src/sound.rs` too, after the code above (the
+  features listed there cover it). `src` is the current song's data URL, empty
+  for none:
+
+```rust
+/// Play/pause, a seek bar, the time and a spectrum for one song.
+#[component]
+pub fn Player(#[prop(into)] src: Signal<String>) -> impl IntoView {
+    let audio = NodeRef::<leptos::html::Audio>::new();
+    let canvas = NodeRef::<leptos::html::Canvas>::new();
+    // "no song", "loading", "playing", "paused", "ended" or "failed: …".
+    let state = RwSignal::new("no song".to_owned());
+    let position = RwSignal::new(0.0f64);
+    let duration = RwSignal::new(0.0f64);
+    let analyser = StoredValue::new_local(None::<(AudioContext, web_sys::AnalyserNode)>);
+    Effect::new(move |_| {
+        let none = src.get().is_empty();
+        state.set(if none { "no song" } else { "loading" }.to_owned());
+    });
+    // Events can come late: the element itself says whether it plays.
+    let sync = move || {
+        if let Some(a) = audio.get_untracked() {
+            let now = if a.ended() {
+                "ended"
+            } else if a.paused() {
+                "paused"
+            } else {
+                "playing"
+            };
+            state.set(now.to_owned());
+        }
+    };
+    let toggle = move |_| {
+        let Some(a) = audio.get_untracked() else {
+            return;
+        };
+        if analyser.with_value(Option::is_none) {
+            // After a click the browser lets sound start: song → analyser → speakers.
+            if let Ok(ctx) = AudioContext::new()
+                && let Ok(source) = ctx.create_media_element_source(&a)
+                && let Ok(node) = ctx.create_analyser()
+            {
+                node.set_fft_size(64);
+                let _ = source.connect_with_audio_node(&node);
+                let _ = node.connect_with_audio_node(&ctx.destination());
+                analyser.set_value(Some((ctx, node)));
+            }
+        }
+        if !a.paused() {
+            let _ = a.pause();
+            return;
+        }
+        if let Ok(playing) = a.play() {
+            leptos::task::spawn_local(async move {
+                if let Err(e) = JsFuture::from(playing).await {
+                    state.set(format!("failed: {}", error_text(&e)));
+                }
+            });
+        }
+    };
+    // The timer's handle is a Result; `.ok()` keeps it for on_cleanup.
+    let timer = set_interval_with_handle(
+        move || draw_spectrum(canvas, analyser),
+        Duration::from_millis(50),
+    )
+    .ok();
+    on_cleanup(move || {
+        if let Some(h) = timer {
+            h.clear();
+        }
+        if let Some(a) = audio.get_untracked() {
+            let _ = a.pause();
+        }
+        if let Some((ctx, _)) = analyser.try_update_value(Option::take).flatten() {
+            let _ = ctx.close();
+        }
+    });
+    // What plays, in whole seconds (an app with its own reader puts this in that one).
+    ak_bridge::set_state_reader(move || {
+        serde_json::json!({ "player": {
+            "state": state.get_untracked(),
+            "position": position.get_untracked().floor(),
+            "duration": duration.get_untracked().floor(),
+        } })
+    });
+    view! {
+        <section data-ak-id="player" class="flex flex-col gap-2">
+            <audio
+                node_ref=audio
+                src=move || Some(src.get()).filter(|s| !s.is_empty())
+                on:loadedmetadata=move |_| {
+                    if let Some(a) = audio.get_untracked() {
+                        duration.set(a.duration());
+                    }
+                    sync();
+                }
+                on:timeupdate=move |_| {
+                    if let Some(a) = audio.get_untracked() {
+                        position.set(a.current_time());
+                    }
+                }
+                on:playing=move |_| sync()
+                on:pause=move |_| sync()
+                on:ended=move |_| sync()
+                on:error=move |_| state.set("failed: this song cannot be played".to_owned())
+            ></audio>
+            <canvas node_ref=canvas data-ak-id="spectrum" class="h-[clamp(40px,10vh,96px)] w-full"></canvas>
+            <div class="flex items-center gap-3">
+                <button
+                    data-ak-id="play-button"
+                    class="shrink-0 rounded bg-sky-600 px-3 py-1 text-white"
+                    on:click=toggle
+                >
+                    {move || if state.get() == "playing" { "Pause" } else { "Play" }}
+                </button>
+                <input
+                    data-ak-id="seek"
+                    type="range"
+                    min="0"
+                    step="0.1"
+                    class="min-w-0 flex-1"
+                    prop:max=move || duration.get().max(0.0).to_string()
+                    prop:value=move || position.get().to_string()
+                    on:input=move |e| {
+                        if let (Some(a), Ok(t)) = (audio.get_untracked(), event_target_value(&e).parse()) {
+                            a.set_current_time(t);
+                        }
+                    }
+                />
+                <span class="shrink-0 whitespace-nowrap text-sm tabular-nums">
+                    {move || format!("{} / {}", clock(position.get()), clock(duration.get()))}
+                </span>
+            </div>
+        </section>
+    }
+}
+
+/// 83.4 seconds → "1:23".
+fn clock(seconds: f64) -> String {
+    if !seconds.is_finite() {
+        return "0:00".to_owned();
+    }
+    let s = seconds as u64;
+    format!("{}:{:02}", s / 60, s % 60)
+}
+
+/// The spectrum's bars; short ones while nothing plays.
+fn draw_spectrum(
+    canvas: NodeRef<leptos::html::Canvas>,
+    analyser: StoredValue<Option<(AudioContext, web_sys::AnalyserNode)>, LocalStorage>,
+) {
+    let Some(el) = canvas.get_untracked() else {
+        return;
+    };
+    let Some(ctx) = el
+        .get_context("2d")
+        .ok()
+        .flatten()
+        .and_then(|c| c.dyn_into::<web_sys::CanvasRenderingContext2d>().ok())
+    else {
+        return;
+    };
+    // Sharp on high-resolution screens: one canvas pixel per screen pixel.
+    // Setting the size clears the drawing state, so the transform comes after.
+    let ratio = web_sys::window().map(|w| w.device_pixel_ratio()).unwrap_or(1.0);
+    let (w, h) = (f64::from(el.client_width()), f64::from(el.client_height()));
+    let (pw, ph) = ((w * ratio) as u32, (h * ratio) as u32);
+    if el.width() != pw || el.height() != ph {
+        el.set_width(pw);
+        el.set_height(ph);
+    }
+    let _ = ctx.set_transform(ratio, 0.0, 0.0, ratio, 0.0, 0.0);
+    ctx.clear_rect(0.0, 0.0, w, h);
+    let mut data = vec![0u8; 32];
+    analyser.with_value(|a| {
+        if let Some((_, node)) = a {
+            data.resize(node.frequency_bin_count() as usize, 0);
+            node.get_byte_frequency_data(&mut data);
+        }
+    });
+    ctx.set_fill_style_str("#38bdf8");
+    let bar = w / data.len() as f64;
+    for (i, v) in data.iter().enumerate() {
+        let height = (f64::from(*v) / 255.0 * h).max(2.0);
+        ctx.fill_rect(i as f64 * bar + 1.0, h - height, (bar - 2.0).max(1.0), height);
+    }
+}
+```
+- The position moves by itself: `interact` `read_state` with `samples: 3,
+  wait_ms: 3000` shows whether the song plays.
 
 ## Checking it
 No sound is heard while you check the preview. Check the state instead:

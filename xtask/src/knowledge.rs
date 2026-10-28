@@ -76,11 +76,11 @@ pub fn check_build(root: &Path) -> Result<()> {
             "{screens}\n#[allow(dead_code, unused)]\nmod snippets;\n#[allow(dead_code)]\nmod game;\n#[allow(dead_code)]\nmod sound;\n"
         ),
     )?;
-    // The sound topic: its module and the screen that uses it, as one file.
+    // The sound topic: its module and the screens that use it, as one file.
     let sound = std::fs::read_to_string(pack.join("sound.md"))?;
     let sound_rs = rust_blocks(&sound);
-    if sound_rs.len() != 2 {
-        return Err(format!("sound.md: expected 2 rust blocks, found {}", sound_rs.len()).into());
+    if sound_rs.is_empty() {
+        return Err("sound.md: no rust blocks (src/sound.rs)".into());
     }
     std::fs::write(out.join("src/sound.rs"), sound_rs.concat())?;
     // The 3D topic: its JS module (wasm-bindgen reads it while compiling) and screen.
@@ -118,7 +118,7 @@ pub fn check_build(root: &Path) -> Result<()> {
     std::fs::write(&backend, tray)?;
     add_deps(
         &out.join("Cargo.toml"),
-        "serde_json = \"1.0.154\"\njs-sys = \"0.3.106\"\nwasm-bindgen-futures = \"0.4.79\"\nweb-sys = { version = \"0.3.106\", features = [\"HtmlCanvasElement\", \"Storage\", \"Window\", \"Navigator\", \"Clipboard\", \"Document\", \"Element\", \"HtmlInputElement\", \"EventTarget\", \"Request\", \"RequestInit\", \"Response\", \"AbortController\", \"AbortSignal\", \"HtmlDocument\", \"Node\", \"Text\", \"CharacterData\", \"DragEvent\", \"DataTransfer\", \"DomRect\", \"AddEventListenerOptions\", \"WheelEvent\", \"PointerEvent\", \"HtmlElement\", \"ClipboardEvent\", \"CanvasRenderingContext2d\", \"AudioBuffer\", \"AudioBufferSourceNode\", \"AudioContext\", \"AudioDestinationNode\", \"AudioNode\", \"AudioParam\", \"AudioScheduledSourceNode\", \"GainNode\", \"HtmlAudioElement\", \"HtmlMediaElement\", \"MediaElementAudioSourceNode\"] }\n",
+        "serde_json = \"1.0.154\"\njs-sys = \"0.3.106\"\nwasm-bindgen-futures = \"0.4.79\"\nweb-sys = { version = \"0.3.106\", features = [\"HtmlCanvasElement\", \"Storage\", \"Window\", \"Navigator\", \"Clipboard\", \"Document\", \"Element\", \"HtmlInputElement\", \"EventTarget\", \"Request\", \"RequestInit\", \"Response\", \"AbortController\", \"AbortSignal\", \"HtmlDocument\", \"Node\", \"Text\", \"CharacterData\", \"DragEvent\", \"DataTransfer\", \"DomRect\", \"AddEventListenerOptions\", \"WheelEvent\", \"PointerEvent\", \"HtmlElement\", \"ClipboardEvent\", \"CanvasRenderingContext2d\", \"AudioBuffer\", \"AudioBufferSourceNode\", \"AudioContext\", \"AudioDestinationNode\", \"AudioNode\", \"AudioParam\", \"AudioScheduledSourceNode\", \"GainNode\", \"HtmlAudioElement\", \"HtmlMediaElement\", \"MediaElementAudioSourceNode\", \"AnalyserNode\"] }\n",
     )?;
 
     let pinned = Pinned::builtin()?;

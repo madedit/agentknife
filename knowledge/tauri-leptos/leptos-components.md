@@ -65,6 +65,12 @@ fn Page() -> impl IntoView {
   element. Use values that are `Copy` there (numbers, signals, `StoredValue`):
   `let id = StoredValue::new(id);` then `id.get_value()` inside each closure; or
   `.clone()` it into each closure (`let id2 = id.clone();`).
+  A list row with three or more handlers: make the row a component of its own
+  first (`#[component] fn TrackRow(#[prop(into)] id: String, …)`), so the row's
+  values and their clones sit in one short function. "Is this the selected row"
+  is a closure or `Signal::derive` comparing a signal with the row's id
+  (`let current = Signal::derive(move || playing.get() == mine);`), read with
+  `current.get()` wherever it is needed.
 - Attribute and prop values are moved in: one `String` for two attributes,
   `width=px height=px`, fails with `use of moved value`: `width=px.clone() height=px`.
 - **Any attribute or prop value with `<` or `>` in it goes in braces**, on every
